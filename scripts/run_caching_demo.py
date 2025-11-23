@@ -127,10 +127,10 @@ def run_caching_demo():
     # Clean Pipeline definition without manual string names
     (
         pipe
+        .add(summarize)  # <-- to illustrate that order doesn't matter
         .add(heavy_computation)
         .add(generate_metadata)
         .add(generate_array, outputs=["arr"]) # Manually name the raw array
-        .add(summarize)
     )
 
     print("--- Run 1: Cold Start ---")

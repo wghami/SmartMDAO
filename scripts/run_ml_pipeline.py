@@ -84,10 +84,10 @@ def run_ml_pipeline():
     # DatasetSplit dataclass handles that logic inside the code, not the config.
     (
         pipe
+        .add(train_model) # <-- the order of the .add does not matter
         .add(load_data)
-        .add(preprocess)
-        .add(train_model)
         .add(report)
+        .add(preprocess)
     )
 
     # Run the pipeline
