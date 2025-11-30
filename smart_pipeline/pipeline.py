@@ -1,11 +1,16 @@
 import inspect
+import webbrowser
+import tempfile
+import base64
+import json
+import urllib.request
 from dataclasses import dataclass, field, is_dataclass, asdict
 from collections import defaultdict, deque
-from typing import Callable, List, Optional, Any
+from pathlib import Path
+from typing import Callable, List, Optional, Any, Set
 
-# FIX: eq=False makes the class hashable by its object ID (memory address).
-# This allows us to use 'Step' objects as dictionary keys.
-@dataclass(eq=False) 
+# FIX: eq=False makes the class hashable by its object ID.
+@dataclass(eq=False)
 class Step:
     fn: Callable
     manual_outputs: Optional[List[str]] = None
@@ -30,7 +35,6 @@ class Pipeline:
 
     def run(self, **inputs):
         # 1. Infer dependencies and sort
-        # We pass the full Step objects to keep track of output configurations
         execution_order = self._topological_sort(inputs)
 
         # 2. Initialize memory
@@ -44,11 +48,139 @@ class Pipeline:
         return memory
 
     # ------------------------------------------------------------
+    # Visualization Logic (New Addition)
+    # ------------------------------------------------------------
+    def visualize(self, inputs: List[str] = None, output_pdf: str = None):
+        """
+        Generates a Mermaid diagram of the pipeline.
+        
+        :param inputs: A list of keys expected to be present in the initial inputs.
+                       (Used to visualize entry points into the graph).
+        :param output_pdf: If provided, saves the diagram as a PDF to this path.
+                           Otherwise, opens a temporary HTML pop-up.
+        """
+        inputs = set(inputs or [])
+        graph_def = self._build_mermaid_graph(inputs)
+
+        if output_pdf:
+            self._render_to_pdf(graph_def, output_pdf)
+            print(f"Pipeline diagram saved to: {output_pdf}")
+        else:
+            self._render_to_browser(graph_def)
+
+    def _build_mermaid_graph(self, input_keys: Set[str]) -> str:
+            """Constructs the Mermaid flowchart syntax."""
+            producers = {}  # var_name -> Step (object)
+            all_consumed = set() # Track variables that are used as inputs by ANY step
+            
+            # 1. Identify all producers
+            for step in self.steps:
+                for out_name in self._resolve_output_names(step):
+                    producers[out_name] = step
+
+            # 2. Identify all consumed variables (to find the 'leaf' outputs later)
+            for step in self.steps:
+                sig = inspect.signature(step.fn)
+                for param_name in sig.parameters:
+                    all_consumed.add(param_name)
+
+            lines = ["graph TD;", "classDef default fill:#f9f,stroke:#333,stroke-width:2px;"]
+            
+            # Track which inputs are actually used to draw explicit Input Nodes
+            used_inputs = set()
+
+            for step in self.steps:
+                step_id = f"node_{id(step)}"
+                lines.append(f'{step_id}("{step.name}")')
+                
+                # --- Draw Inputs (Upstream Dependencies) ---
+                sig = inspect.signature(step.fn)
+                for param_name in sig.parameters:
+                    if param_name in producers:
+                        # Connection from another Step
+                        producer_step = producers[param_name]
+                        prod_id = f"node_{id(producer_step)}"
+                        lines.append(f'{prod_id} -- "{param_name}" --> {step_id}')
+                    elif param_name in input_keys:
+                        # Connection from Global Input
+                        lines.append(f'Input_{param_name}(["Input: {param_name}"]) -- "{param_name}" --> {step_id}')
+                        lines.append(f"style Input_{param_name} fill:#fff,stroke:#333,stroke-dasharray: 5 5")
+                        used_inputs.add(param_name)
+                    else:
+                        # Missing dependency
+                        lines.append(f'Missing_{param_name}[("???")] -. "{param_name}" .-> {step_id}')
+                        lines.append(f"style Missing_{param_name} fill:#ffaaaa,stroke:#f00")
+
+                # --- Draw Final Outputs (Downstream Leaves) ---
+                # If a variable produced by this step is NOT consumed by any other step,
+                # it is a "Final Output". We draw it explicitly.
+                outputs = self._resolve_output_names(step)
+                for out_name in outputs:
+                    if out_name not in all_consumed:
+                        # Generate a unique ID for the output node
+                        out_node_id = f"Output_{out_name}"
+                        # [[text]] syntax creates a 'Terminal' shape in Mermaid
+                        lines.append(f'{step_id} -- "{out_name}" --> {out_node_id}[["Final: {out_name}"]]')
+                        # Style it Green to signify success/result
+                        lines.append(f"style {out_node_id} fill:#ccffcc,stroke:#090,stroke-width:2px")
+
+            return "\n".join(lines)
+
+    def _render_to_browser(self, graph_def: str):
+        """Creates a temp HTML file and opens it."""
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Pipeline Visualization</title>
+        </head>
+        <body>
+            <div class="mermaid">
+            {graph_def}
+            </div>
+            <script type="module">
+                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                mermaid.initialize({{ startOnLoad: true }});
+            </script>
+        </body>
+        </html>
+        """
+        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html') as f:
+            f.write(html_content)
+            url = Path(f.name).as_uri()
+        
+        webbrowser.open(url)
+
+    def _render_to_pdf(self, graph_def: str, output_path: str):
+        """
+        Uses mermaid.ink service to generate a PDF. 
+        Note: This requires internet access. 
+        """
+        # Mermaid.ink expects a base64 encoded JSON dictionary containing the code
+        state = {"code": graph_def, "mermaid": {"theme": "default"}}
+        json_str = json.dumps(state)
+        encoded = base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8')
+        
+        # Create URL (Mermaid.ink handles the conversion)
+        url = f"https://mermaid.ink/pdf/{encoded}"
+        
+        try:
+            with urllib.request.urlopen(url) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"Failed to generate PDF. HTTP {response.status}")
+                data = response.read()
+                
+            with open(output_path, 'wb') as f:
+                f.write(data)
+        except Exception as e:
+            raise RuntimeError(f"Could not generate PDF via mermaid.ink: {e}")
+
+    # ------------------------------------------------------------
     # Dependency Graph & Topological Sort
     # ------------------------------------------------------------
     def _topological_sort(self, inputs) -> List[Step]:
-        producers = defaultdict(list)  # var_name -> list of Steps producing it
-        consumers = defaultdict(list)  # Step -> list of var_names needed
+        producers = defaultdict(list)
+        consumers = defaultdict(list)
 
         # 1. Map Producers
         for step in self.steps:
@@ -63,16 +195,14 @@ class Pipeline:
                 consumers[step].append(param)
 
         # 3. Build Graph
-        graph = defaultdict(set)      # Step -> set of dependency Steps
+        graph = defaultdict(set)
         indegree = {step: 0 for step in self.steps}
 
         for step in self.steps:
             for needed_var in consumers[step]:
-                # Case A: Variable is provided in initial inputs -> No dependency needed
                 if needed_var in inputs:
                     continue
 
-                # Case B: Variable is produced by another step
                 if needed_var in producers:
                     for producer_step in producers[needed_var]:
                         if producer_step is not step:
@@ -110,11 +240,8 @@ class Pipeline:
     # ------------------------------------------------------------
     def _execute_step(self, step: Step, memory: dict):
         sig = inspect.signature(step.fn)
-        # Inject arguments from memory
         try:
-            params = {
-                k: memory[k] for k in sig.parameters
-            }
+            params = {k: memory[k] for k in sig.parameters}
         except KeyError as e:
             raise KeyError(f"Step '{step.name}' failed to run. Missing dependency: {e}")
         
@@ -123,19 +250,15 @@ class Pipeline:
     def _store_result(self, step: Step, result: Any, memory: dict):
         expected_names = self._resolve_output_names(step)
 
-        # Case 1: Step returns None
         if result is None:
             return
 
-        # Case 2: User specified manual outputs (e.g. unpacking a tuple)
         if step.manual_outputs:
             if len(expected_names) == 1:
-                # Assign single value to single manual name
                 memory[expected_names[0]] = result
             else:
-                # Unpack tuple/list
                 if not isinstance(result, (list, tuple)):
-                    raise TypeError(f"Step '{step.name}' expected to return iterable for unpacking, got {type(result)}")
+                    raise TypeError(f"Step '{step.name}' expected iterable, got {type(result)}")
                 if len(result) != len(expected_names):
                     raise ValueError(f"Step '{step.name}' returned {len(result)} items, expected {len(expected_names)}")
                 
@@ -143,38 +266,23 @@ class Pipeline:
                     memory[name] = val
             return
 
-        # Case 3: Dataclass (Automatic Unpacking)
-        # Note: We check if the class IS a dataclass instance
         if is_dataclass(result):
             memory.update(asdict(result))
             return
 
-        # Case 4: Default (Assign result to function name)
-        # We know expected_names has exactly 1 item here based on _resolve_output_names logic
         memory[expected_names[0]] = result
 
     # ------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------
     def _resolve_output_names(self, step: Step) -> List[str]:
-        """
-        Determines variable names a step produces.
-        Priority:
-        1. Manual 'outputs' list passed to .add()
-        2. If Return Annotation is a Dataclass -> Field names
-        3. Function Name
-        """
-        # 1. Explicit Overrides
         if step.manual_outputs:
             return step.manual_outputs
 
-        # 2. Dataclass Annotation
         sig = inspect.signature(step.fn)
         ann = sig.return_annotation
         
         if isinstance(ann, type) and is_dataclass(ann):
             return list(ann.__dataclass_fields__.keys())
 
-        # 3. Fallback to function name
         return [step.name]
-    
