@@ -33,6 +33,25 @@ class Pipeline:
         self.steps.append(Step(fn, outputs))
         return self
 
+    def step(self, fn: Callable = None, *, outputs: List[str] = None):
+        """
+        Decorator to register a step. Supports both:
+        1. @pipe.step
+        2. @pipe.step(outputs=['a', 'b'])
+        """
+        # Case 1: Called as @pipe.step (no arguments, fn is passed immediately)
+        if fn is not None and callable(fn):
+            self.add(fn, outputs=outputs)
+            return fn
+
+        # Case 2: Called with arguments @pipe.step(outputs=...)
+        # We return a wrapper that Python will call with the function later
+        def wrapper(func):
+            self.add(func, outputs=outputs)
+            return func
+        
+        return wrapper
+
     def run(self, **inputs):
         # 1. Infer dependencies and sort
         execution_order = self._topological_sort(inputs)
