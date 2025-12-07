@@ -76,7 +76,8 @@ def run_pipeline_demo():
     # We pass the list of inputs we INTEND to provide to see how they connect
     print("Generating interactive diagram...")
     pipe.visualize(inputs=["x", "a"],
-                   output_pdf=str(Path("results") / "pipeline_diagram.pdf"))
+                   output_pdf=str(Path("results") / "pipeline_diagram.pdf"),
+                   graph_type="flow")
 
     # Run the pipeline
     # The pipeline sees step_1 needs 'x', so we must provide 'x'.

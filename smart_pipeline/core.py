@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Literal
 
 from .models import Step
 from .solvers import Solver, DAGSolver
@@ -39,12 +39,21 @@ class Pipeline:
         """
         return self.solver.solve(self.steps, inputs)
 
-    def visualize(self, inputs: List[str] = None, output_pdf: str = None):
+    def visualize(self, 
+                  inputs: List[str] = None, 
+                  output_pdf: str = None, 
+                  orientation: str = "TD",
+                  graph_type: Literal["flow", "bipartite"] = "flow"):
         """
         Generates a Mermaid diagram of the pipeline.
+        
+        :param inputs: List of input keys available at runtime.
+        :param output_pdf: Path to save PDF (optional).
+        :param orientation: 'TD' (Top-Down) or 'LR' (Left-Right).
+        :param graph_type: 'flow' (default) or 'bipartite' (explicit variable nodes).
         """
         inputs = set(inputs or [])
-        graph_def = build_mermaid_graph(self.steps, inputs)
+        graph_def = build_mermaid_graph(self.steps, inputs, orientation, graph_type)
 
         if output_pdf:
             render_to_pdf(graph_def, output_pdf)

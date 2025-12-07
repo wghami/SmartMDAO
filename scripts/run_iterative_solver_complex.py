@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from smart_pipeline import Pipeline, IterativeSolver
 
+# TODO implement solver that does not depend on thr order of steps added
+
 # ==============================================================================
 # 1. DEFINE A COUPLED SYSTEM (Cyclic Dependencies)
 # ==============================================================================
@@ -49,12 +51,20 @@ solver_config = IterativeSolver(
 
 pipe = Pipeline(solver=solver_config)
 
+# !!! CRITICAL NOTE ON ORDER !!!
+# Unlike the DAGSolver (which reorders based on dependencies), the IterativeSolver 
+# is "naive" and runs steps in the exact order they are added.
+# 
+# Current Order: Z -> Y -> X
+# Changing this order affects the "propagation speed" of the solution (Gauss-Seidel effect),
+# though for this stable linear system, it will likely converge regardless.
+pipe.add(compute_z, outputs=['z'])
 pipe.add(compute_y, outputs=['y'])
 pipe.add(compute_x, outputs=['x'])
-pipe.add(compute_z, outputs=['z'])
 
 pipe.visualize(inputs=["history_x", "history_y", "history_z"],
-                output_pdf=str(Path("results") / "iterative_pipeline_diagram.pdf"))
+                output_pdf=str(Path("results") / "iterative_pipeline_diagram.pdf"),
+                graph_type="bipartite")
 
 # ==============================================================================
 # 3. RUN THE SIMULATION
@@ -67,6 +77,13 @@ initial_state = {
     'history_y': [0],
     'history_z': [0]
 }
+
+print("--- Starting Iterative Solver ---")
+print("NOTE: The solver will execute steps in the registration order:")
+print("      1. compute_z (updates z)")
+print("      2. compute_y (updates y using new z)")
+print("      3. compute_x (updates x using new y)")
+print("-----------------------------------")
 
 print("Running pipeline...")
 results = pipe.run(**initial_state)

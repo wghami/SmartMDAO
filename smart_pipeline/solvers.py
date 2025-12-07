@@ -15,6 +15,11 @@ class DAGSolver:
     """
     Standard Topological Sort Solver. 
     Ideal for linear workflows.
+
+    Execution Order:
+    Automatically reorders steps based on data dependencies (Topological Sort).
+    The order in which steps are added to the pipeline DOES NOT affect execution;
+    the solver determines the correct mathematical order.
     """
     def solve(self, steps: List[Step], inputs: Dict[str, Any]) -> Dict[str, Any]:
         execution_order = self._topological_sort(steps, set(inputs.keys()))
@@ -70,6 +75,15 @@ class DAGSolver:
 class IterativeSolver:
     """
     Solves systems with feedback loops (e.g., Newton's Method).
+
+    Execution Order:
+    Strictly follows the order in which steps were added to the Pipeline ("Naive" execution).
+    Unlike DAGSolver, it DOES NOT reorder steps automatically.
+
+    CRITICAL NOTE:
+    In coupled systems (e.g., A -> B -> A), the order of execution determines which 
+    values (current iteration vs previous iteration) are used by the steps. 
+    This affects convergence speed (Gauss-Seidel effect).
     """
     max_iterations: int = 10
     tolerance: float = 1e-6
