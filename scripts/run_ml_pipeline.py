@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from smart_pipeline.pipeline import Pipeline
+from smart_pipeline.core import Pipeline
 
 # ==========================================
 # 1. Define Data Contracts

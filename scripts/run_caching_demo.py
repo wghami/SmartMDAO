@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 from dataclasses import dataclass
-from smart_pipeline.pipeline import Pipeline
+from smart_pipeline.core import Pipeline
 from smart_pipeline.cache import (
     MemoryBackend,
     HDF5Backend,
