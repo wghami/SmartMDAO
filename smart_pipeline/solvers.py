@@ -2,6 +2,7 @@ import inspect
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import List, Dict, Any, Set, Protocol, Optional
+import warnings
 
 from .models import Step
 from .executor import StepExecutor
@@ -77,8 +78,8 @@ class IterativeSolver:
     Solves systems with feedback loops (e.g., Newton's Method).
 
     Execution Order:
-    Strictly follows the order in which steps were added to the Pipeline ("Naive" execution).
-    Unlike DAGSolver, it DOES NOT reorder steps automatically.
+    1. If `execution_order` is provided (List of step names), it strictly follows that sequence.
+    2. Otherwise, it follows the order in which steps were added to the Pipeline.
 
     CRITICAL NOTE:
     In coupled systems (e.g., A -> B -> A), the order of execution determines which 
@@ -87,16 +88,21 @@ class IterativeSolver:
     """
     max_iterations: int = 10
     tolerance: float = 1e-6
-    target_var: Optional[str] = None 
+    target_var: Optional[str] = None
+    execution_order: Optional[List[str]] = None
 
     def solve(self, steps: List[Step], inputs: Dict[str, Any]) -> Dict[str, Any]:
         memory = inputs.copy()
         residuals = []
         
+        # Determine the sequence of execution
+        run_sequence = self._determine_execution_order(steps)
+
         for i in range(self.max_iterations):
             prev_val = memory.get(self.target_var) if self.target_var else None
             
-            for step in steps:
+            # Execute in the determined sequence
+            for step in run_sequence:
                 StepExecutor.run_step(step, memory)
             
             if self.target_var and prev_val is not None:
@@ -109,6 +115,34 @@ class IterativeSolver:
                     if diff < self.tolerance:
                         break
         
-        # Store the history of residuals in memory so the user can access it
         memory['residual_history'] = residuals
         return memory
+
+    def _determine_execution_order(self, steps: List[Step]) -> List[Step]:
+        """
+        Sorts the steps based on self.execution_order if provided.
+        """
+        if not self.execution_order:
+            return steps # Fallback to registration order
+
+        # Map name -> Step object
+        step_map = {s.name: s for s in steps}
+        
+        # Validation
+        ordered_steps = []
+        missing_steps = []
+        
+        for name in self.execution_order:
+            if name in step_map:
+                ordered_steps.append(step_map[name])
+            else:
+                missing_steps.append(name)
+        
+        if missing_steps:
+            raise ValueError(f"IterativeSolver config references missing steps: {missing_steps}")
+
+        # Check if all registered steps are included in the order? 
+        # (Optional: we might want to allow running a SUBSET of the pipeline)
+        # For now, we assume if you define an order, you only run those steps.
+        
+        return ordered_steps

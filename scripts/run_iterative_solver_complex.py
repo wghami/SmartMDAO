@@ -2,8 +2,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from smart_pipeline import Pipeline, IterativeSolver
 
-# TODO implement solver that does not depend on thr order of steps added
-
 # ==============================================================================
 # 1. DEFINE A COUPLED SYSTEM (Cyclic Dependencies)
 # ==============================================================================
@@ -38,6 +36,10 @@ def compute_z(x, history_z):
     history_z.append(val)
     return val
 
+# Define the desired mathematical order explicitly
+execution_order = ["compute_z", "compute_y", "compute_x"]
+# execution_order = None  # Uncomment to test fallback to registration order
+
 # ==============================================================================
 # 2. CONFIGURE PIPELINE
 # ==============================================================================
@@ -46,21 +48,22 @@ def compute_z(x, history_z):
 solver_config = IterativeSolver(
     target_var='y',
     tolerance=1e-6,
-    max_iterations=50
+    max_iterations=50,
+    # Explicitly force this order, regardless of pipe.add() calls.
+    # If None, the order of pipe.add() is used.
+    execution_order=execution_order
 )
 
 pipe = Pipeline(solver=solver_config)
 
 # !!! CRITICAL NOTE ON ORDER !!!
-# Unlike the DAGSolver (which reorders based on dependencies), the IterativeSolver 
-# is "naive" and runs steps in the exact order they are added.
-# 
-# Current Order: Z -> Y -> X
-# Changing this order affects the "propagation speed" of the solution (Gauss-Seidel effect),
-# though for this stable linear system, it will likely converge regardless.
-pipe.add(compute_z, outputs=['z'])
+# Because we provided 'execution_order' to the solver above, the order of these 
+# .add() calls NO LONGER MATTERS for the math. 
+# However, if we removed 'execution_order', the solver would revert to 
+# executing in the order Y -> X -> Z defined below.
 pipe.add(compute_y, outputs=['y'])
 pipe.add(compute_x, outputs=['x'])
+pipe.add(compute_z, outputs=['z'])
 
 pipe.visualize(inputs=["history_x", "history_y", "history_z"],
                 output_pdf=str(Path("results") / "iterative_pipeline_diagram.pdf"),
@@ -79,10 +82,15 @@ initial_state = {
 }
 
 print("--- Starting Iterative Solver ---")
-print("NOTE: The solver will execute steps in the registration order:")
-print("      1. compute_z (updates z)")
-print("      2. compute_y (updates y using new z)")
-print("      3. compute_x (updates x using new y)")
+if solver_config.execution_order:
+    print(f"MODE: EXPLICIT ORDER")
+    print(f"The solver will strictly follow this sequence (ignoring add() order):")
+    for i, step_name in enumerate(solver_config.execution_order, 1):
+        print(f"   {i}. {step_name}")
+else:
+    print(f"MODE: REGISTRATION ORDER (Fallback)")
+    print("WARNING: No explicit execution_order provided.")
+    print("The solver will execute steps in the order they were added to the pipeline.")
 print("-----------------------------------")
 
 print("Running pipeline...")
