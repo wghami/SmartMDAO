@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
-from smart_pipeline.core import Pipeline
+from smart_pipeline import Pipeline
 
 
 # ==========================================

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from smart_pipeline.core import Pipeline
+from smart_pipeline import Pipeline
 from smart_pipeline.cache import MemoryBackend, cached
 
 # ==============================================================================

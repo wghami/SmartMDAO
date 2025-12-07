@@ -1,13 +1,14 @@
 from dataclasses import dataclass, field
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from .models import Step
-from .execution import topological_sort, execute_step, store_result
+from .solvers import Solver, DAGSolver
 from .visualization import build_mermaid_graph, render_to_browser, render_to_pdf
 
 @dataclass
 class Pipeline:
     steps: list[Step] = field(default_factory=list)
+    solver: Solver = field(default_factory=DAGSolver)
 
     def add(self, fn: Callable, outputs: list[str] = None):
         """
@@ -20,9 +21,7 @@ class Pipeline:
 
     def step(self, fn: Callable = None, *, outputs: List[str] = None):
         """
-        Decorator to register a step. Supports both:
-        1. @pipe.step
-        2. @pipe.step(outputs=['a', 'b'])
+        Decorator to register a step.
         """
         if fn is not None and callable(fn):
             self.add(fn, outputs=outputs)
@@ -35,18 +34,10 @@ class Pipeline:
         return wrapper
 
     def run(self, **inputs):
-        # 1. Infer dependencies and sort
-        execution_order = topological_sort(self.steps, inputs)
-
-        # 2. Initialize memory
-        memory = dict(inputs)
-
-        # 3. Execute
-        for step in execution_order:
-            result = execute_step(step, memory)
-            store_result(step, result, memory)
-
-        return memory
+        """
+        Delegates the execution to the configured Solver.
+        """
+        return self.solver.solve(self.steps, inputs)
 
     def visualize(self, inputs: List[str] = None, output_pdf: str = None):
         """

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
-from smart_pipeline.core import Pipeline # Adjust import to your actual file
+from smart_pipeline import Pipeline # Adjust import to your actual file
 
 def run_decorators_usage():
     # 1. Initialize Pipeline FIRST
