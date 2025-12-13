@@ -1,6 +1,11 @@
+import logging
 from dataclasses import dataclass
-from smart_pipeline import Pipeline
+from smart_pipeline import Pipeline, configure_logging
 from smart_pipeline.cache import MemoryBackend, cached
+
+# --- Setup Logging ---
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 # ==============================================================================
 # PART 1: The "Unchangeable" External Libraries
@@ -44,6 +49,7 @@ mem_cache = MemoryBackend()
 @cached(mem_cache)
 def run_analytics_step(data: int) -> AnalyticsResult:
     """Adapts LibAnalytics for the pipeline."""
+    logger.debug(f"Executing real logic for Analytics with data={data}...")
     
     # Call the external 'raw' function
     raw_value = LibAnalytics.analyze(data)
@@ -57,6 +63,7 @@ def run_analytics_step(data: int) -> AnalyticsResult:
 @cached(mem_cache)
 def run_finance_step(money: int) -> FinanceResult:
     """Adapts LibFinance for the pipeline."""
+    logger.debug(f"Executing real logic for Finance with money={money}...")
     
     # Call the external 'raw' function
     raw_value = LibFinance.analyze(money)
@@ -69,6 +76,10 @@ def run_finance_step(money: int) -> FinanceResult:
 # PART 3: Execution
 # ==============================================================================
 def run_adapter_demo():
+    # Initialize the centralized logging configuration
+    # PRO TIP: Change to logging.DEBUG to see the cache hits/misses in action!
+    configure_logging(level=logging.INFO)
+    
     pipe = Pipeline()
 
     # We add our ADAPTERS, not the raw library functions.
@@ -78,25 +89,25 @@ def run_adapter_demo():
     pipe.add(run_analytics_step)
     pipe.add(run_finance_step)
 
-    print("--- Run 1: Cold Start ---")
+    logger.info("--- Run 1: Cold Start ---")
     # 'run_analytics_step' calls LibAnalytics
     # 'run_finance_step' calls LibFinance
     res1 = pipe.run(data=10, money=50)
-    print(f"Analytics Score: {res1['score']}")
-    print(f"Finance Budget:  {res1['budget']}\n")
+    logger.info(f"Analytics Score: {res1['score']}")
+    logger.info(f"Finance Budget:  {res1['budget']}")
 
-    print("--- Run 2: Cached ---")
+    logger.info("--- Run 2: Cached ---")
     # The adapters are cached. They don't even call the library functions.
     res2 = pipe.run(data=10, money=50)
-    print("Results match:", res1 == res2)
+    logger.info(f"Results match: {res1 == res2}")
 
-    print("\n--- Run 3: Partial Change ---")
+    logger.info("--- Run 3: Partial Change ---")
     # We change 'money'.
     # - run_analytics_step: Inputs same -> Returns cached result immediately.
     # - run_finance_step:   Inputs changed -> Calls LibFinance.analyze again.
     res3 = pipe.run(data=10, money=9999)
-    print(f"Analytics Score: {res3['score']} (Cached)")
-    print(f"Finance Budget:  {res3['budget']} (Recalculated)")
+    logger.info(f"Analytics Score: {res3['score']} (Cached)")
+    logger.info(f"Finance Budget:  {res3['budget']} (Recalculated)")
 
 if __name__ == "__main__":
     run_adapter_demo()

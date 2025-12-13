@@ -2,9 +2,13 @@ import functools
 import hashlib
 import pickle
 import os
+import logging
 import numpy as np
 from abc import ABC, abstractmethod
 from collections import defaultdict
+
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 # --- 1. Abstract Backend Interface ---
 class CacheBackend(ABC):
@@ -32,7 +36,7 @@ class MemoryBackend(CacheBackend):
         return self._make_key(func_name, key) in self.store
 
     def get(self, func_name, key):
-        print(f"  [Memory] Hit: {func_name}")
+        logger.debug(f"[Memory] Cache hit for {func_name}")
         return self.store[self._make_key(func_name, key)]
 
     def set(self, func_name, key, value):
@@ -74,7 +78,7 @@ class HDF5Backend(CacheBackend):
             return f"{func_name}/{key}" in f
 
     def get(self, func_name, key):
-        print(f"  [HDF5] Hit: {func_name}")
+        logger.debug(f"[HDF5] Cache hit for {func_name}")
         with self.h5py.File(self.filepath, 'r') as f:
             dataset = f[f"{func_name}/{key}"]
             # Convert back to numpy or scalar
@@ -105,7 +109,7 @@ class PickleDiskBackend(CacheBackend):
         return os.path.exists(self._path(func_name, key))
 
     def get(self, func_name, key):
-        print(f"  [Pickle] Hit: {func_name}")
+        logger.debug(f"[Pickle] Cache hit for {func_name}")
         with open(self._path(func_name, key), 'rb') as f:
             return pickle.load(f)
 
@@ -136,7 +140,7 @@ def cached(backend: CacheBackend):
                 return backend.get(fn.__name__, key)
             
             # 3. Run Function
-            print(f"  [Exec] Running {fn.__name__}...")
+            logger.debug(f"Cache miss for {fn.__name__}. Executing...")
             result = fn(**kwargs)
             
             # 4. Save Result

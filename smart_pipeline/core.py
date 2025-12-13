@@ -1,9 +1,13 @@
+import logging
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Literal, Set
 
 from .models import Step
 from .solvers import Solver, DAGSolver
 from .visualization import visualize_pipeline
+
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Pipeline:
@@ -16,7 +20,9 @@ class Pipeline:
         :param fn: The function to execute.
         :param outputs: Optional list of variable names this function produces. 
         """
-        self.steps.append(Step(fn, outputs))
+        step = Step(fn, outputs)
+        self.steps.append(step)
+        logger.debug(f"Added step '{step.name}' to pipeline.")
         return self
 
     def step(self, fn: Callable = None, *, outputs: List[str] = None):
@@ -37,7 +43,14 @@ class Pipeline:
         """
         Delegates the execution to the configured Solver.
         """
-        return self.solver.solve(self.steps, inputs)
+        logger.info(f"Starting pipeline execution with {len(self.steps)} steps and inputs: {list(inputs.keys())}")
+        try:
+            result = self.solver.solve(self.steps, inputs)
+            logger.info("Pipeline execution completed successfully.")
+            return result
+        except Exception as e:
+            logger.error(f"Pipeline execution failed: {e}")
+            raise
 
     def visualize(self, 
                   inputs: List[str] = None, 
@@ -47,15 +60,9 @@ class Pipeline:
                   view: bool = True):
         """
         Generates a Graphviz diagram of the pipeline.
-        
-        :param inputs: List of input keys available at runtime.
-        :param output_path: Path to save file (e.g., 'pipeline.pdf', 'graph.png').
-                            If None, opens in the default viewer.
-        :param orientation: 'TB' (Top-Bottom) or 'LR' (Left-Right).
-        :param graph_type: 'flow' (logic view) or 'bipartite' (data view).
-        :param view: Whether to try opening the generated file automatically.
         """
         input_set = set(inputs or [])
+        logger.debug(f"Generating visualization ({graph_type}) for pipeline.")
         
         visualize_pipeline(
             steps=self.steps,

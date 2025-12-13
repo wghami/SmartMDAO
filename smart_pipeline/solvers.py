@@ -1,4 +1,5 @@
 import inspect
+import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Set, Protocol, Optional, Union
@@ -6,6 +7,9 @@ import math
 
 from .models import Step
 from .executor import StepExecutor
+
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 class Solver(Protocol):
     """Interface for execution logic."""
@@ -18,7 +22,10 @@ class DAGSolver:
     Ideal for linear workflows.
     """
     def solve(self, steps: List[Step], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        logger.info("DAGSolver started.")
         execution_order = self._topological_sort(steps, set(inputs.keys()))
+        logger.debug(f"Topological sort order: {[s.name for s in execution_order]}")
+        
         memory = inputs.copy()
         
         for step in execution_order:
@@ -44,6 +51,7 @@ class DAGSolver:
                     queue.append(neighbor)
 
         if len(sorted_steps) != len(steps):
+            logger.error("Cycle detected in DAGSolver.")
             raise ValueError("Cycle detected in pipeline. Use HybridSolver or IterativeSolver.")
 
         return sorted_steps
@@ -63,7 +71,7 @@ class IterativeSolver:
         residuals = []
         
         run_sequence = self._determine_execution_order(steps)
-        print(f"  [IterativeSolver] Execution Sequence: {[s.name for s in run_sequence]}")
+        logger.info(f"IterativeSolver started. Sequence: {[s.name for s in run_sequence]}")
         
         # Identify variables produced by these steps (for auto-convergence)
         produced_vars = set()
@@ -84,10 +92,12 @@ class IterativeSolver:
             
             # Only break if we actually calculated a numeric difference (not inf)
             if diff != float('inf') and diff < self.tolerance:
-                print(f"  [IterativeSolver] Converged at iteration {i+1} with residual {diff:.6e}")
+                logger.info(f"Converged at iteration {i+1} with residual {diff:.6e}")
                 break
+            
+            logger.debug(f"Iteration {i+1}: residual {diff:.6e}")
         else:
-             print(f"  [IterativeSolver] Reached max_iterations ({self.max_iterations}) without converging. Last residual: {residuals[-1]:.6e}")
+             logger.warning(f"Reached max_iterations ({self.max_iterations}) without converging. Last residual: {residuals[-1]:.6e}")
         
         # Store residuals (append to potentially existing history from other cycles)
         memory.setdefault('residual_history', []).append(residuals)
@@ -139,6 +149,7 @@ class HybridSolver:
         self.tolerance = tolerance
 
     def solve(self, steps: List[Step], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        logger.info("HybridSolver started.")
         input_keys = set(inputs.keys())
         producers_map = _map_producers(steps)
         
@@ -147,6 +158,7 @@ class HybridSolver:
 
         # 2. Find Strongly Connected Components (SCCs)
         sccs = self._tarjan_scc(steps, adj_list)
+        logger.debug(f"Detected {len(sccs)} execution blocks (SCCs).")
         
         # 3. Build Condensation Graph (DAG of SCCs)
         scc_map = {step: i for i, cluster in enumerate(sccs) for step in cluster}
@@ -194,7 +206,7 @@ class HybridSolver:
             # Sort alphabetically to ensure deterministic execution order within the cycle
             group_sorted = sorted(group, key=lambda s: s.name)
             
-            print(f"  [Hybrid] Detected Cyclic Block: {[s.name for s in group_sorted]}")
+            logger.info(f"Cyclic Block Detected: {[s.name for s in group_sorted]}")
             sub_solver = IterativeSolver(
                 max_iterations=self.max_iterations, 
                 tolerance=self.tolerance

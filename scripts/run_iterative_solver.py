@@ -1,15 +1,22 @@
+import logging
 from dataclasses import dataclass
-from smart_pipeline import Pipeline, IterativeSolver
+from smart_pipeline import Pipeline, IterativeSolver, configure_logging
 
-# ==============================================================================
-# 5. EXAMPLE USAGE
-# ==============================================================================
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
-if __name__ == "__main__":
-    print("\n=== CASE 1: Standard Linear Pipeline (DAG) ===")
+def run_iterative_solver_demo():
+    # 0. Configure Logging
+    configure_logging(level=logging.INFO)
+
+    # ==============================================================================
+    # CASE 1: Standard Linear Pipeline (DAG)
+    # ==============================================================================
+    logger.info("=== CASE 1: Standard Linear Pipeline (DAG) ===")
     
     # 1. Dictionary return example
     def fetch_data(source): 
+        logger.debug(f"Fetching data from {source}")
         return {"raw": [2, 4, 6], "meta": "raw_data"}
     
     @dataclass
@@ -17,13 +24,15 @@ if __name__ == "__main__":
         clean_data: list
         avg: float
 
-    # 2. IMPORTANT: Return Type Hint added! 
+    # 2. Return Type Hint added! 
     # The pipeline reads '-> Processed' to know this function produces 'clean_data' and 'avg'
     def process(raw) -> Processed:
+        logger.debug(f"Processing raw data: {raw}")
         return Processed(clean_data=[x*2 for x in raw], avg=sum(raw)/len(raw))
 
     def report(avg, clean_data):
-        return f"Report: Average is {avg}, Data * 2: {clean_data}"
+        msg = f"Report: Average is {avg}, Data * 2: {clean_data}"
+        return msg
 
     pipe_linear = Pipeline()
     
@@ -34,15 +43,21 @@ if __name__ == "__main__":
     pipe_linear.add(process) 
 
     res = pipe_linear.run(source="DB_PROD")
-    print("Result:", res['report'])
+    logger.info(f"Result: {res['report']}")
 
-    print("\n=== CASE 2: Iterative Feedback (Babylonian Sqrt) ===")
+    # ==============================================================================
+    # CASE 2: Iterative Feedback (Babylonian Sqrt)
+    # ==============================================================================
+    logger.info("=== CASE 2: Iterative Feedback (Babylonian Sqrt) ===")
     
     def update_guess(x, S):
         new_x = 0.5 * (x + S/x)
-        print(f"  Guess: {new_x:.4f}")
+        # We log the iteration step. 
+        # Using INFO here so you can see the convergence in standard run mode.
+        logger.info(f"  Guess update: {new_x:.4f}")
         return new_x
 
+    # Configure the solver specifically for this loop
     solver = IterativeSolver(max_iterations=10, tolerance=0.0001, target_var='x')
     pipe_loop = Pipeline(solver=solver)
     
@@ -50,5 +65,14 @@ if __name__ == "__main__":
     
     initial_guess = 10.0
     S = 36.0
+    
+    logger.info(f"Starting calculation for Sqrt({S}) with initial guess {initial_guess}...")
     result_loop = pipe_loop.run(x=initial_guess, S=S) 
-    print(f"Square root of {S} = {result_loop['x']}")
+    
+    logger.info(f"Square root of {S} = {result_loop['x']}")
+
+# ==============================================================================
+# MAIN EXECUTION
+# ==============================================================================
+if __name__ == "__main__":
+    run_iterative_solver_demo()

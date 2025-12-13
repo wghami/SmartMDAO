@@ -1,8 +1,15 @@
+import logging
 from dataclasses import dataclass
 import numpy as np
-from smart_pipeline import Pipeline # Adjust import to your actual file
+from smart_pipeline import Pipeline, configure_logging
+
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 def run_decorators_usage():
+    # 0. Configure logging
+    configure_logging(level=logging.INFO)
+    
     # 1. Initialize Pipeline FIRST
     pipe = Pipeline()
 
@@ -14,7 +21,9 @@ def run_decorators_usage():
     # The decorator automatically adds this to 'pipe'
     @pipe.step
     def step_1(x: float):
-        return x + 1
+        result = x + 1
+        logger.debug(f"Executing step_1: {x} + 1 = {result}")
+        return result
 
     # SCENARIO B: Tuple Unpacking (Needs explicit 'outputs')
     # We pass the outputs list just like we did in .add()
@@ -23,6 +32,7 @@ def run_decorators_usage():
         # Returns a tuple, so we need to tell the pipeline what the names are
         val_y = step_1 * 2
         val_z = step_1 * 3
+        logger.debug(f"Executing step_2: Unpacking {step_1} -> y={val_y}, z={val_z}")
         return val_y, val_z
 
     # SCENARIO C: Dataclass (Automatic inference)
@@ -32,14 +42,22 @@ def run_decorators_usage():
 
     @pipe.step
     def step_3(y: float, z: float) -> FinalResult:
+        logger.debug(f"Executing step_3: Summing {y} + {z}")
         return FinalResult(total=y + z)
     
-    print("Pipeline steps:", [s.name for s in pipe.steps])
+    # Log the registered steps
+    logger.info(f"Pipeline steps registered: {[s.name for s in pipe.steps]}")
     
     # pipe.visualize(inputs=["x"])
     
+    # Run the pipeline
+    logger.info("Starting pipeline execution with x=10...")
     result = pipe.run(x=10)
-    print("Result:", result)
+    
+    logger.info(f"Final Result Dictionary: {result}")
+    # Accessing the specific dataclass field if present in memory
+    if 'total' in result:
+        logger.info(f"Computed Total: {result['total']}")
 
 # ==========================================
 # 3. Execution

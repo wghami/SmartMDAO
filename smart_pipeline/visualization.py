@@ -1,15 +1,20 @@
 import inspect
 import os
+import logging
 from typing import List, Set, Dict, Literal, Optional, Any, Tuple
 from collections import defaultdict
 
 from .models import Step
+
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 # Try importing graphviz; handle absence gracefully
 try:
     import graphviz
 except ImportError:
     graphviz = None
+    logger.warning("Graphviz not found. Visualization features will be unavailable.")
 
 
 class PipelineVisualizer:
@@ -115,13 +120,14 @@ class PipelineVisualizer:
                 fmt = ext.lstrip('.').lower() if ext else 'pdf'
                 out_file = self.dot.render(filename, format=fmt, cleanup=True, view=view)
                 if not view:
-                    print(f"Pipeline diagram saved to: {out_file}")
+                    logger.info(f"Pipeline diagram saved to: {out_file}")
             else:
                 self.dot.view(cleanup=True)
+                logger.info("Pipeline diagram opened in viewer.")
         except Exception as e:
-            print(f"Graph rendered successfully, but viewer failed: {e}")
+            logger.error(f"Graph rendered successfully, but viewer failed: {e}")
             if output_path:
-                print(f"File saved at: {output_path}")
+                logger.info(f"File saved at: {output_path}")
 
     # --- Classification Logic ---
 

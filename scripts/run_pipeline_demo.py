@@ -1,8 +1,11 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
-from smart_pipeline import Pipeline
+from smart_pipeline import Pipeline, configure_logging
 
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # 1. Define Data Contracts (The "What")
@@ -39,6 +42,7 @@ def step_1(x: np.ndarray) -> InitialProcessingOutput:
     """
     Takes raw input 'x', process it, and packages it into a structured output.
     """
+    logger.debug(f"Executing step_1 with input x={x}")
     processed_value = x + 1
     return InitialProcessingOutput(y=processed_value)
 
@@ -46,6 +50,7 @@ def step_2(a: np.ndarray) -> IntermediateCalculationOutput:
     """
     Takes raw input 'a', process it, and packages it into a structured output.
     """
+    logger.debug(f"Executing step_2 with input a={a}")
     intermediate_value = a ** 2
     return IntermediateCalculationOutput(b=intermediate_value, c=intermediate_value + 10)
 
@@ -54,6 +59,7 @@ def step_3(y: np.ndarray, b: np.ndarray) -> FinalCalculationOutput:
     Requires 'y'. The pipeline automatically looks for a previous step 
     that outputs an object containing 'y'.
     """
+    logger.debug(f"Executing step_3 with inputs y={y}, b={b}")
     final_value = y * 2 + b
     return FinalCalculationOutput(z=final_value)
 
@@ -62,7 +68,10 @@ def step_3(y: np.ndarray, b: np.ndarray) -> FinalCalculationOutput:
 # 3. Execution Logic
 # ==========================================
 def run_pipeline_demo():
-    print("--- Starting Pipeline ---")
+    # 0. Configure Logging
+    configure_logging(level=logging.INFO)
+
+    logger.info("--- Starting Pipeline ---")
 
     # Initialize the pipeline
     pipe = Pipeline()
@@ -74,23 +83,24 @@ def run_pipeline_demo():
 
     # Visualize diagram dependency (Pop-up default)
     # We pass the list of inputs we INTEND to provide to see how they connect
-    print("Generating interactive diagram...")
+    logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["x", "a"],
                    output_path=str(Path("results") / "pipeline_diagram.pdf"),
-                   graph_type="flow")
+                   graph_type="flow",
+                   view=False)
 
     # Run the pipeline
     # The pipeline sees step_1 needs 'x', so we must provide 'x'.
     results = pipe.run(x=np.array([3.0]), a=np.array([4.0]))
 
-    print("--- Pipeline Finished ---")
-    print(f"Input (x): {results['x']}")
-    print(f"Input (a): {results['a']}")
-    print(f"Step 1 (y): {results['y']} (x + 1)")
-    print(f"Step 2 (b): {results['b']} (a ** 2)")
-    print(f"Step 3 (z): {results['z']} (y * 2 + b)")
-    print("-" * 25)
-    print(f"Full State: {results}")
+    logger.info("--- Pipeline Finished ---")
+    logger.info(f"Input (x): {results['x']}")
+    logger.info(f"Input (a): {results['a']}")
+    logger.info(f"Step 1 (y): {results['y']} (x + 1)")
+    logger.info(f"Step 2 (b): {results['b']} (a ** 2)")
+    logger.info(f"Step 3 (z): {results['z']} (y * 2 + b)")
+    logger.info("-" * 25)
+    logger.info(f"Full State: {results}")
 
 
 if __name__ == "__main__":

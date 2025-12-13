@@ -1,7 +1,11 @@
 import inspect
+import logging
 from dataclasses import is_dataclass, asdict
 from typing import Dict, Any
 from .models import Step
+
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 class StepExecutor:
     """
@@ -10,6 +14,8 @@ class StepExecutor:
     """
     @staticmethod
     def run_step(step: Step, memory: Dict[str, Any]):
+        logger.debug(f"Preparing to execute step '{step.name}'")
+        
         # Use the robust unwrapped signature to find expected parameters
         sig = step.get_signature()
         
@@ -24,29 +30,29 @@ class StepExecutor:
                 missing_required.append(name)
         
         if missing_required:
-            raise KeyError(
-                f"Step '{step.name}' cannot run. Missing inputs: {missing_required}. "
-                f"Available in memory: {list(memory.keys())}"
-            )
+            error_msg = (f"Step '{step.name}' cannot run. Missing inputs: {missing_required}. "
+                         f"Available in memory: {list(memory.keys())}")
+            logger.error(error_msg)
+            raise KeyError(error_msg)
         
         # 2. Execute
-        # We still call the (possibly decorated) step.fn, passing the mapped params.
-        # The wrapper handles **kwargs matching.
         try:
+            logger.debug(f"Invoking '{step.name}' with inputs: {list(params.keys())}")
             result = step.fn(**params)
         except Exception as e:
+            logger.error(f"Error executing step '{step.name}': {e}", exc_info=True)
             raise RuntimeError(f"Error executing step '{step.name}': {e}") from e
 
         # 3. Store Result
         StepExecutor._update_memory(step, result, memory)
+        logger.debug(f"Finished step '{step.name}'.")
 
     @staticmethod
     def _update_memory(step: Step, result: Any, memory: Dict[str, Any]):
         output_keys = step.resolve_output_names()
 
         if result is None:
-             # Even if result is None, we might need to verify if outputs were expected?
-             # For now, we assume None means no output to store unless manual_outputs dictated otherwise.
+             logger.debug(f"Step '{step.name}' returned None. No outputs stored.")
              return
 
         # Case A: Explicit Manual Outputs (e.g. outputs=['a', 'b'])
@@ -59,6 +65,7 @@ class StepExecutor:
             if isinstance(result, dict):
                 for k in output_keys:
                     if k not in result:
+                        logger.error(f"Step '{step.name}' missing output key '{k}' in returned dict.")
                         raise KeyError(f"Step '{step.name}' expected output key '{k}' but it was missing in returned dict.")
                     memory[k] = result[k]
                 return
