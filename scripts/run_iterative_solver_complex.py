@@ -1,150 +1,137 @@
 import matplotlib.pyplot as plt
 from pathlib import Path
-from smart_pipeline import Pipeline, IterativeSolver
+from smart_pipeline import Pipeline, HybridSolver
 
 # ==============================================================================
 # 1. DEFINE A COUPLED SYSTEM (Cyclic Dependencies)
 # ==============================================================================
-# We define a stable system of linear equations with a cyclic dependency.
+# System:
 # x = 0.5 * y + 2
 # y = 0.5 * z - 1
 # z = 0.5 * x + 4
 #
-# Analytical Solution:
-# Substitute z -> y, then y -> x:
-#   y = 0.5(0.5x + 4) - 1 = 0.25x + 1
-#   x = 0.5(0.25x + 1) + 2 = 0.125x + 2.5
-#   0.875x = 2.5  => x = 2.5 / 0.875 = 20/7 ≈ 2.8571
-#   y = 0.25(20/7) + 1 = 12/7 ≈ 1.7143
-#   z = 0.5(20/7) + 4 = 10/7 + 28/7 = 38/7 ≈ 5.4286
+# Analytical Solution: x ≈ 2.8571, y ≈ 1.7143, z ≈ 5.4286
 
 def compute_x(y, history_x):
-    """Calculates x based on y."""
     val = 0.5 * y + 2
     history_x.append(val)
     return val
 
 def compute_y(z, history_y):
-    """Calculates y based on z."""
     val = 0.5 * z - 1
     history_y.append(val)
     return val
 
 def compute_z(x, history_z):
-    """Calculates z based on x."""
     val = 0.5 * x + 4
     history_z.append(val)
     return val
 
-# Define the desired mathematical order explicitly
-execution_order = ["compute_z", "compute_y", "compute_x"]
-# execution_order = None  # Uncomment to test fallback to registration order
-
 # ==============================================================================
-# 2. CONFIGURE PIPELINE
+# 2. CONFIGURE PIPELINE WITH HYBRID SOLVER
 # ==============================================================================
 
-# We monitor 'x' for convergence.
-solver_config = IterativeSolver(
-    target_var='y',
+# We use HybridSolver instead of IterativeSolver manually.
+# This allows the system to auto-detect that these 3 functions form a cycle.
+solver_config = HybridSolver(
     tolerance=1e-6,
-    max_iterations=50,
-    # Explicitly force this order, regardless of pipe.add() calls.
-    # If None, the order of pipe.add() is used.
-    execution_order=execution_order
+    max_iterations=50
 )
 
 pipe = Pipeline(solver=solver_config)
 
-# !!! CRITICAL NOTE ON ORDER !!!
-# Because we provided 'execution_order' to the solver above, the order of these 
-# .add() calls NO LONGER MATTERS for the math. 
-# However, if we removed 'execution_order', the solver would revert to 
-# executing in the order Y -> X -> Z defined below.
+# Add steps in ANY order. The HybridSolver resolves dependencies.
 pipe.add(compute_y, outputs=['y'])
 pipe.add(compute_x, outputs=['x'])
 pipe.add(compute_z, outputs=['z'])
 
-pipe.visualize(inputs=["history_x", "history_y", "history_z"],
-                output_pdf=str(Path("results") / "iterative_pipeline_diagram.pdf"),
-                graph_type="bipartite")
+# ==============================================================================
+# EXPLANATION: How is Execution Order Chosen?
+# ==============================================================================
+# 1. Dependency Analysis: 
+#    The solver builds a graph where nodes are steps and edges are data dependencies.
+#    Since x needs y, y needs z, and z needs x, it detects a Strongly Connected Component (Cycle).
+#
+# 2. Hybrid Decomposition:
+#    - Linear parts (if any) are executed first/last based on Topological Sort.
+#    - Cyclic parts are isolated into a "super-node" and executed iteratively.
+#
+# 3. Intra-Cycle Order:
+#    Inside the detected cycle {compute_x, compute_y, compute_z}, the execution 
+#    order defaults to alphanumeric sort of the function names to ensure determinism:
+#    Order: compute_x -> compute_y -> compute_z.
+# ==============================================================================
 
 # ==============================================================================
 # 3. RUN THE SIMULATION
 # ==============================================================================
 
-# Initial guesses
 initial_state = {
     'x': 0, 'y': 0, 'z': 0,
-    'history_x': [0],
+    'history_x': [0], # Track history for plotting
     'history_y': [0],
     'history_z': [0]
 }
 
-print("--- Starting Iterative Solver ---")
-if solver_config.execution_order:
-    print(f"MODE: EXPLICIT ORDER")
-    print(f"The solver will strictly follow this sequence (ignoring add() order):")
-    for i, step_name in enumerate(solver_config.execution_order, 1):
-        print(f"   {i}. {step_name}")
-else:
-    print(f"MODE: REGISTRATION ORDER (Fallback)")
-    print("WARNING: No explicit execution_order provided.")
-    print("The solver will execute steps in the order they were added to the pipeline.")
-print("-----------------------------------")
-
-print("Running pipeline...")
+print("--- Starting Hybrid Solver ---")
+print("The solver will automatically detect the cycle [x, y, z] and iterate.")
 results = pipe.run(**initial_state)
 
-print(f"Converged Values -> X: {results['x']:.4f}, Y: {results['y']:.4f}, Z: {results['z']:.4f}")
+print(f"\nConverged Values -> X: {results['x']:.4f}, Y: {results['y']:.4f}, Z: {results['z']:.4f}")
 
-# Verification Step
+# Verification
 expected = {'x': 20./7., 'y': 12./7., 'z': 38./7.}
 print("\n--- Verification Check ---")
 for var, target in expected.items():
     actual = results[var]
-    error = abs(actual - target)
-    print(f"Variable {var.upper()}: Target={target}, Actual={actual:.4f} (Error={error:.4e})")
+    print(f"Variable {var.upper()}: Target={target:.4f}, Actual={actual:.4f} (Err={abs(actual - target):.4e})")
+
+# Visualizatio diagram
+print("Generating interactive diagram...")
+pipe.visualize(inputs=["x", "a"],
+                output_path=str(Path("results") / "iterative_solver_complex.pdf"),
+                graph_type="bipartite")
 
 # ==============================================================================
-# 4. PLOT TRAJECTORIES
+# 4. PLOT TRAJECTORIES (Updated for Hybrid Solver Structure)
 # ==============================================================================
 
 hist_x = results['history_x']
 hist_y = results['history_y']
 hist_z = results['history_z']
-# Retrieve the residuals generated by our modified IterativeSolver
-residuals = results.get('residual_history', [])
+
+# Retrieve residuals. 
+# HybridSolver/IterativeSolver now stores a LIST of residual lists (one per cyclic block).
+# Since we have 1 cycle, we take the last element (or the first, as there's only one).
+raw_residuals = results.get('residual_history', [])
+residuals = raw_residuals[0] if raw_residuals else []
 
 iterations = range(len(hist_x))
 res_iterations = range(1, len(residuals) + 1)
 
-# Create a figure with 2 subplots (1 row, 2 columns)
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
-# Plot 1: Variable Convergence (Updated Legends)
-ax1.plot(iterations, hist_x, 'o-', label=f"x (Target {expected['x']:.6f})", markersize=4)
-ax1.plot(iterations, hist_y, 's-', label=f"y (Target {expected['y']:.6f})", markersize=4)
-ax1.plot(iterations, hist_z, '^-', label=f"z (Target {expected['z']:.6f})", markersize=4)
-ax1.set_title('Variable Trajectories')
+# Plot 1: Variable Convergence
+ax1.plot(iterations, hist_x, 'o-', label=f"x (Target {expected['x']:.2f})", markersize=4, alpha=0.8)
+ax1.plot(iterations, hist_y, 's-', label=f"y (Target {expected['y']:.2f})", markersize=4, alpha=0.8)
+ax1.plot(iterations, hist_z, '^-', label=f"z (Target {expected['z']:.2f})", markersize=4, alpha=0.8)
+ax1.set_title('Variable Convergence Trajectories')
 ax1.set_xlabel('Iteration Step')
 ax1.set_ylabel('Value')
 ax1.grid(True, linestyle='--', alpha=0.5)
 ax1.legend()
 
-# Plot 2: Residual History (Log Scale)
+# Plot 2: Residual History
 if residuals:
-    ax2.plot(res_iterations, residuals, 'r-o', label='Residual (|x_new - x_old|)')
+    ax2.plot(res_iterations, residuals, 'r-o', linewidth=2, label='Max Residual')
     ax2.set_yscale('log')
-    ax2.set_title('Convergence Residual (Log Scale)')
+    ax2.set_title(f'Convergence Rate ({len(residuals)} iterations)')
     ax2.set_xlabel('Iteration Step')
-    ax2.set_ylabel('Residual')
+    ax2.set_ylabel('Residual (Log Scale)')
     ax2.grid(True, linestyle='--', alpha=0.5, which="both")
     ax2.legend()
 else:
-    ax2.text(0.5, 0.5, "No residuals recorded", ha='center')
+    ax2.text(0.5, 0.5, "No residuals recorded\n(Converged immediately or no cycle)", ha='center')
 
 plt.tight_layout()
-
-print("Displaying plot...")
 plt.show()

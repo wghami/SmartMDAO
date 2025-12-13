@@ -3,7 +3,7 @@ from typing import Callable, List, Optional, Literal
 
 from .models import Step
 from .solvers import Solver, DAGSolver
-from .visualization import build_mermaid_graph, render_to_browser, render_to_pdf
+from .visualization import build_mermaid_graph, render_to_browser, render_to_file
 
 @dataclass
 class Pipeline:
@@ -41,22 +41,23 @@ class Pipeline:
 
     def visualize(self, 
                   inputs: List[str] = None, 
-                  output_pdf: str = None, 
+                  output_path: str = None, 
                   orientation: str = "TD",
                   graph_type: Literal["flow", "bipartite"] = "flow"):
         """
         Generates a Mermaid diagram of the pipeline.
         
         :param inputs: List of input keys available at runtime.
-        :param output_pdf: Path to save PDF (optional).
+        :param output_path: Path to save file. Supports .pdf, .svg, .png. 
+                            Use .svg for single-page large diagrams.
         :param orientation: 'TD' (Top-Down) or 'LR' (Left-Right).
         :param graph_type: 'flow' (default) or 'bipartite' (explicit variable nodes).
         """
         inputs = set(inputs or [])
         graph_def = build_mermaid_graph(self.steps, inputs, orientation, graph_type)
 
-        if output_pdf:
-            render_to_pdf(graph_def, output_pdf)
-            print(f"Pipeline diagram saved to: {output_pdf}")
+        if output_path:
+            render_to_file(graph_def, output_path)
+            print(f"Pipeline diagram saved to: {output_path}")
         else:
             render_to_browser(graph_def)

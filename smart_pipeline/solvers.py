@@ -1,8 +1,8 @@
 import inspect
 from collections import defaultdict, deque
-from dataclasses import dataclass
-from typing import List, Dict, Any, Set, Protocol, Optional
-import warnings
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Set, Protocol, Optional, Union
+import math
 
 from .models import Step
 from .executor import StepExecutor
@@ -16,11 +16,6 @@ class DAGSolver:
     """
     Standard Topological Sort Solver. 
     Ideal for linear workflows.
-
-    Execution Order:
-    Automatically reorders steps based on data dependencies (Topological Sort).
-    The order in which steps are added to the pipeline DOES NOT affect execution;
-    the solver determines the correct mathematical order.
     """
     def solve(self, steps: List[Step], inputs: Dict[str, Any]) -> Dict[str, Any]:
         execution_order = self._topological_sort(steps, set(inputs.keys()))
@@ -32,29 +27,10 @@ class DAGSolver:
         return memory
 
     def _topological_sort(self, steps: List[Step], input_keys: Set[str]) -> List[Step]:
-        # 1. Map Outputs -> Producer Step
-        producers_map = {} 
-        for step in steps:
-            for out_name in step.resolve_output_names():
-                producers_map[out_name] = step
-        
-        # 2. Build Dependency Graph
-        adj_list = defaultdict(list)
-        indegree = {step: 0 for step in steps}
+        producers_map = _map_producers(steps)
+        adj_list, indegree = _build_dependency_graph(steps, input_keys, producers_map)
 
-        for consumer in steps:
-            sig = inspect.signature(consumer.fn)
-            for param in sig.parameters:
-                if param in input_keys:
-                    continue 
-                
-                if param in producers_map:
-                    producer = producers_map[param]
-                    if producer is not consumer:
-                        adj_list[producer].append(consumer)
-                        indegree[consumer] += 1
-
-        # 3. Kahn's Algorithm
+        # Kahn's Algorithm
         queue = deque([s for s, deg in indegree.items() if deg == 0])
         sorted_steps = []
 
@@ -68,25 +44,16 @@ class DAGSolver:
                     queue.append(neighbor)
 
         if len(sorted_steps) != len(steps):
-            raise ValueError("Cycle detected in pipeline (or disjoint graph with unresolved deps). Use IterativeSolver for loops.")
+            raise ValueError("Cycle detected in pipeline. Use HybridSolver or IterativeSolver.")
 
         return sorted_steps
 
 @dataclass
 class IterativeSolver:
     """
-    Solves systems with feedback loops (e.g., Newton's Method).
-
-    Execution Order:
-    1. If `execution_order` is provided (List of step names), it strictly follows that sequence.
-    2. Otherwise, it follows the order in which steps were added to the Pipeline.
-
-    CRITICAL NOTE:
-    In coupled systems (e.g., A -> B -> A), the order of execution determines which 
-    values (current iteration vs previous iteration) are used by the steps. 
-    This affects convergence speed (Gauss-Seidel effect).
+    Solves systems with feedback loops.
     """
-    max_iterations: int = 10
+    max_iterations: int = 100
     tolerance: float = 1e-6
     target_var: Optional[str] = None
     execution_order: Optional[List[str]] = None
@@ -95,54 +62,217 @@ class IterativeSolver:
         memory = inputs.copy()
         residuals = []
         
-        # Determine the sequence of execution
         run_sequence = self._determine_execution_order(steps)
+        print(f"  [IterativeSolver] Execution Sequence: {[s.name for s in run_sequence]}")
+        
+        # Identify variables produced by these steps (for auto-convergence)
+        produced_vars = set()
+        for s in steps:
+            produced_vars.update(s.resolve_output_names())
 
         for i in range(self.max_iterations):
-            prev_val = memory.get(self.target_var) if self.target_var else None
+            # Snapshot state for convergence check
+            prev_state = {k: memory.get(k) for k in produced_vars if k in memory}
             
-            # Execute in the determined sequence
+            # Execute
             for step in run_sequence:
                 StepExecutor.run_step(step, memory)
             
-            if self.target_var and prev_val is not None:
-                current_val = memory.get(self.target_var)
-                # Check convergence if numeric
-                if isinstance(current_val, (int, float)) and isinstance(prev_val, (int, float)):
-                    diff = abs(current_val - prev_val)
-                    residuals.append(diff)
-                    
-                    if diff < self.tolerance:
-                        break
+            # Check Convergence
+            diff = self._calculate_residual(prev_state, memory, produced_vars)
+            residuals.append(diff)
+            
+            # Only break if we actually calculated a numeric difference (not inf)
+            if diff != float('inf') and diff < self.tolerance:
+                print(f"  [IterativeSolver] Converged at iteration {i+1} with residual {diff:.6e}")
+                break
+        else:
+             print(f"  [IterativeSolver] Reached max_iterations ({self.max_iterations}) without converging. Last residual: {residuals[-1]:.6e}")
         
-        memory['residual_history'] = residuals
+        # Store residuals (append to potentially existing history from other cycles)
+        memory.setdefault('residual_history', []).append(residuals)
         return memory
 
+    def _calculate_residual(self, prev_state: Dict, current_memory: Dict, produced_vars: Set[str]) -> float:
+        """
+        Calculates the maximum change in variables. 
+        """
+        if self.target_var:
+            p = prev_state.get(self.target_var)
+            c = current_memory.get(self.target_var)
+            return abs(c - p) if (isinstance(p, (int, float)) and isinstance(c, (int, float))) else float('inf')
+
+        max_diff = 0.0
+        numeric_vars_found = False
+
+        for k in produced_vars:
+            p = prev_state.get(k)
+            c = current_memory.get(k)
+            
+            # Strictly require both to be numeric
+            if isinstance(p, (int, float)) and isinstance(c, (int, float)):
+                diff = abs(c - p)
+                max_diff = max(max_diff, diff)
+                numeric_vars_found = True
+        
+        if numeric_vars_found:
+            return max_diff
+            
+        # If no numeric variables updated, we can't judge convergence numerically.
+        return float('inf')
+
     def _determine_execution_order(self, steps: List[Step]) -> List[Step]:
-        """
-        Sorts the steps based on self.execution_order if provided.
-        """
         if not self.execution_order:
-            return steps # Fallback to registration order
-
-        # Map name -> Step object
+            return steps 
+        
         step_map = {s.name: s for s in steps}
-        
-        # Validation
-        ordered_steps = []
-        missing_steps = []
-        
-        for name in self.execution_order:
-            if name in step_map:
-                ordered_steps.append(step_map[name])
-            else:
-                missing_steps.append(name)
-        
-        if missing_steps:
-            raise ValueError(f"IterativeSolver config references missing steps: {missing_steps}")
+        return [step_map[name] for name in self.execution_order if name in step_map]
 
-        # Check if all registered steps are included in the order? 
-        # (Optional: we might want to allow running a SUBSET of the pipeline)
-        # For now, we assume if you define an order, you only run those steps.
+
+class HybridSolver:
+    """
+    Advanced solver that automatically decomposes the pipeline into 
+    Linear (DAG) and Iterative (Cyclic) components (Strongly Connected Components).
+    """
+    def __init__(self, max_iterations: int = 100, tolerance: float = 1e-6):
+        self.max_iterations = max_iterations
+        self.tolerance = tolerance
+
+    def solve(self, steps: List[Step], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        input_keys = set(inputs.keys())
+        producers_map = _map_producers(steps)
         
-        return ordered_steps
+        # 1. Build Adjacency Graph (Producer -> Consumer)
+        adj_list, _ = _build_dependency_graph(steps, input_keys, producers_map)
+
+        # 2. Find Strongly Connected Components (SCCs)
+        sccs = self._tarjan_scc(steps, adj_list)
+        
+        # 3. Build Condensation Graph (DAG of SCCs)
+        scc_map = {step: i for i, cluster in enumerate(sccs) for step in cluster}
+        scc_adj = defaultdict(set)
+        scc_indegree = defaultdict(int)
+
+        for u in steps:
+            u_scc = scc_map[u]
+            for v in adj_list[u]:
+                v_scc = scc_map[v]
+                if u_scc != v_scc:
+                    if v_scc not in scc_adj[u_scc]:
+                        scc_adj[u_scc].add(v_scc)
+                        scc_indegree[v_scc] += 1
+        
+        # Ensure all SCCs have an entry
+        for i in range(len(sccs)):
+            if i not in scc_indegree:
+                scc_indegree[i] = 0
+
+        # 4. Topological Sort of SCCs
+        queue = deque([i for i, deg in scc_indegree.items() if deg == 0])
+        execution_plan = []
+        
+        while queue:
+            current_scc_idx = queue.popleft()
+            execution_plan.append(sccs[current_scc_idx])
+            
+            for neighbor_scc in scc_adj[current_scc_idx]:
+                scc_indegree[neighbor_scc] -= 1
+                if scc_indegree[neighbor_scc] == 0:
+                    queue.append(neighbor_scc)
+
+        # 5. Execute
+        memory = inputs.copy()
+        
+        for group in execution_plan:
+            # Case A: Linear
+            if len(group) == 1 and group[0] not in adj_list[group[0]]:
+                step = group[0]
+                StepExecutor.run_step(step, memory)
+                continue
+
+            # Case B: Cyclic
+            # Sort alphabetically to ensure deterministic execution order within the cycle
+            group_sorted = sorted(group, key=lambda s: s.name)
+            
+            print(f"  [Hybrid] Detected Cyclic Block: {[s.name for s in group_sorted]}")
+            sub_solver = IterativeSolver(
+                max_iterations=self.max_iterations, 
+                tolerance=self.tolerance
+            )
+            
+            cycle_results = sub_solver.solve(group_sorted, memory)
+            memory.update(cycle_results)
+
+        return memory
+
+    def _tarjan_scc(self, steps: List[Step], adj_list: Dict[Step, List[Step]]) -> List[List[Step]]:
+        index = 0
+        indices = {}
+        lowlinks = {}
+        stack = []
+        on_stack = set()
+        sccs = []
+
+        def strongconnect(v):
+            nonlocal index
+            indices[v] = index
+            lowlinks[v] = index
+            index += 1
+            stack.append(v)
+            on_stack.add(v)
+
+            for w in adj_list[v]:
+                if w not in indices:
+                    strongconnect(w)
+                    lowlinks[v] = min(lowlinks[v], lowlinks[w])
+                elif w in on_stack:
+                    lowlinks[v] = min(lowlinks[v], indices[w])
+
+            if lowlinks[v] == indices[v]:
+                new_scc = []
+                while True:
+                    w = stack.pop()
+                    on_stack.remove(w)
+                    new_scc.append(w)
+                    if w == v: break
+                sccs.append(new_scc)
+
+        for step in steps:
+            if step not in indices:
+                strongconnect(step)
+                
+        return sccs
+
+# --- Helpers ---
+
+def _map_producers(steps: List[Step]) -> Dict[str, Step]:
+    mapping = {}
+    for step in steps:
+        for out in step.resolve_output_names():
+            mapping[out] = step
+    return mapping
+
+def _build_dependency_graph(steps: List[Step], input_keys: Set[str], producers_map: Dict[str, Step]):
+    adj_list = defaultdict(list)
+    indegree = defaultdict(int)
+    
+    for s in steps: 
+        indegree[s] = 0
+
+    for consumer in steps:
+        sig = inspect.signature(consumer.fn)
+        for param in sig.parameters:
+            
+            # PRIORITY FIX: Check if it's an internal producer FIRST.
+            # Even if 'x' is in input_keys (initial guess), if it is produced by another step,
+            # we must link to that step to preserve the cycle structure.
+            if param in producers_map:
+                producer = producers_map[param]
+                adj_list[producer].append(consumer)
+                indegree[consumer] += 1
+            
+            # Only if it's NOT produced internally do we check if it's satisfied by inputs.
+            elif param in input_keys:
+                continue 
+
+    return adj_list, indegree
