@@ -134,15 +134,14 @@ class PipelineVisualizer:
         consumed = set()
         produced = set()
 
-        # 1. Map Producers and Consumed vars
         for step in self.steps:
             # Outputs
             for out in step.resolve_output_names():
                 producers_map[out] = step
                 produced.add(out)
             
-            # Inputs
-            sig = inspect.signature(step.fn)
+            # Inputs (Use unwrapped signature)
+            sig = step.get_signature()
             for param in sig.parameters:
                 consumed.add(param)
 
@@ -199,7 +198,7 @@ class PipelineVisualizer:
         # 5. Draw Edges
         for step in self.steps:
             step_id = self._node_id(step)
-            sig = inspect.signature(step.fn)
+            sig = step.get_signature()
 
             # Inputs to Step
             for param in sig.parameters:
@@ -248,7 +247,7 @@ class PipelineVisualizer:
         # 4. Draw Edges
         for step in self.steps:
             step_id = self._node_id(step)
-            sig = inspect.signature(step.fn)
+            sig = step.get_signature()
             
             for param in sig.parameters:
                 # Case A: Missing

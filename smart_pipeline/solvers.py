@@ -260,12 +260,11 @@ def _build_dependency_graph(steps: List[Step], input_keys: Set[str], producers_m
         indegree[s] = 0
 
     for consumer in steps:
-        sig = inspect.signature(consumer.fn)
+        # --- FIX: Use .get_signature() to see through decorators ---
+        sig = consumer.get_signature() 
         for param in sig.parameters:
             
             # PRIORITY FIX: Check if it's an internal producer FIRST.
-            # Even if 'x' is in input_keys (initial guess), if it is produced by another step,
-            # we must link to that step to preserve the cycle structure.
             if param in producers_map:
                 producer = producers_map[param]
                 adj_list[producer].append(consumer)

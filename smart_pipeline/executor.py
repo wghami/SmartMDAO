@@ -10,7 +10,8 @@ class StepExecutor:
     """
     @staticmethod
     def run_step(step: Step, memory: Dict[str, Any]):
-        sig = inspect.signature(step.fn)
+        # Use the robust unwrapped signature to find expected parameters
+        sig = step.get_signature()
         
         # 1. Bind Arguments
         params = {}
@@ -29,6 +30,8 @@ class StepExecutor:
             )
         
         # 2. Execute
+        # We still call the (possibly decorated) step.fn, passing the mapped params.
+        # The wrapper handles **kwargs matching.
         try:
             result = step.fn(**params)
         except Exception as e:

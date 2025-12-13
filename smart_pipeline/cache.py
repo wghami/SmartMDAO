@@ -4,6 +4,7 @@ import pickle
 import os
 import numpy as np
 from abc import ABC, abstractmethod
+from collections import defaultdict
 
 # --- 1. Abstract Backend Interface ---
 class CacheBackend(ABC):
@@ -36,6 +37,23 @@ class MemoryBackend(CacheBackend):
 
     def set(self, func_name, key, value):
         self.store[self._make_key(func_name, key)] = value
+
+class HistoryBackend(MemoryBackend):
+    """
+    A simple extension of MemoryBackend that keeps a chronological 
+    list of all values computed by the cached functions.
+    """
+    def __init__(self):
+        super().__init__()
+        # Dictionary mapping function_name -> list of values
+        self.history = defaultdict(list)
+
+    def set(self, func_name, key, value):
+        # 1. Store in the standard cache (MemoryBackend logic)
+        super().set(func_name, key, value)
+        
+        # 2. Append to our history list for plotting
+        self.history[func_name].append(value)
 
 # --- 3. HDF5 Backend ---
 class HDF5Backend(CacheBackend):
