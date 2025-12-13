@@ -1,8 +1,6 @@
 import inspect
-import tempfile
 import os
-import webbrowser
-from typing import List, Set, Dict, Literal, Optional, Any
+from typing import List, Set, Dict, Literal, Optional, Any, Tuple
 from collections import defaultdict
 
 from .models import Step
@@ -17,8 +15,50 @@ except ImportError:
 class PipelineVisualizer:
     """
     A modern, modular visualizer for the Pipeline using Graphviz.
-    Supports 'flow' (logic-centric) and 'bipartite' (data-centric) views.
+    Focuses on standardizing workflow visualization with clear separation of concerns.
     """
+
+    # --- Standard Palette (Material Design Pastels) ---
+    STYLE_INPUT = {
+        "shape": "parallelogram", 
+        "style": "filled", 
+        "fillcolor": "#E3F2FD", # Blue 50
+        "color": "#1565C0",     # Blue 800
+        "penwidth": "1.5",
+        "margin": "0.2"
+    }
+    STYLE_STEP = {
+        "shape": "component", 
+        "style": "filled", 
+        "fillcolor": "#FFF3E0", # Orange 50
+        "color": "#EF6C00",     # Orange 800
+        "penwidth": "1.5",
+        "margin": "0.3"
+    }
+    STYLE_INTERMEDIATE = {
+        "shape": "ellipse", 
+        "style": "filled", 
+        "fillcolor": "#F5F5F5", # Grey 100
+        "color": "#757575",     # Grey 600
+        "penwidth": "1.0",
+        "height": "0.4"
+    }
+    STYLE_FINAL = {
+        "shape": "parallelogram", 
+        "style": "filled", 
+        "fillcolor": "#E8F5E9", # Green 50
+        "color": "#2E7D32",     # Green 800
+        "penwidth": "2.0",      # Thicker border for emphasis
+        "peripheries": "2",     # Double border
+        "margin": "0.2"
+    }
+    STYLE_MISSING = {
+        "shape": "hexagon",
+        "style": "filled",
+        "fillcolor": "#FFEBEE", # Red 50
+        "color": "#C62828",     # Red 800
+        "penwidth": "2.0"
+    }
 
     def __init__(
         self, 
@@ -36,206 +76,228 @@ class PipelineVisualizer:
         self.input_keys = input_keys
         self.orientation = orientation
         
-        # Initialize the directed graph
+        # Initialize the graph
         self.dot = graphviz.Digraph(comment='Pipeline Graph')
         self._setup_graph_attributes()
 
     def _setup_graph_attributes(self):
-        """Configures global graph styling for a modern look."""
+        """Configures global graph styling for a professional look."""
         self.dot.attr(rankdir=self.orientation)
-        self.dot.attr('node', fontname='Helvetica', fontsize='10', margin='0.2')
-        self.dot.attr('edge', fontname='Helvetica', fontsize='9', color='#555555')
+        self.dot.attr(compound='true') # Allow edges between clusters
         
-        # 'curved' conflicts with edge labels in 'dot' layout. 
-        # 'ortho' (orthogonal) is clean for technical diagrams.
+        # Global typography
+        self.dot.attr('node', fontname='Helvetica', fontsize='11')
+        self.dot.attr('edge', fontname='Helvetica', fontsize='9', color='#616161')
+        
+        # 'ortho' provides clean, rect-linear lines suitable for technical diagrams
+        # 'splines'='polyline' is also a good option if ortho gets messy.
         self.dot.attr(splines='ortho') 
 
     def build(self, graph_type: Literal["flow", "bipartite"] = "flow") -> "PipelineVisualizer":
         """
-        Builds the nodes and edges based on the selected strategy.
+        Builds the nodes and edges.
+        Note: The 'bipartite' (Data Flow) view is recommended for detailed analysis 
+        of Inputs vs Intermediates vs Finals.
         """
         if graph_type == "bipartite":
-            self._build_bipartite()
+            self._build_bipartite_standard()
         else:
-            self._build_flow()
+            self._build_flow_standard()
         return self
 
     def render(self, output_path: Optional[str] = None, view: bool = True):
         """
-        Renders the graph.
-        :param output_path: File path to save (e.g., 'pipeline.pdf', 'graph.png').
-                            If None, renders to a temp file and attempts to open it.
-        :param view: Whether to try opening the rendered file automatically.
+        Renders the graph to a file or temporary view.
         """
         try:
             if output_path:
                 filename, ext = os.path.splitext(output_path)
-                # Graphviz 'format' is the extension without dot
                 fmt = ext.lstrip('.').lower() if ext else 'pdf'
-                
-                # render() saves the file. It only opens it if view=True.
-                output_file = self.dot.render(filename, format=fmt, cleanup=True, view=view)
+                out_file = self.dot.render(filename, format=fmt, cleanup=True, view=view)
                 if not view:
-                    print(f"Pipeline diagram saved to: {output_file}")
+                    print(f"Pipeline diagram saved to: {out_file}")
             else:
-                # view() saves to temp and opens.
                 self.dot.view(cleanup=True)
-                
         except Exception as e:
-            # Gracefully handle missing viewers (xdg-open, etc.)
-            msg = f"Graph rendered successfully, but could not be opened automatically: {e}"
+            print(f"Graph rendered successfully, but viewer failed: {e}")
             if output_path:
-                msg += f"\nFile saved at: {output_path}"
-            print(msg)
+                print(f"File saved at: {output_path}")
 
-    # --- Flow Strategy (Step-to-Step) ---
+    # --- Classification Logic ---
 
-    def _build_flow(self):
+    def _analyze_variables(self) -> Tuple[Set[str], Set[str], Set[str], Set[str], Dict[str, Step]]:
         """
-        Constructs a graph focusing on Steps as nodes and dependencies as edges.
+        Categorizes all variables in the pipeline.
+        Returns: (inputs, intermediates, finals, missing, producer_map)
         """
-        producers = self._map_producers()
-        step_indices = {step: i for i, step in enumerate(self.steps)}
-        consumed_vars = set()
+        producers_map = {}
+        consumed = set()
+        produced = set()
 
-        # 1. Create Step Nodes
+        # 1. Map Producers and Consumed vars
         for step in self.steps:
-            self._add_step_node(step)
-
-        # 2. Link Dependencies
-        for step in self.steps:
-            sig = inspect.signature(step.fn)
-            step_id = self._node_id(step)
-
-            for param_name in sig.parameters:
-                consumed_vars.add(param_name)
-
-                # Case A: Produced by another step
-                if param_name in producers:
-                    producer = producers[param_name]
-                    prod_id = self._node_id(producer)
-                    
-                    # Detect Feedback Loop (Back-edge)
-                    is_feedback = step_indices[producer] >= step_indices[step]
-                    edge_style = "dashed" if is_feedback else "solid"
-                    color = "#d32f2f" if is_feedback else "#555555" # Red for feedback
-                    
-                    # Note: xlabels/labels can be tricky with ortho splines, 
-                    # but simple labels usually work.
-                    self.dot.edge(prod_id, step_id, label=param_name, style=edge_style, color=color)
-
-                # Case B: External Input
-                elif param_name in self.input_keys:
-                    input_id = f"Input_{param_name}"
-                    self._add_input_node(input_id, param_name)
-                    self.dot.edge(input_id, step_id, style="dotted")
-
-                # Case C: Missing
-                else:
-                    missing_id = f"Missing_{param_name}"
-                    self.dot.node(
-                        missing_id, label=f"???\n{param_name}", 
-                        shape='hexagon', style='filled', fillcolor='#ffcdd2', color='#b71c1c'
-                    )
-                    self.dot.edge(missing_id, step_id, style="dotted", color='#b71c1c')
-
-        # 3. Mark Final Outputs (Unused variables)
-        for step in self.steps:
-            step_id = self._node_id(step)
+            # Outputs
             for out in step.resolve_output_names():
-                if out not in consumed_vars:
-                    out_id = f"Final_{out}"
-                    self.dot.node(
-                        out_id, label=f"Result:\n{out}", 
-                        shape='ellipse', style='filled', fillcolor='#c8e6c9', color='#2e7d32'
-                    )
-                    self.dot.edge(step_id, out_id)
+                producers_map[out] = step
+                produced.add(out)
+            
+            # Inputs
+            sig = inspect.signature(step.fn)
+            for param in sig.parameters:
+                consumed.add(param)
 
-    # --- Bipartite Strategy (Step-Variable-Step) ---
+        # 2. Categorize
+        # Inputs: Variables consumed but NOT produced internally.
+        # (We strictly use input_keys to validate, but graph logic relies on structural dependency)
+        real_inputs = {v for v in consumed if v not in produced}
+        
+        # Missing: Required inputs that are NOT in the provided input_keys
+        missing = {v for v in real_inputs if v not in self.input_keys}
+        
+        # Valid Inputs: Real inputs that exist in input_keys
+        valid_inputs = real_inputs.intersection(self.input_keys)
+        
+        # Intermediates: Produced AND Consumed
+        intermediates = produced.intersection(consumed)
+        
+        # Finals: Produced but NEVER Consumed
+        finals = produced - consumed
 
-    def _build_bipartite(self):
+        return valid_inputs, intermediates, finals, missing, producers_map
+
+    # --- Bipartite (Data Flow) Strategy ---
+
+    def _build_bipartite_standard(self):
         """
-        Constructs a graph where Variables and Steps are distinct nodes.
-        Structure: (Step/Input) -> (Variable) -> (Step/Output)
+        Constructs a Data Flow Diagram (DFD).
+        Strictly separates: Input Nodes -> Step Nodes -> Intermediate Nodes -> Step Nodes -> Final Nodes.
         """
-        producers = self._map_producers()
+        inputs, intermediates, finals, missing, producers = self._analyze_variables()
 
-        # 1. Create Step Nodes
+        # 1. Draw Inputs (Rank Source to force top/left)
+        with self.dot.subgraph(name='cluster_inputs') as c:
+            c.attr(rank='source', style='invis') # Invisible container for grouping
+            for var in inputs:
+                self._add_node(c, f"Var_{var}", var, self.STYLE_INPUT)
+            for var in missing:
+                self._add_node(c, f"Missing_{var}", f"{var} (?)", self.STYLE_MISSING)
+
+        # 2. Draw Finals (Rank Sink to force bottom/right)
+        with self.dot.subgraph(name='cluster_finals') as c:
+            c.attr(rank='sink', style='invis')
+            for var in finals:
+                self._add_node(c, f"Var_{var}", var, self.STYLE_FINAL)
+
+        # 3. Draw Intermediates
+        for var in intermediates:
+            self._add_node(self.dot, f"Var_{var}", var, self.STYLE_INTERMEDIATE)
+
+        # 4. Draw Steps
         for step in self.steps:
-            self._add_step_node(step)
+            self._add_step_node(self.dot, step)
 
-        # 2. Input Variables -> Consumer Steps
+        # 5. Draw Edges
+        for step in self.steps:
+            step_id = self._node_id(step)
+            sig = inspect.signature(step.fn)
+
+            # Inputs to Step
+            for param in sig.parameters:
+                if param in missing:
+                    self.dot.edge(f"Missing_{param}", step_id, style="dotted", color="#D32F2F")
+                else:
+                    # It's either a valid input or an intermediate/produced var
+                    var_id = f"Var_{param}"
+                    self.dot.edge(var_id, step_id)
+
+            # Step to Outputs
+            for out in step.resolve_output_names():
+                var_id = f"Var_{out}"
+                self.dot.edge(step_id, var_id)
+
+    # --- Flow Strategy (Process Flow) ---
+
+    def _build_flow_standard(self):
+        """
+        Constructs a Process Flow Diagram.
+        Focuses on Steps. Data is shown as explicit nodes ONLY if it is an Input or Final Output.
+        Intermediates are labels on edges.
+        """
+        inputs, intermediates, finals, missing, producers = self._analyze_variables()
+        step_indices = {step: i for i, step in enumerate(self.steps)}
+
+        # 1. Draw Inputs
+        with self.dot.subgraph(name='cluster_inputs') as c:
+            c.attr(rank='source', style='invis')
+            for var in inputs:
+                self._add_node(c, f"Input_{var}", var, self.STYLE_INPUT)
+            for var in missing:
+                self._add_node(c, f"Missing_{var}", f"{var} (?)", self.STYLE_MISSING)
+
+        # 2. Draw Finals
+        with self.dot.subgraph(name='cluster_finals') as c:
+            c.attr(rank='sink', style='invis')
+            for var in finals:
+                 # Note: In flow view, we link the step directly to this final node
+                self._add_node(c, f"Final_{var}", var, self.STYLE_FINAL)
+
+        # 3. Draw Steps
+        for step in self.steps:
+            self._add_step_node(self.dot, step)
+
+        # 4. Draw Edges
         for step in self.steps:
             step_id = self._node_id(step)
             sig = inspect.signature(step.fn)
             
-            for param_name in sig.parameters:
-                var_id = f"Var_{param_name}"
+            for param in sig.parameters:
+                # Case A: Missing
+                if param in missing:
+                    self.dot.edge(f"Missing_{param}", step_id, style="dotted", color="#D32F2F")
                 
-                # Check if it's an external input (not produced by any step)
-                if param_name in self.input_keys and param_name not in producers:
-                     self._add_variable_node(var_id, param_name, is_input=True)
-                else:
-                     self._add_variable_node(var_id, param_name)
+                # Case B: External Input
+                elif param in inputs:
+                    self.dot.edge(f"Input_{param}", step_id)
 
-                self.dot.edge(var_id, step_id)
+                # Case C: Produced by another step (Intermediate)
+                elif param in producers:
+                    producer = producers[param]
+                    prod_id = self._node_id(producer)
+                    
+                    # Cycle Detection
+                    is_feedback = step_indices[producer] >= step_indices[step]
+                    style = "dashed" if is_feedback else "solid"
+                    color = "#D32F2F" if is_feedback else "#616161"
+                    
+                    self.dot.edge(prod_id, step_id, label=param, style=style, color=color)
 
-        # 3. Producer Steps -> Output Variables
+        # 5. Link Steps to Final Outputs
         for step in self.steps:
             step_id = self._node_id(step)
-            for out_name in step.resolve_output_names():
-                var_id = f"Var_{out_name}"
-                # Ensure the variable node exists
-                self._add_variable_node(var_id, out_name)
-                self.dot.edge(step_id, var_id)
+            for out in step.resolve_output_names():
+                if out in finals:
+                    self.dot.edge(step_id, f"Final_{out}")
 
     # --- Helpers ---
-
-    def _map_producers(self) -> Dict[str, Step]:
-        mapping = {}
-        for step in self.steps:
-            for out in step.resolve_output_names():
-                mapping[out] = step
-        return mapping
 
     def _node_id(self, step: Step) -> str:
         return f"Step_{id(step)}"
 
-    def _add_step_node(self, step: Step):
-        # Using HTML-like labels <...> is required for bolding <b>...</b>
-        self.dot.node(
-            self._node_id(step), 
-            label=f"<<b>{step.name}</b>>", 
-            shape='component', 
-            style='filled', 
-            fillcolor='#fff9c4', 
-            color='#fbc02d'
-        )
+    def _add_node(self, graph, node_id: str, label: str, style_dict: Dict[str, str]):
+        """Generic node adder using a style dictionary."""
+        # Make a copy to avoid mutating the class constant
+        attrs = style_dict.copy()
+        attrs['label'] = label
+        graph.node(node_id, **attrs)
 
-    def _add_input_node(self, node_id: str, label: str):
-        self.dot.node(
-            node_id, 
-            label=label, 
-            shape='invhouse', 
-            style='filled', 
-            fillcolor='#e1f5fe', 
-            color='#0277bd'
-        )
+    def _add_step_node(self, graph, step: Step):
+        """Adds a function/step node."""
+        attrs = self.STYLE_STEP.copy()
+        # HTML label for bold text
+        attrs['label'] = f"<<b>{step.name}</b>>" 
+        graph.node(self._node_id(step), **attrs)
 
-    def _add_variable_node(self, node_id: str, label: str, is_input: bool = False):
-        fill = '#e1f5fe' if is_input else '#e8f5e9'
-        color = '#0277bd' if is_input else '#2e7d32'
-        self.dot.node(
-            node_id, 
-            label=label, 
-            shape='ellipse', 
-            style='filled', 
-            fillcolor=fill, 
-            color=color,
-            width='0.4', height='0.3'
-        )
-
-# API adapter for backward compatibility/simplicity
+# API adapter
 def visualize_pipeline(
     steps: List[Step], 
     inputs: Set[str], 
@@ -244,8 +306,5 @@ def visualize_pipeline(
     graph_type: Literal["flow", "bipartite"] = "flow",
     view: bool = True
 ):
-    """
-    Convenience function to instantiate and run the visualizer.
-    """
     viz = PipelineVisualizer(steps, inputs, orientation)
     viz.build(graph_type).render(output_path, view=view)

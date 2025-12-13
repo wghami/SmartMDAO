@@ -79,8 +79,8 @@ for i, residuals in enumerate(results.get("residual_history", [])):
 
 # Visualizatio diagram
 print("\nGenerating interactive diagram...")
-pipe.visualize(inputs=["x", "a"],
+pipe.visualize(inputs=["initial_value"],  # If not provided, will try to infer and use a (?) in the graph
                 output_path=str(Path("results") / "test_hybrid_flow.pdf"),
-                orientation="LR",
+                orientation="TB",
                 graph_type="bipartite",
                 view=False)  # Set view=True to open automatically if supported

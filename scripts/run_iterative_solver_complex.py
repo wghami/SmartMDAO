@@ -88,7 +88,7 @@ for var, target in expected.items():
 
 # Visualizatio diagram
 print("Generating interactive diagram...")
-pipe.visualize(inputs=["x", "a"],
+pipe.visualize(inputs=["history_x", "history_y", "history_z"],  # If not provided, will try to infer and use a (?) in the graph"],
                 output_path=str(Path("results") / "iterative_solver_complex.pdf"),
                 graph_type="bipartite")
 
