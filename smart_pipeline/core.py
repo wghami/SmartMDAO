@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Literal
+from typing import Callable, List, Optional, Literal, Set
 
 from .models import Step
 from .solvers import Solver, DAGSolver
-from .visualization import build_mermaid_graph, render_to_browser, render_to_file
+from .visualization import visualize_pipeline
 
 @dataclass
 class Pipeline:
@@ -42,22 +42,26 @@ class Pipeline:
     def visualize(self, 
                   inputs: List[str] = None, 
                   output_path: str = None, 
-                  orientation: str = "TD",
-                  graph_type: Literal["flow", "bipartite"] = "flow"):
+                  orientation: Literal["TB", "LR"] = "TB",
+                  graph_type: Literal["flow", "bipartite"] = "flow",
+                  view: bool = True):
         """
-        Generates a Mermaid diagram of the pipeline.
+        Generates a Graphviz diagram of the pipeline.
         
         :param inputs: List of input keys available at runtime.
-        :param output_path: Path to save file. Supports .pdf, .svg, .png. 
-                            Use .svg for single-page large diagrams.
-        :param orientation: 'TD' (Top-Down) or 'LR' (Left-Right).
-        :param graph_type: 'flow' (default) or 'bipartite' (explicit variable nodes).
+        :param output_path: Path to save file (e.g., 'pipeline.pdf', 'graph.png').
+                            If None, opens in the default viewer.
+        :param orientation: 'TB' (Top-Bottom) or 'LR' (Left-Right).
+        :param graph_type: 'flow' (logic view) or 'bipartite' (data view).
+        :param view: Whether to try opening the generated file automatically.
         """
-        inputs = set(inputs or [])
-        graph_def = build_mermaid_graph(self.steps, inputs, orientation, graph_type)
-
-        if output_path:
-            render_to_file(graph_def, output_path)
-            print(f"Pipeline diagram saved to: {output_path}")
-        else:
-            render_to_browser(graph_def)
+        input_set = set(inputs or [])
+        
+        visualize_pipeline(
+            steps=self.steps,
+            inputs=input_set,
+            output_path=output_path,
+            orientation=orientation,
+            graph_type=graph_type,
+            view=view
+        )

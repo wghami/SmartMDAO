@@ -1,174 +1,251 @@
 import inspect
-import webbrowser
 import tempfile
-import base64
-import json
-import urllib.request
-from pathlib import Path
-from typing import List, Set, Literal
+import os
+import webbrowser
+from typing import List, Set, Dict, Literal, Optional, Any
+from collections import defaultdict
+
 from .models import Step
 
-def build_mermaid_graph(
-    steps: List[Step], 
-    input_keys: Set[str], 
-    orientation: str = "TD",
-    graph_type: Literal["flow", "bipartite"] = "flow"
-) -> str:
+# Try importing graphviz; handle absence gracefully
+try:
+    import graphviz
+except ImportError:
+    graphviz = None
+
+
+class PipelineVisualizer:
     """
-    Constructs a Mermaid graph definition.
+    A modern, modular visualizer for the Pipeline using Graphviz.
+    Supports 'flow' (logic-centric) and 'bipartite' (data-centric) views.
     """
-    
-    steps = sorted(steps, key=lambda s: s.name)
-    
-    producers = {}
-    step_indices = {step: i for i, step in enumerate(steps)}
-    all_consumed = set()
-    
-    for step in steps:
-        for out_name in step.resolve_output_names():
-            producers[out_name] = step
 
-    lines = [f"graph {orientation};"]
-    
-    lines.append("classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;")
-    lines.append("classDef inputNode fill:#e1f5fe,stroke:#01579b,stroke-dasharray: 5 5;")
-    lines.append("classDef stepNode fill:#fff9c4,stroke:#fbc02d,stroke-width:2px;")
-    lines.append("classDef varNode fill:#e8f5e9,stroke:#2e7d32,rx:5,ry:5;")
-    lines.append("classDef outputNode fill:#ccffcc,stroke:#090,stroke-width:2px;")
-
-    if graph_type == "bipartite":
-        _build_bipartite_graph(steps, input_keys, producers, lines)
-    else:
-        _build_flow_graph(steps, input_keys, producers, step_indices, lines, all_consumed)
-
-    return "\n".join(lines)
-
-def _build_flow_graph(steps, input_keys, producers, step_indices, lines, all_consumed):
-    link_count = 0 
-    style_commands = [] 
-
-    for step in steps:
-        step_id = f"node_{id(step)}"
-        lines.append(f'{step_id}("{step.name}"):::stepNode')
-
-    for step in steps:
-        step_id = f"node_{id(step)}"
-        sig = inspect.signature(step.fn)
+    def __init__(
+        self, 
+        steps: List[Step], 
+        input_keys: Set[str],
+        orientation: Literal['TB', 'LR'] = 'TB'
+    ):
+        if graphviz is None:
+            raise ImportError(
+                "The 'graphviz' library is required for visualization. "
+                "Please install it using: pip install graphviz"
+            )
         
-        for param_name in sig.parameters:
-            all_consumed.add(param_name)
-            
-            if param_name in producers:
-                producer_step = producers[param_name]
-                prod_id = f"node_{id(producer_step)}"
+        self.steps = sorted(steps, key=lambda s: s.name)
+        self.input_keys = input_keys
+        self.orientation = orientation
+        
+        # Initialize the directed graph
+        self.dot = graphviz.Digraph(comment='Pipeline Graph')
+        self._setup_graph_attributes()
+
+    def _setup_graph_attributes(self):
+        """Configures global graph styling for a modern look."""
+        self.dot.attr(rankdir=self.orientation)
+        self.dot.attr('node', fontname='Helvetica', fontsize='10', margin='0.2')
+        self.dot.attr('edge', fontname='Helvetica', fontsize='9', color='#555555')
+        
+        # 'curved' conflicts with edge labels in 'dot' layout. 
+        # 'ortho' (orthogonal) is clean for technical diagrams.
+        self.dot.attr(splines='ortho') 
+
+    def build(self, graph_type: Literal["flow", "bipartite"] = "flow") -> "PipelineVisualizer":
+        """
+        Builds the nodes and edges based on the selected strategy.
+        """
+        if graph_type == "bipartite":
+            self._build_bipartite()
+        else:
+            self._build_flow()
+        return self
+
+    def render(self, output_path: Optional[str] = None, view: bool = True):
+        """
+        Renders the graph.
+        :param output_path: File path to save (e.g., 'pipeline.pdf', 'graph.png').
+                            If None, renders to a temp file and attempts to open it.
+        :param view: Whether to try opening the rendered file automatically.
+        """
+        try:
+            if output_path:
+                filename, ext = os.path.splitext(output_path)
+                # Graphviz 'format' is the extension without dot
+                fmt = ext.lstrip('.').lower() if ext else 'pdf'
                 
-                is_feedback = step_indices[producer_step] >= step_indices[step]
-                arrow = "-.->" if is_feedback else "-->"
+                # render() saves the file. It only opens it if view=True.
+                output_file = self.dot.render(filename, format=fmt, cleanup=True, view=view)
+                if not view:
+                    print(f"Pipeline diagram saved to: {output_file}")
+            else:
+                # view() saves to temp and opens.
+                self.dot.view(cleanup=True)
                 
-                if is_feedback:
-                     lines.append(f'{prod_id} {arrow} |"{param_name}"| {step_id}')
-                     style_commands.append(f"linkStyle {link_count} stroke:#f44336,stroke-width:2px,stroke-dasharray: 5 5;")
+        except Exception as e:
+            # Gracefully handle missing viewers (xdg-open, etc.)
+            msg = f"Graph rendered successfully, but could not be opened automatically: {e}"
+            if output_path:
+                msg += f"\nFile saved at: {output_path}"
+            print(msg)
+
+    # --- Flow Strategy (Step-to-Step) ---
+
+    def _build_flow(self):
+        """
+        Constructs a graph focusing on Steps as nodes and dependencies as edges.
+        """
+        producers = self._map_producers()
+        step_indices = {step: i for i, step in enumerate(self.steps)}
+        consumed_vars = set()
+
+        # 1. Create Step Nodes
+        for step in self.steps:
+            self._add_step_node(step)
+
+        # 2. Link Dependencies
+        for step in self.steps:
+            sig = inspect.signature(step.fn)
+            step_id = self._node_id(step)
+
+            for param_name in sig.parameters:
+                consumed_vars.add(param_name)
+
+                # Case A: Produced by another step
+                if param_name in producers:
+                    producer = producers[param_name]
+                    prod_id = self._node_id(producer)
+                    
+                    # Detect Feedback Loop (Back-edge)
+                    is_feedback = step_indices[producer] >= step_indices[step]
+                    edge_style = "dashed" if is_feedback else "solid"
+                    color = "#d32f2f" if is_feedback else "#555555" # Red for feedback
+                    
+                    # Note: xlabels/labels can be tricky with ortho splines, 
+                    # but simple labels usually work.
+                    self.dot.edge(prod_id, step_id, label=param_name, style=edge_style, color=color)
+
+                # Case B: External Input
+                elif param_name in self.input_keys:
+                    input_id = f"Input_{param_name}"
+                    self._add_input_node(input_id, param_name)
+                    self.dot.edge(input_id, step_id, style="dotted")
+
+                # Case C: Missing
                 else:
-                     lines.append(f'{prod_id} -- "{param_name}" --> {step_id}')
+                    missing_id = f"Missing_{param_name}"
+                    self.dot.node(
+                        missing_id, label=f"???\n{param_name}", 
+                        shape='hexagon', style='filled', fillcolor='#ffcdd2', color='#b71c1c'
+                    )
+                    self.dot.edge(missing_id, step_id, style="dotted", color='#b71c1c')
+
+        # 3. Mark Final Outputs (Unused variables)
+        for step in self.steps:
+            step_id = self._node_id(step)
+            for out in step.resolve_output_names():
+                if out not in consumed_vars:
+                    out_id = f"Final_{out}"
+                    self.dot.node(
+                        out_id, label=f"Result:\n{out}", 
+                        shape='ellipse', style='filled', fillcolor='#c8e6c9', color='#2e7d32'
+                    )
+                    self.dot.edge(step_id, out_id)
+
+    # --- Bipartite Strategy (Step-Variable-Step) ---
+
+    def _build_bipartite(self):
+        """
+        Constructs a graph where Variables and Steps are distinct nodes.
+        Structure: (Step/Input) -> (Variable) -> (Step/Output)
+        """
+        producers = self._map_producers()
+
+        # 1. Create Step Nodes
+        for step in self.steps:
+            self._add_step_node(step)
+
+        # 2. Input Variables -> Consumer Steps
+        for step in self.steps:
+            step_id = self._node_id(step)
+            sig = inspect.signature(step.fn)
+            
+            for param_name in sig.parameters:
+                var_id = f"Var_{param_name}"
                 
-                link_count += 1
+                # Check if it's an external input (not produced by any step)
+                if param_name in self.input_keys and param_name not in producers:
+                     self._add_variable_node(var_id, param_name, is_input=True)
+                else:
+                     self._add_variable_node(var_id, param_name)
 
-            elif param_name in input_keys:
-                input_id = f"Input_{param_name}"
-                if f'{input_id}([' not in "".join(lines):
-                    lines.append(f'{input_id}(["{param_name}"]):::inputNode')
-                
-                lines.append(f'{input_id} -.-> {step_id}')
-                link_count += 1
-            
-            else:
-                lines.append(f'Missing_{param_name}[("???")] -.-> {step_id}')
-                lines.append(f"style Missing_{param_name} fill:#ffaaaa,stroke:#f00")
-                link_count += 1
+                self.dot.edge(var_id, step_id)
 
-    for step in steps:
-        step_id = f"node_{id(step)}"
-        for out_name in step.resolve_output_names():
-            if out_name not in all_consumed:
-                out_node_id = f"Output_{out_name}"
-                lines.append(f'{step_id} -- "{out_name}" --> {out_node_id}[["Final: {out_name}"]]:::outputNode')
-                link_count += 1
+        # 3. Producer Steps -> Output Variables
+        for step in self.steps:
+            step_id = self._node_id(step)
+            for out_name in step.resolve_output_names():
+                var_id = f"Var_{out_name}"
+                # Ensure the variable node exists
+                self._add_variable_node(var_id, out_name)
+                self.dot.edge(step_id, var_id)
 
-    lines.extend(style_commands)
+    # --- Helpers ---
 
-def _build_bipartite_graph(steps, input_keys, producers, lines):
-    for step in steps:
-        step_id = f"step_{id(step)}"
-        lines.append(f'{step_id}["{step.name}"]:::stepNode')
+    def _map_producers(self) -> Dict[str, Step]:
+        mapping = {}
+        for step in self.steps:
+            for out in step.resolve_output_names():
+                mapping[out] = step
+        return mapping
 
-    for step in steps:
-        step_id = f"step_{id(step)}"
-        
-        sig = inspect.signature(step.fn)
-        for param_name in sig.parameters:
-            var_id = f"var_{param_name}"
-            
-            if param_name in input_keys and param_name not in producers:
-                 lines.append(f'{var_id}(["{param_name} (Input)"]):::inputNode')
-            else:
-                 lines.append(f'{var_id}(["{param_name}"]):::varNode')
-            
-            lines.append(f'{var_id} --> {step_id}')
+    def _node_id(self, step: Step) -> str:
+        return f"Step_{id(step)}"
 
-        for out_name in step.resolve_output_names():
-            var_id = f"var_{out_name}"
-            lines.append(f'{var_id}(["{out_name}"]):::varNode')
-            lines.append(f'{step_id} --> {var_id}')
+    def _add_step_node(self, step: Step):
+        # Using HTML-like labels <...> is required for bolding <b>...</b>
+        self.dot.node(
+            self._node_id(step), 
+            label=f"<<b>{step.name}</b>>", 
+            shape='component', 
+            style='filled', 
+            fillcolor='#fff9c4', 
+            color='#fbc02d'
+        )
 
-def render_to_browser(graph_def: str):
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head><title>Pipeline Visualization</title></head>
-    <body style="background-color: #fafafa; font-family: sans-serif;">
-        <h2 style="text-align:center; color:#333;">Pipeline Graph</h2>
-        <div class="mermaid" style="display:flex; justify-content:center;">{graph_def}</div>
-        <script type="module">
-            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-            mermaid.initialize({{ startOnLoad: true, theme: 'neutral' }});
-        </script>
-    </body>
-    </html>
+    def _add_input_node(self, node_id: str, label: str):
+        self.dot.node(
+            node_id, 
+            label=label, 
+            shape='invhouse', 
+            style='filled', 
+            fillcolor='#e1f5fe', 
+            color='#0277bd'
+        )
+
+    def _add_variable_node(self, node_id: str, label: str, is_input: bool = False):
+        fill = '#e1f5fe' if is_input else '#e8f5e9'
+        color = '#0277bd' if is_input else '#2e7d32'
+        self.dot.node(
+            node_id, 
+            label=label, 
+            shape='ellipse', 
+            style='filled', 
+            fillcolor=fill, 
+            color=color,
+            width='0.4', height='0.3'
+        )
+
+# API adapter for backward compatibility/simplicity
+def visualize_pipeline(
+    steps: List[Step], 
+    inputs: Set[str], 
+    output_path: Optional[str] = None,
+    orientation: str = "TD",
+    graph_type: Literal["flow", "bipartite"] = "flow",
+    view: bool = True
+):
     """
-    with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html') as f:
-        f.write(html_content)
-        url = Path(f.name).as_uri()
-    webbrowser.open(url)
-
-def render_to_file(graph_def: str, output_path: str):
+    Convenience function to instantiate and run the visualizer.
     """
-    Renders the graph to a file (PDF, SVG, or PNG) based on the extension.
-    Use .svg for infinite canvas (single page).
-    """
-    ext = Path(output_path).suffix.lower()
-    
-    # Map extension to mermaid.ink endpoint
-    # pdf -> /pdf/
-    # svg -> /svg/
-    # png -> /img/
-    if ext == '.svg':
-        endpoint = 'svg'
-    elif ext == '.png':
-        endpoint = 'img'
-    else:
-        endpoint = 'pdf' # Default
-        
-    state = {"code": graph_def, "mermaid": {"theme": "neutral"}}
-    json_str = json.dumps(state)
-    encoded = base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8')
-    
-    url = f"https://mermaid.ink/{endpoint}/{encoded}"
-    
-    try:
-        with urllib.request.urlopen(url) as response:
-            if response.status != 200:
-                raise RuntimeError(f"HTTP {response.status}")
-            with open(output_path, 'wb') as f:
-                f.write(response.read())
-    except Exception as e:
-        raise RuntimeError(f"Generation failed: {e}. Check if graph is too complex for mermaid.ink")
+    viz = PipelineVisualizer(steps, inputs, orientation)
+    viz.build(graph_type).render(output_path, view=view)

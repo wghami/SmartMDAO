@@ -80,5 +80,7 @@ for i, residuals in enumerate(results.get("residual_history", [])):
 # Visualizatio diagram
 print("\nGenerating interactive diagram...")
 pipe.visualize(inputs=["x", "a"],
-                output_path=str(Path("results") / "test_hybrid_flow.svg"),
-                graph_type="bipartite")
+                output_path=str(Path("results") / "test_hybrid_flow.pdf"),
+                orientation="LR",
+                graph_type="bipartite",
+                view=False)  # Set view=True to open automatically if supported
