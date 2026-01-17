@@ -1023,7 +1023,7 @@ wheels = [
 [[package]]
 name = "smart-pipeline"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "graphviz" },
     { name = "h5py" },
