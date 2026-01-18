@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # ==========================================
 
 # Instantiate the backend globally so decorators can register it immediately
+# for history tracking in chronological order.
 history_tracker = HistoryBackend()
 
 # Output contract for the first step
@@ -136,16 +137,21 @@ def run_hybrid_workflow_demo():
         ax2.set_ylabel('Value')
         ax2.legend()
         ax2.grid(True, linestyle='--', alpha=0.7)
-
+        
     plt.tight_layout()
+    logger.info("Displaying plots... (will close in 10s)")
 
-    logger.info("Displaying plots...")
+    # Create a timer object (10,000 milliseconds = 10 seconds)
+    timer = fig.canvas.new_timer(interval=10000) 
+    timer.add_callback(plt.close)
+    timer.start()
+
     plt.show()
 
     # 4. Generate Pipeline Diagram
     logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["initial_value"],
-                    output_path=str(Path("results") / "test_hybrid_flow.pdf"),
+                    output_path=str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
                     orientation="TB",
                     graph_type="bipartite",
                     view=False)

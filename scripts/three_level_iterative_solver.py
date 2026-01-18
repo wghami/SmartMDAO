@@ -96,7 +96,7 @@ def run_iterative_solver_complex():
     # Visualization diagram
     logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["history_x", "history_y", "history_z"],
-                    output_path=str(Path("results") / "iterative_solver_complex.pdf"),
+                    output_path=str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
                     graph_type="bipartite",
                     view=False)
 
@@ -143,7 +143,13 @@ def run_iterative_solver_complex():
         ax2.text(0.5, 0.5, "No residuals recorded\n(Converged immediately or no cycle)", ha='center')
 
     plt.tight_layout()
-    logger.info("Displaying plots...")
+    logger.info("Displaying plots... (will close in 10s)")
+
+    # Create a timer object (10,000 milliseconds = 10 seconds)
+    timer = fig.canvas.new_timer(interval=10000) 
+    timer.add_callback(plt.close)
+    timer.start()
+
     plt.show()
 
 if __name__ == "__main__":

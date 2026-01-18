@@ -33,7 +33,7 @@ def load_data(path: str) -> str:
     Simple Step: Returns a raw string.
     """
     logger.debug(f"Loading data from path: {path}")
-    return f"Data from {path}"
+    return f"{path}"
 
 
 def preprocess(load_data: str) -> DatasetSplit:

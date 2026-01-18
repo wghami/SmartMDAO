@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-import numpy as np
+from pathlib import Path
 from smart_pipeline import Pipeline, configure_logging
 
 # Initialize module-level logger
@@ -18,7 +18,7 @@ def run_decorators_usage():
     # ==========================================
 
     # SCENARIO A: Standard Step (No arguments needed)
-    # The decorator automatically adds this to 'pipe'
+    # The decorator automatically adds this to 'pipe' with the output name 'step_1'
     @pipe.step
     def step_1(x: float):
         result = x + 1
@@ -35,7 +35,7 @@ def run_decorators_usage():
         logger.debug(f"Executing step_2: Unpacking {step_1} -> y={val_y}, z={val_z}")
         return val_y, val_z
 
-    # SCENARIO C: Dataclass (Automatic inference)
+    # SCENARIO C: Dataclass for automatic inference
     @dataclass
     class FinalResult:
         total: float
@@ -48,7 +48,11 @@ def run_decorators_usage():
     # Log the registered steps
     logger.info(f"Pipeline steps registered: {[s.name for s in pipe.steps]}")
     
-    # pipe.visualize(inputs=["x"])
+    pipe.visualize(inputs=["x"],  # <-- if not provided, pipeline tries to infer it
+                   output_path = str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
+                   orientation = "LR",
+                   graph_type = "bipartite",
+                   view = False)
     
     # Run the pipeline
     logger.info("Starting pipeline execution with x=10...")

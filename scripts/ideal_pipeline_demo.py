@@ -85,13 +85,13 @@ def run_pipeline_demo():
     # We pass the list of inputs we INTEND to provide to see how they connect
     logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["x", "a"],
-                   output_path=str(Path("results") / "pipeline_diagram.pdf"),
-                   graph_type="flow",
+                   output_path=str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
+                   graph_type="bipartite",
                    view=False)
 
     # Run the pipeline
     # The pipeline sees step_1 needs 'x', so we must provide 'x'.
-    results = pipe.run(x=np.array([3.0]), a=np.array([4.0]))
+    results = pipe.run(x=np.array([3.0, 4.0]), a=np.array([4.0, 5.0]))
 
     logger.info("--- Pipeline Finished ---")
     logger.info(f"Input (x): {results['x']}")
