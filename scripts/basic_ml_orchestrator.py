@@ -71,9 +71,7 @@ def run_ml_pipeline():
 
     pipe = Pipeline()
 
-    # Notice how clean this block is now.
-    # We removed `outputs=["train_set", "test_set"]` because the 
-    # DatasetSplit dataclass handles that logic inside the code, not the config.
+    # Notice how clean this block is.
     (
         pipe
         .add(train_model) # <-- the order of the .add does not matter

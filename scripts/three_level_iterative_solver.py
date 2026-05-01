@@ -73,8 +73,8 @@ def run_iterative_solver_complex():
     # 3. Run The Simulation
     initial_state = {
         'x': 0, 'y': 0, 'z': 0,
-        'history_x': [0], # Track history for plotting
-        'history_y': [0],
+        'history_x': [0], # Track history for plotting (we could use HistoryBackend instead,
+        'history_y': [0], # but this is simpler for demo)
         'history_z': [0]
     }
 
