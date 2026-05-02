@@ -78,9 +78,10 @@ def run_sellar_benchmark():
     
     # Optional: Generate your Graphviz diagram!
     pipeline.visualize(inputs=list(inputs.keys()),
-                       output_path="sellar_mda",
+                       output_path="results/sellar_mda",
                        orientation="LR",
-                       graph_type="bipartite")
+                       graph_type="bipartite",
+                       view=False)
 
 # 4. Run the Benchmark
 if __name__ == "__main__":
