@@ -117,3 +117,7 @@ To make `SmartPipeline` even better, the following improvements are planned:
 # 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+# 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/smart-pipeline/blob/main/LICENSE) file for details.
