@@ -1,6 +1,6 @@
 import pytest
-from smart_pipeline.models import Step
-from smart_pipeline.solvers import DAGSolver, IterativeSolver, HybridSolver
+from smartmdao.models import Step
+from smartmdao.solvers import DAGSolver, IterativeSolver, HybridSolver
 
 def test_dag_solver_success():
     steps = [

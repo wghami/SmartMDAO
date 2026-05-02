@@ -1,7 +1,7 @@
 import logging
 import matplotlib.pyplot as plt
 from pathlib import Path
-from smart_pipeline import Pipeline, HybridSolver, configure_logging
+from smartmdao import Pipeline, HybridSolver, configure_logging
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)

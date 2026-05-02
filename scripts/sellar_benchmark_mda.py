@@ -1,8 +1,8 @@
 import math
 import logging
-from smart_pipeline.core import Pipeline
-from smart_pipeline.solvers import HybridSolver
-from smart_pipeline.logging_config import configure_logging
+from smartmdao.core import Pipeline
+from smartmdao.solvers import HybridSolver
+from smartmdao.logging_config import configure_logging
 
 # --- Setup Logging ---
 # Initialize module-level logger

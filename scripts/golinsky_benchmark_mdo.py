@@ -3,10 +3,10 @@ import logging
 import numpy as np
 from scipy.optimize import minimize
 
-from smart_pipeline.core import Pipeline
-from smart_pipeline.solvers import DAGSolver
-from smart_pipeline.logging_config import configure_logging
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao.core import Pipeline
+from smartmdao.solvers import DAGSolver
+from smartmdao.logging_config import configure_logging
+from smartmdao.optimization import PipelineEvaluator
 
 # --- Setup Logging ---
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def run_golinski_mdo():
     print("="*70)
     
     # Suppress pipeline INFO logs during the optimization loop
-    logging.getLogger("smart_pipeline").setLevel(logging.WARNING)
+    logging.getLogger("smartmdao").setLevel(logging.WARNING)
     
     # Map the optimizer's array to the 7 design variables
     design_vars = ["x1", "x2", "x3", "x4", "x5", "x6", "x7"]
@@ -126,7 +126,7 @@ def run_golinski_mdo():
     )
     
     # Restore logging level
-    logging.getLogger("smart_pipeline").setLevel(logging.INFO)
+    logging.getLogger("smartmdao").setLevel(logging.INFO)
     
     # Extract Full State
     optimal_state = evaluator.evaluate(result.x)

@@ -1,4 +1,4 @@
-from smart_pipeline.core import Pipeline
+from smartmdao.core import Pipeline
 
 def test_pipeline_decorators_and_run():
     pipeline = Pipeline()

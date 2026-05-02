@@ -1234,8 +1234,8 @@ wheels = [
 ]
 
 [[package]]
-name = "smart-pipeline"
-version = "0.1.0"
+name = "smartmdao"
+version = "1.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "graphviz" },

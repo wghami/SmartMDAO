@@ -2,8 +2,8 @@ import logging
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass
-from smart_pipeline import Pipeline, configure_logging
-from smart_pipeline.cache import (
+from smartmdao import Pipeline, configure_logging
+from smartmdao.cache import (
     MemoryBackend,
     HDF5Backend,
     PickleDiskBackend,

@@ -23,7 +23,7 @@ def run_scripts():
         print(f"Running: {script.name}...", end=" ", flush=True)
         
         # 3. Run the script using 'uv run' to ensure the environment is correct
-        # This automatically handles the 'smart_pipeline' import issue we fixed earlier
+        # This automatically handles the 'smartmdao' import issue we fixed earlier
         process = subprocess.run(
             ["uv", "run", str(script)],
             capture_output=True,

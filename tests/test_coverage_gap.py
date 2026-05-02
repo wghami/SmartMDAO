@@ -1,11 +1,11 @@
 import pytest
 from dataclasses import dataclass
-from smart_pipeline.models import Step
-from smart_pipeline.core import Pipeline
-from smart_pipeline.cache import CacheBackend
-from smart_pipeline.utils import resolve_output_names as utils_resolve
-from smart_pipeline.logging_config import configure_logging, get_logger
-from smart_pipeline.executor import StepExecutor
+from smartmdao.models import Step
+from smartmdao.core import Pipeline
+from smartmdao.cache import CacheBackend
+from smartmdao.utils import resolve_output_names as utils_resolve
+from smartmdao.logging_config import configure_logging, get_logger
+from smartmdao.executor import StepExecutor
 
 def test_utils_resolve_output_names():
     # Hits utils.py which is currently at 0%
@@ -55,7 +55,7 @@ def test_abstract_cache_backend():
 
 def test_cache_memory_backend():
     # Explicitly hit standard MemoryBackend
-    from smart_pipeline.cache import MemoryBackend
+    from smartmdao.cache import MemoryBackend
     b = MemoryBackend()
     b.set("f", "k", "v")
     assert b.has("f", "k")
@@ -63,7 +63,7 @@ def test_cache_memory_backend():
 
 def test_cache_hdf5_overwrite(tmp_path):
     # Hits the HDF5 overwrite key branch
-    from smart_pipeline.cache import HDF5Backend
+    from smartmdao.cache import HDF5Backend
     backend = HDF5Backend(filepath=str(tmp_path / "test.h5"))
     backend.set("func", "key", 1)
     backend.set("func", "key", 2)
@@ -82,7 +82,7 @@ def test_main_execution():
     import warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        runpy.run_module("smart_pipeline.main", run_name="__main__")
+        runpy.run_module("smartmdao.main", run_name="__main__")
 
 def test_executor_tuple_return_not_iterable():
     # Hits TypeError in executor.py when manual_outputs mismatch real returns
@@ -112,13 +112,13 @@ def test_models_resolve_exception_fallback():
 
 def test_hdf5_missing_file(tmp_path):
     # Hits the HDF5Backend early return when a file doesn't exist
-    from smart_pipeline.cache import HDF5Backend
+    from smartmdao.cache import HDF5Backend
     backend = HDF5Backend(filepath=str(tmp_path / "does_not_exist.h5"))
     assert not backend.has("func", "key")
 
 def test_visualization_missing_inputs(tmp_path):
     # Covers missing inputs styling & view=False logic in visualization.py
-    from smart_pipeline.visualization import PipelineVisualizer
+    from smartmdao.visualization import PipelineVisualizer
     step = Step(fn=lambda missing_var: missing_var)
     viz = PipelineVisualizer([step], input_keys=set())
     viz.build(graph_type="flow").render(output_path=str(tmp_path / "f.pdf"), view=False)
@@ -126,7 +126,7 @@ def test_visualization_missing_inputs(tmp_path):
 
 def test_visualization_no_extension(tmp_path):
     # Hits visualization.py line 126 (fallback to 'pdf' when no extension is provided)
-    from smart_pipeline.visualization import PipelineVisualizer
+    from smartmdao.visualization import PipelineVisualizer
     step = Step(fn=lambda x: x)
     viz = PipelineVisualizer([step], input_keys={"x"})
     viz.build().render(output_path=str(tmp_path / "graph_no_ext"), view=False)
@@ -135,7 +135,7 @@ def test_visualization_graphviz_missing(monkeypatch):
     # Simulates what happens if graphviz isn't installed (hits visualization.py top level exception)
     import sys
     import importlib
-    import smart_pipeline.visualization as viz
+    import smartmdao.visualization as viz
     
     # Hide graphviz
     monkeypatch.setitem(sys.modules, "graphviz", None)
@@ -153,7 +153,7 @@ def test_visualization_graphviz_missing(monkeypatch):
 
 def test_visualization_render_exception(monkeypatch, tmp_path):
     # Hits the exception fallback in PipelineVisualizer.render
-    from smart_pipeline.visualization import PipelineVisualizer
+    from smartmdao.visualization import PipelineVisualizer
     step = Step(fn=lambda x: x)
     viz = PipelineVisualizer([step], input_keys={"x"})
     viz.build()
@@ -172,7 +172,7 @@ def test_visualization_render_exception(monkeypatch, tmp_path):
 
 def test_visualization_render_view_success(monkeypatch):
     # Hits visualization.py line 126 (successful viewer opening log)
-    from smart_pipeline.visualization import PipelineVisualizer
+    from smartmdao.visualization import PipelineVisualizer
     step = Step(fn=lambda x: x)
     viz = PipelineVisualizer([step], input_keys={"x"})
     viz.build()
@@ -185,7 +185,7 @@ def test_visualization_render_view_success(monkeypatch):
 
 def test_iterative_solver_no_numeric():
     # Covers string variable fallbacks in the iterative solver residual check
-    from smart_pipeline.solvers import IterativeSolver
+    from smartmdao.solvers import IterativeSolver
     steps = [Step(fn=lambda s: s + "a", manual_outputs=["s"])]
     solver = IterativeSolver(max_iterations=2)
     result = solver.solve(steps, {"s": ""})
@@ -193,7 +193,7 @@ def test_iterative_solver_no_numeric():
 
 def test_iterative_solver_target_var_non_numeric():
     # Covers target_var not numeric fallback (solvers.py 138-139)
-    from smart_pipeline.solvers import IterativeSolver
+    from smartmdao.solvers import IterativeSolver
     steps = [Step(fn=lambda s: s + "a", manual_outputs=["s"])]
     solver = IterativeSolver(max_iterations=2, target_var="s")
     result = solver.solve(steps, {"s": ""})
@@ -201,14 +201,14 @@ def test_iterative_solver_target_var_non_numeric():
     
 def test_iterative_solver_empty_produced():
     # Covers fallback when produced_vars is completely empty
-    from smart_pipeline.solvers import IterativeSolver
+    from smartmdao.solvers import IterativeSolver
     step = Step(fn=lambda x: None, manual_outputs=[])
     solver = IterativeSolver(max_iterations=2)
     solver.solve([step], {"x": 1})
 
 def test_iterative_solver_execution_order():
     # Hits solvers.py lines 138-139 (manual execution order resolution)
-    from smart_pipeline.solvers import IterativeSolver
+    from smartmdao.solvers import IterativeSolver
     def stp1(x): return x+1
     def stp2(x): return x*2
     step1 = Step(fn=stp1, manual_outputs=["x"])
@@ -218,7 +218,7 @@ def test_iterative_solver_execution_order():
 
 def test_hybrid_solver_disconnected():
     # Covers disjoint graphs in the hybrid solver's SCC finder
-    from smart_pipeline.solvers import HybridSolver
+    from smartmdao.solvers import HybridSolver
     steps = [
         Step(fn=lambda a: a + 1, manual_outputs=["b"]),
         Step(fn=lambda c: c + 1, manual_outputs=["d"])

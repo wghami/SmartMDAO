@@ -1,4 +1,4 @@
-from smart_pipeline import main
+from smartmdao import main
 
 def test_import():
     assert main is not None
