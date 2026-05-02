@@ -122,7 +122,7 @@ def run_ssbj_mdo():
         {'type': 'ineq', 'fun': evaluator.get_constraint("range_constraint", multiplier=-1.0)}
     ]
     
-    print(f"Starting optimization for 11 design variables...")
+    print("Starting optimization for 11 design variables...")
     result = minimize(
         evaluator.get_objective("objective"), 
         initial_guess, 

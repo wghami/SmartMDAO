@@ -1,7 +1,6 @@
 import math
 import logging
 import numpy as np
-from scipy.optimize import minimize
 
 from smart_pipeline.core import Pipeline
 from smart_pipeline.solvers import HybridSolver

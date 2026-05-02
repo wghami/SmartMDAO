@@ -115,7 +115,7 @@ def run_golinski_mdo():
         })
     
     # Run Optimization
-    print(f"Starting optimization from initial guess...")
+    print("Starting optimization from initial guess...")
     result = minimize(
         evaluator.get_objective("objective"), 
         initial_guess, 
