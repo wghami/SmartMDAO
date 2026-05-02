@@ -1,139 +1,119 @@
 # SmartPipeline 🚀
 
-**SmartPipeline** is a robust, Pythonic framework for building modular computational workflows. It moves beyond simple DAGs (Directed Acyclic Graphs) by supporting **automatic dependency injection**, **cyclic/iterative solving**, and **integrated caching**, all while keeping your code clean and readable using standard Python type hints.
+SmartPipeline is a robust, Pythonic framework for building modular computational workflows. It moves beyond simple DAGs (Directed Acyclic Graphs) by supporting automatic dependency injection, cyclic/iterative solving, and integrated caching, all while keeping your code clean and readable using standard Python type hints.
 
-## 🌟 Key Features
+Whether you are running linear data processing or highly coupled Multidisciplinary Design Optimization (MDO) problems, SmartPipeline dynamically maps your functions and solves them efficiently.
 
-* **Type-Hint Driven Dependency Injection**: No need to manually define edges. If `Step B` needs a variable `x` and `Step A` returns a Dataclass containing `x`, the pipeline connects them automatically.
+# 🌟 Key Features
 
-* **Hybrid Solver**: Automatically detects whether your pipeline is linear or contains feedback loops (cycles). It solves linear parts topologically and iterates over cyclic parts until convergence.
+- **Type-Hint Driven Dependency Injection**: No need to manually define edges. If `Step B` needs a variable `x` and `Step A` returns a variable named `x`, the pipeline connects them automatically.
 
-* **Modular Caching**: Built-in decorators (`@cached`) to cache step results in RAM, HDF5 (for large arrays), or Pickle (for complex objects) with zero boilerplate.
+- **We do the MDA, you do the MDO**: We handle the heavy lifting of Multidisciplinary Analysis (MDA) — automatically isolating and converging feedback loops. Because our architecture is completely optimizer-agnostic, you can plug our dynamic evaluator into SciPy, OpenTURNS, PyOptSparse, or any algorithm you prefer.
 
-* **Visualization**: One-line generation of professional Graphviz diagrams (Flow charts or Data-Flow diagrams).
+- **Hybrid Solver**: Automatically detects whether your pipeline is linear or contains feedback loops (cycles). It solves linear parts topologically and iterates over cyclic parts until convergence using Tarjan's Algorithm.
 
-* **Integrated Logging**: Unified, configurable logging for debugging execution flows and solver convergence.
+- **Modular Caching**: Built-in decorators (`@cached`) to cache step results in RAM, HDF5 (for large arrays), or Pickle (for complex objects) with zero boilerplate.
 
-## 📦 Installation
+- **Visualization**: One-line generation of Graphviz diagrams (Flow charts or Data-Flow diagrams).
 
-1. **Clone the repository:**
+# 📦 Installation
 
-   ```
-   git clone [https://github.com/yourusername/smart-pipeline.git](https://github.com/yourusername/smart-pipeline.git)
-   cd smart-pipeline
-   ```
+We recommend using `uv` for lightning-fast installation, but standard `pip` works perfectly as well.
 
-2. **Install dependencies:**
-   It is recommended to use a virtual environment.
+Using `uv` (Recommended):
 
-   ```
-   pip install numpy matplotlib graphviz h5py
-   ```
-
-   *(Note: `graphviz` also requires the system-level binary to be installed on your OS).*
-
-## ⚡ Quick Start
-
-### 1. Basic Linear Pipeline
-
-Create steps using standard Python functions or Dataclasses.
-
-```python
-from dataclasses import dataclass
-from smart_pipeline import Pipeline
-
-@dataclass
-class ProcessedData:
-    clean_value: float
-
-# Step 1: Returns a Dataclass (Pipeline infers output name 'clean_value')
-def process(raw_val: float) -> ProcessedData:
-    return ProcessedData(clean_value=raw_val * 1.5)
-
-# Step 2: Requests 'clean_value' (Pipeline auto-connects to Step 1)
-def analyze(clean_value: float):
-    print(f"Analysis Result: {clean_value + 10}")
-
-# Execution
-pipe = Pipeline()
-pipe.add(process).add(analyze)
-pipe.run(raw_val=10.0)
+``` bash
+uv pip install git+[https://github.com/wghami/smart-pipeline.git](https://github.com/wghami/smart-pipeline.git)
 ```
 
-### 2. Handling Cycles (Iterative Solving)
+Using standard `pip`:
 
-SmartPipeline shines with coupled systems (e.g., Physics simulations, economic models). Use the `HybridSolver` to auto-detect loops.
+``` bash
+pip install git+[https://github.com/wghami/smart-pipeline.git](https://github.com/wghami/smart-pipeline.git)
+```
 
-```python
+*Note*: The visualization features require the `graphviz` system binary to be installed on your OS.
+
+# ⚡ The Agnostic MDO Approach
+
+`SmartPipeline` is built to let you define complex physics or engineering problems using pure, readable Python, without being locked into a specific optimization suite.
+
+Here is how easily you can solve the classic **Sellar coupled problem** (a 2-discipline feedback loop) and optimize it using SciPy.
+
+``` python
+import math
+from scipy.optimize import minimize
 from smart_pipeline import Pipeline, HybridSolver
+from smart_pipeline.optimization import PipelineEvaluator
 
-# A system where X depends on Y, and Y depends on X
-def calc_x(y, input_val):
-    return (y + input_val) / 2
+# 1. We handle the heavy lifting: Multidisciplinary Analysis (MDA)
+# The HybridSolver automatically detects the cyclic dependency between y1 and y2!
+pipe = Pipeline(solver=HybridSolver())
 
-def calc_y(x):
-    return x ** 0.5 + 2
+@pipe.step(outputs=["y1"])
+def discipline_1(z1: float, z2: float, x1: float, y2: float) -> float:
+    return (z1 ** 2) + z2 + x1 - (0.2 * y2)
 
-pipe = Pipeline(solver=HybridSolver(tolerance=1e-5))
-pipe.add(calc_x, outputs=["x"])
-pipe.add(calc_y, outputs=["y"])
+@pipe.step(outputs=["y2"])
+def discipline_2(z1: float, z2: float, y1: float) -> float:
+    return math.sqrt(abs(y1)) + z1 + z2
 
-# Run with initial guesses
-results = pipe.run(input_val=10.0, y=1.0, x=1.0)
-print(f"Converged: x={results['x']:.4f}, y={results['y']:.4f}")
+@pipe.step(outputs=["objective"])
+def compute_objective(x1: float, z2: float, y1: float, y2: float) -> float:
+    return (x1 ** 2) + z2 + (y1 ** 2) + math.exp(-y2)
+
+
+# 2. You choose the optimizer: Agnostic Multidisciplinary Optimization (MDO)
+# Map the optimizer's numeric array to our named design variables
+evaluator = PipelineEvaluator(
+    pipeline=pipe,
+    design_vars=["z1", "z2", "x1"],
+    constants={"y2": 1.0}  # Initial guess to kick off the cycle
+)
+
+# Pass the dynamically generated objective functions to ANY optimizer (SciPy, OpenTURNS, etc.)
+result = minimize(
+    evaluator.get_objective("objective"), 
+    x0=[1.0, 1.0, 1.0], 
+    method='SLSQP', 
+    bounds=[(-10.0, 10.0), (0.0, 10.0), (0.0, 10.0)]
+)
+
+print(f"Optimization Success! Objective: {result.fun:.4f}")
 ```
 
-### 3. Caching
+The user retains full control over the Pythonic equations, while the `PipelineEvaluator` caches the complex cyclic MDA evaluations so the optimizer can request objectives and constraints independently without performance penalties.
 
-Persist results to disk automatically using decorators.
+# 🛠️ Architecture Overview
 
-```python
-from smart_pipeline.cache import HDF5Backend, cached
+- `core.py`: The entry point. Manages steps and delegates execution to solvers.
 
-backend = HDF5Backend("cache/data.h5")
+- `solvers.py`: The brains.
 
-@cached(backend)
-def expensive_simulation(param: int):
-    # This runs once. Future calls with param=42 load from HDF5 instantly.
-    return some_heavy_numpy_calculation(param)
-```
+    - `DAGSolver`: For standard linear pipelines.
 
-## 🛠️ Architecture Overview
+    - `IterativeSolver`: For fixed-point iteration problems.
 
-* **`core.py`**: The entry point. Manages steps and delegates execution to solvers.
+    - `HybridSolver`: Uses Tarjan's Algorithm to decompose graphs into linear and cyclic components dynamically.
 
-* **`solvers.py`**: The brains.
+- `optimization.py`: Contains the stateful `PipelineEvaluator` bridge, providing callable factories for external optimizers.
 
-  * `DAGSolver`: For standard linear pipelines.
+- `executor.py:` Handles argument binding and runtime memory management.
 
-  * `IterativeSolver`: For fixed-point iteration problems.
+- `visualization.py`: Generates high-quality PDF/PNG diagrams of your workflow.
 
-  * `HybridSolver`: Uses Tarjan's Algorithm to decompose graphs into linear and cyclic components dynamically.
-
-* **`executor.py`**: Handles argument binding and runtime memory management.
-
-* **`visualization.py`**: Generates high-quality PDF/PNG diagrams of your workflow.
-
-## 🚀 Future Improvements & Roadmap
+# 🚀 Future Improvements & Roadmap
 
 To make `SmartPipeline` even better, the following improvements are planned:
 
-1. **Parallel Execution**:
+- **Parallel Execution**: Integrating `asyncio` or `ProcessPoolExecutor` to allow independent branches of the DAG to run in parallel.
 
-   * Currently, the executor runs sequentially. Integrating `asyncio` or `ProcessPoolExecutor` would allow independent branches of the DAG to run in parallel.
+- **Pydantic Integration**: Replace standard `dataclasses` with Pydantic models for robust runtime data validation and schema generation.
 
-2. **Pydantic Integration**:
+- **Checkpointing**: Allow the pipeline to pause and resume from a specific state in case of failure, serializing the entire memory dictionary.
 
-   * Replace standard `dataclasses` with Pydantic models for robust runtime data validation and schema generation.
+- **Web UI**: A lightweight Flask/Streamlit dashboard to visualize pipeline progress and convergence plots in real-time.
 
-3. **Checkpointing**:
-
-   * Allow the pipeline to pause and resume from a specific state in case of failure, serializing the entire memory dictionary.
-
-4. **Web UI**:
-
-   * A lightweight Flask/Streamlit dashboard to visualize pipeline progress and convergence plots in real-time.
-
-## 🤝 Contributing
+# 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
