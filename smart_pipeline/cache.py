@@ -81,7 +81,8 @@ class HDF5Backend(CacheBackend):
         with self.h5py.File(self.filepath, 'r') as f:
             dataset = f[f"{func_name}/{key}"]
             # Convert back to numpy or scalar
-            if dataset.shape == (): return dataset[()] # scalar
+            if dataset.shape == ():
+                return dataset[()] # scalar
             return dataset[:] # array
 
     def set(self, func_name, key, value):

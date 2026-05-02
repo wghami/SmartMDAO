@@ -244,7 +244,8 @@ class HybridSolver:
                     w = stack.pop()
                     on_stack.remove(w)
                     new_scc.append(w)
-                    if w == v: break
+                    if w == v:
+                        break
                 sccs.append(new_scc)
 
         for step in steps:

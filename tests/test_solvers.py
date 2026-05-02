@@ -43,25 +43,6 @@ def test_iterative_solver_max_iterations():
 
 def test_hybrid_solver():
     # x -> (a <-> b) -> y
-    steps = [
-        Step(fn=lambda x: x, manual_outputs=["a"]),     # Linear
-        Step(fn=lambda a: a * 0.5, manual_outputs=["b"]), # Cycle part 1
-        Step(fn=lambda b: b + 0.1, manual_outputs=["a"]), # Cycle part 2
-        Step(fn=lambda b: b * 2, manual_outputs=["y"]),   # Linear
-    ]
-    solver = HybridSolver(tolerance=0.2)
-    result = solver.solve(steps, {"x": 1.0})
-    assert "y" in result
-
-def test_iterative_solver_max_iterations():
-    # A loop that never converges
-    steps = [Step(fn=lambda x: x + 1, manual_outputs=["x"])]
-    solver = IterativeSolver(max_iterations=5)
-    result = solver.solve(steps, {"x": 0})
-    assert result["x"] == 5
-
-def test_hybrid_solver():
-    # x -> (a <-> b) -> y
     # We use named functions instead of lambdas here because the HybridSolver
     # sorts cycle blocks alphabetically by step name to ensure deterministic execution.
     def step1_linear(x): return x
