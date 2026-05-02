@@ -19,5 +19,6 @@ __all__ = [
     "HistoryBackend", 
     "HDF5Backend", 
     "PickleDiskBackend",
-    "configure_logging"
+    "configure_logging",
+    "PipelineEvaluator"
 ]

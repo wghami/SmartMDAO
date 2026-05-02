@@ -10,6 +10,8 @@ dependencies = [
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
+    "openturns>=1.27",
+    "scipy>=1.17.1",
 ]
 
 [dependency-groups]
