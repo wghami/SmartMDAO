@@ -1,8 +1,6 @@
-import inspect
 import os
 import logging
-from typing import List, Set, Dict, Literal, Optional, Any, Tuple
-from collections import defaultdict
+from typing import List, Set, Dict, Literal, Optional, Tuple
 
 from .models import Step
 

@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Literal, Set
+from typing import Callable, List, Literal
 
 from .models import Step
 from .solvers import Solver, DAGSolver

@@ -1,7 +1,6 @@
-import pytest
 import numpy as np
 from smart_pipeline.cache import (
-    MemoryBackend, HistoryBackend, PickleDiskBackend, HDF5Backend, cached, generate_cache_key
+    HistoryBackend, PickleDiskBackend, HDF5Backend, cached, generate_cache_key
 )
 
 def test_generate_cache_key():

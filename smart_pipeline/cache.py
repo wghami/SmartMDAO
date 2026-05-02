@@ -3,7 +3,6 @@ import hashlib
 import pickle
 import os
 import logging
-import numpy as np
 from abc import ABC, abstractmethod
 from collections import defaultdict
 

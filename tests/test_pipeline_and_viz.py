@@ -1,6 +1,4 @@
-import pytest
 from smart_pipeline.core import Pipeline
-from smart_pipeline.visualization import PipelineVisualizer
 
 def test_pipeline_decorators_and_run():
     pipeline = Pipeline()
