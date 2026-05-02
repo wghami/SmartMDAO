@@ -3,10 +3,10 @@ import logging
 import numpy as np
 from scipy.optimize import minimize
 
-from smart_pipeline.core import Pipeline
-from smart_pipeline.solvers import HybridSolver
-from smart_pipeline.logging_config import configure_logging
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao.core import Pipeline
+from smartmdao.solvers import HybridSolver
+from smartmdao.logging_config import configure_logging
+from smartmdao.optimization import PipelineEvaluator
 
 # --- Setup Logging ---
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def run_sellar_mdo():
     print("="*65)
     
     # 1. Temporarily suppress pipeline INFO logs to avoid console flooding
-    logging.getLogger("smart_pipeline").setLevel(logging.WARNING)
+    logging.getLogger("smartmdao").setLevel(logging.WARNING)
     
     # 2. Setup the Evaluator bridge
     evaluator = PipelineEvaluator(
@@ -83,7 +83,7 @@ def run_sellar_mdo():
     )
     
     # Restore logging level
-    logging.getLogger("smart_pipeline").setLevel(logging.INFO)
+    logging.getLogger("smartmdao").setLevel(logging.INFO)
     
     # 5. Extract Full State at Optimum
     # By passing the optimal 'x' back to the evaluator, we retrieve the full dictionary

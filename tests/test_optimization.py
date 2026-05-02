@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao.optimization import PipelineEvaluator
 
 # ==============================================================================
 # Fixtures

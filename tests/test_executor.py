@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import dataclass
-from smart_pipeline.models import Step
-from smart_pipeline.executor import StepExecutor
+from smartmdao.models import Step
+from smartmdao.executor import StepExecutor
 
 @dataclass
 class MyData:

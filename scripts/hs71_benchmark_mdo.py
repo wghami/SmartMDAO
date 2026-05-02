@@ -2,10 +2,10 @@ import logging
 import numpy as np
 from scipy.optimize import minimize
 
-from smart_pipeline.core import Pipeline
-from smart_pipeline.solvers import DAGSolver
-from smart_pipeline.logging_config import configure_logging
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao.core import Pipeline
+from smartmdao.solvers import DAGSolver
+from smartmdao.logging_config import configure_logging
+from smartmdao.optimization import PipelineEvaluator
 
 # --- Setup Logging ---
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def run_hs71_mdo():
     print("="*65)
     
     # 1. Suppress pipeline INFO logs during the optimization loop
-    logging.getLogger("smart_pipeline").setLevel(logging.WARNING)
+    logging.getLogger("smartmdao").setLevel(logging.WARNING)
     
     # 2. Setup the Evaluator bridge
     # We map the optimizer's array directly to our 4 design variables
@@ -91,7 +91,7 @@ def run_hs71_mdo():
     )
     
     # Restore logging level
-    logging.getLogger("smart_pipeline").setLevel(logging.INFO)
+    logging.getLogger("smartmdao").setLevel(logging.INFO)
     
     # 5. Extract Full State at Optimum
     optimal_state = evaluator.evaluate(result.x)

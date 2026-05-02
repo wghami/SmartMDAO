@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
-from smart_pipeline import Pipeline, configure_logging
+from smartmdao import Pipeline, configure_logging
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)

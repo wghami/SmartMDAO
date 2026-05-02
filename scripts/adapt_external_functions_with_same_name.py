@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
-from smart_pipeline import Pipeline, configure_logging
-from smart_pipeline.cache import MemoryBackend, cached
+from smartmdao import Pipeline, configure_logging
+from smartmdao.cache import MemoryBackend, cached
 
 # --- Setup Logging ---
 # Initialize module-level logger

@@ -1,5 +1,5 @@
 [project]
-name = "smart-pipeline"
+name = "SmartMDAO"
 version = "1.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["smart_pipeline"]
+packages = ["smartmdao"]
 
 [tool.pytest.ini_options]
 pythonpath = "."

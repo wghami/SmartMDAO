@@ -1,5 +1,5 @@
 import numpy as np
-from smart_pipeline.cache import (
+from smartmdao.cache import (
     HistoryBackend, PickleDiskBackend, HDF5Backend, cached, generate_cache_key
 )
 

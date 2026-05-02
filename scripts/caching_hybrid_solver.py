@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 
-from smart_pipeline import (
+from smartmdao import (
     Pipeline,
     HybridSolver,
     cached,

@@ -2,10 +2,10 @@ import math
 import logging
 import numpy as np
 
-from smart_pipeline.core import Pipeline
-from smart_pipeline.solvers import HybridSolver
-from smart_pipeline.logging_config import configure_logging
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao.core import Pipeline
+from smartmdao.solvers import HybridSolver
+from smartmdao.logging_config import configure_logging
+from smartmdao.optimization import PipelineEvaluator
 import openturns as ot
 
 # --- Setup Logging ---
@@ -52,7 +52,7 @@ def run_sellar_mdo_openturns():
     print("="*65)
     
     # 1. Temporarily suppress pipeline INFO logs to avoid console flooding
-    logging.getLogger("smart_pipeline").setLevel(logging.WARNING)
+    logging.getLogger("smartmdao").setLevel(logging.WARNING)
     
     # 2. Setup the Evaluator bridge
     evaluator = PipelineEvaluator(
@@ -95,7 +95,7 @@ def run_sellar_mdo_openturns():
     algo.run()
     
     # Restore logging level
-    logging.getLogger("smart_pipeline").setLevel(logging.INFO)
+    logging.getLogger("smartmdao").setLevel(logging.INFO)
     
     # 7. Extract Results
     result = algo.getResult()

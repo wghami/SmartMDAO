@@ -18,7 +18,7 @@ class PipelineEvaluator:
                  design_vars: List[str], 
                  constants: Dict[str, Any] = None):
         """
-        :param pipeline: The instantiated smart_pipeline.
+        :param pipeline: The instantiated smartmdao.
         :param design_vars: Ordered list of variable names corresponding to the optimizer's input array `x`.
         :param constants: Optional dictionary of variables that remain fixed during optimization.
         """

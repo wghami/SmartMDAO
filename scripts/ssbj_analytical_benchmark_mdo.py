@@ -2,10 +2,10 @@ import logging
 import numpy as np
 from scipy.optimize import minimize
 
-from smart_pipeline.core import Pipeline
-from smart_pipeline.solvers import HybridSolver
-from smart_pipeline.logging_config import configure_logging
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao.core import Pipeline
+from smartmdao.solvers import HybridSolver
+from smartmdao.logging_config import configure_logging
+from smartmdao.optimization import PipelineEvaluator
 
 # --- Setup Logging ---
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ def run_ssbj_mdo():
     print("="*70)
     
     # Suppress pipeline INFO logs during the optimization loop
-    logging.getLogger("smart_pipeline").setLevel(logging.WARNING)
+    logging.getLogger("smartmdao").setLevel(logging.WARNING)
     
     # We have 11 design variables
     design_vars = [f"x{i}" for i in range(1, 12)]
@@ -133,7 +133,7 @@ def run_ssbj_mdo():
     )
     
     # Restore logging level
-    logging.getLogger("smart_pipeline").setLevel(logging.INFO)
+    logging.getLogger("smartmdao").setLevel(logging.INFO)
     
     # Extract Full State
     optimal_state = evaluator.evaluate(result.x)

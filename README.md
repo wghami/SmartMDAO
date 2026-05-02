@@ -23,13 +23,13 @@ We recommend using `uv` for lightning-fast installation, but standard `pip` work
 Using `uv` (Recommended):
 
 ``` bash
-uv pip install git+[https://github.com/wghami/smart-pipeline.git](https://github.com/wghami/smart-pipeline.git)
+uv pip install git+[https://github.com/wghami/SmartMDAO.git](https://github.com/wghami/SmartMDAO.git)
 ```
 
 Using standard `pip`:
 
 ``` bash
-pip install git+[https://github.com/wghami/smart-pipeline.git](https://github.com/wghami/smart-pipeline.git)
+pip install git+[https://github.com/wghami/SmartMDAO.git](https://github.com/wghami/SmartMDAO.git)
 ```
 
 *Note*: The visualization features require the `graphviz` system binary to be installed on your OS.
@@ -43,8 +43,8 @@ Here is how easily you can solve the classic **Sellar coupled problem** (a 2-dis
 ``` python
 import math
 from scipy.optimize import minimize
-from smart_pipeline import Pipeline, HybridSolver
-from smart_pipeline.optimization import PipelineEvaluator
+from smartmdao import Pipeline, HybridSolver
+from smartmdao.optimization import PipelineEvaluator
 
 # 1. We handle the heavy lifting: Multidisciplinary Analysis (MDA)
 # The HybridSolver automatically detects the cyclic dependency between y1 and y2!
@@ -120,4 +120,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 # 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/smart-pipeline/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.

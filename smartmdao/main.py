@@ -1,7 +1,7 @@
 import sys
 
 def main():
-    print("Hello from smart_pipeline !")
+    print("Hello from smartmdao !")
     print(f"Running with Python: {sys.version}")
 
 if __name__ == "__main__":
