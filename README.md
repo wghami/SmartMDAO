@@ -1,50 +1,64 @@
-# SmartPipeline 🚀
+# SmartMDAO 🚀
 
-SmartPipeline is a robust, Pythonic framework for building modular computational workflows. It moves beyond simple DAGs (Directed Acyclic Graphs) by supporting automatic dependency injection, cyclic/iterative solving, and integrated caching, all while keeping your code clean and readable using standard Python type hints.
+**SmartMDAO** is a lightweight, purely Pythonic framework for Multidisciplinary Design Analysis and Optimization (MDO).
 
-Whether you are running linear data processing or highly coupled Multidisciplinary Design Optimization (MDO) problems, SmartPipeline dynamically maps your functions and solves them efficiently.
-
-# 🌟 Key Features
-
-- **Type-Hint Driven Dependency Injection**: No need to manually define edges. If `Step B` needs a variable `x` and `Step A` returns a variable named `x`, the pipeline connects them automatically.
-
-- **We do the MDA, you do the MDO**: We handle the heavy lifting of Multidisciplinary Analysis (MDA) — automatically isolating and converging feedback loops. Because our architecture is completely optimizer-agnostic, you can plug our dynamic evaluator into SciPy, OpenTURNS, PyOptSparse, or any algorithm you prefer.
-
-- **Hybrid Solver**: Automatically detects whether your pipeline is linear or contains feedback loops (cycles). It solves linear parts topologically and iterates over cyclic parts until convergence using Tarjan's Algorithm.
-
-- **Modular Caching**: Built-in decorators (`@cached`) to cache step results in RAM, HDF5 (for large arrays), or Pickle (for complex objects) with zero boilerplate.
-
-- **Visualization**: One-line generation of Graphviz diagrams (Flow charts or Data-Flow diagrams).
+Define your physics and engineering models, and let SmartMDAO handle the complex dependency mapping, cyclic feedback loops, and caching. Once your Multidisciplinary Analysis (MDA) is built, seamlessly plug it into your favorite optimization library.
 
 # 📦 Installation
 
-We recommend using `uv` for lightning-fast installation, but standard `pip` works perfectly as well.
+SmartMDAO is available on PyPI. We recommend using uv for lightning-fast installation, but standard pip works perfectly.
 
-Using `uv` (Recommended):
-
-``` bash
-uv pip install git+[https://github.com/wghami/SmartMDAO.git](https://github.com/wghami/SmartMDAO.git)
-```
-
-Using standard `pip`:
+Using `uv`:
 
 ``` bash
-pip install git+[https://github.com/wghami/SmartMDAO.git](https://github.com/wghami/SmartMDAO.git)
+uv add smartmdao
 ```
 
-*Note*: The visualization features require the `graphviz` system binary to be installed on your OS.
+Using `pip`:
 
-# ⚡ The Agnostic MDO Approach
+``` bash
+pip install smartmdao
+```
 
-`SmartPipeline` is built to let you define complex physics or engineering problems using pure, readable Python, without being locked into a specific optimization suite.
+*(Note: Visualization features require the graphviz system binary to be installed on your OS).*
 
-Here is how easily you can solve the classic **Sellar coupled problem** (a 2-discipline feedback loop) and optimize it using SciPy.
+### Installing Graphviz (Optional System Requirement)
+
+While `smartmdao` works perfectly on its own, generating pipeline diagrams requires the `graphviz` system binary to be installed on your OS.
+
+**macOS (Homebrew):**
+```bash
+brew install graphviz
+```
+
+**Linux (Ubuntu/Debian):**
+``` bash
+sudo apt-get install graphviz
+```
+
+**Windows (winget):**
+``` bash
+winget install graphviz
+```
+
+*(Alternatively, you can download the Windows installer directly from the [official Graphviz website](https://graphviz.org/download/))*
+
+# 🌟 Why SmartMDAO? (The 3 Core Strengths)
+
+1. **Effortless MDA via Decorators & Auto-Caching** No need to manually define complex graph edges or learn a heavy Domain-Specific Language. If `Step B` needs variable `x` and `Step A` returns `x`, SmartMDAO connects them automatically using standard Python type hints. Wrap your functions in `@pipe.step` and add our built-in `@cached` decorators (RAM, HDF5, Pickle) to effortlessly speed up evaluations.
+
+2. **Plug-and-Play MDO (Bring Your Own Optimizer)** We do the MDA, you do the MDO. Because our architecture relies on standard Python types and dictionaries, it is completely optimizer-agnostic. Use our `PipelineEvaluator` bridge to cache cyclic MDA evaluations, and pass your objective functions, constraints, etc directly to SciPy, OpenTURNS, PyOptSparse, or any other algorithm you prefer.
+
+3. **Also Built for Researchers (Highly Extensible)** SmartMDAO is designed to be a sandbox for innovation. Our solvers are built on standard Python `Protocol` interfaces. If you want to research and implement your own custom MDA convergence algorithms, you can easily write a new solver class and inject it into the pipeline without touching the core framework.
+
+# ⚡ Quick Start: The Agnostic MDO Approach
+
+Here is how easily you can solve the classic Sellar coupled problem (a 2-discipline feedback loop) and optimize it using standard `scipy`.
 
 ``` python
 import math
 from scipy.optimize import minimize
-from smartmdao import Pipeline, HybridSolver
-from smartmdao.optimization import PipelineEvaluator
+from smartmdao import Pipeline, HybridSolver, PipelineEvaluator
 
 # 1. We handle the heavy lifting: Multidisciplinary Analysis (MDA)
 # The HybridSolver automatically detects the cyclic dependency between y1 and y2!
@@ -71,7 +85,7 @@ evaluator = PipelineEvaluator(
     constants={"y2": 1.0}  # Initial guess to kick off the cycle
 )
 
-# Pass the dynamically generated objective functions to ANY optimizer (SciPy, OpenTURNS, etc.)
+# Pass the dynamically generated objective functions to ANY optimizer
 result = minimize(
     evaluator.get_objective("objective"), 
     x0=[1.0, 1.0, 1.0], 
@@ -82,42 +96,24 @@ result = minimize(
 print(f"Optimization Success! Objective: {result.fun:.4f}")
 ```
 
-The user retains full control over the Pythonic equations, while the `PipelineEvaluator` caches the complex cyclic MDA evaluations so the optimizer can request objectives and constraints independently without performance penalties.
-
 # 🛠️ Architecture Overview
 
 - `core.py`: The entry point. Manages steps and delegates execution to solvers.
-
-- `solvers.py`: The brains.
-
+- `solvers.py`: The brains of the operation.
     - `DAGSolver`: For standard linear pipelines.
-
     - `IterativeSolver`: For fixed-point iteration problems.
-
-    - `HybridSolver`: Uses Tarjan's Algorithm to decompose graphs into linear and cyclic components dynamically.
-
+    - `HybridSolver`: Uses Tarjan's Algorithm to dynamically decompose graphs into linear and cyclic components.
 - `optimization.py`: Contains the stateful `PipelineEvaluator` bridge, providing callable factories for external optimizers.
+- `visualization.py`: Generates high-quality Graphviz diagrams (Data-Flow or Process-Flow) of your workflow in one line of code.
 
-- `executor.py:` Handles argument binding and runtime memory management.
+# 🚀 Roadmap
 
-- `visualization.py`: Generates high-quality PDF/PNG diagrams of your workflow.
+**Parallel Execution**: Integrating `asyncio` or `ProcessPoolExecutor` to allow independent branches of the DAG to run in parallel.
 
-# 🚀 Future Improvements & Roadmap
+**Pydantic Integration**: Replacing standard `dataclasses` with Pydantic models for robust runtime data validation.
 
-To make `SmartPipeline` even better, the following improvements are planned:
+**Checkpointing**: Allowing pipelines to pause and resume from a specific state in case of failure.
 
-- **Parallel Execution**: Integrating `asyncio` or `ProcessPoolExecutor` to allow independent branches of the DAG to run in parallel.
+# 🤝 Contributing & License
 
-- **Pydantic Integration**: Replace standard `dataclasses` with Pydantic models for robust runtime data validation and schema generation.
-
-- **Checkpointing**: Allow the pipeline to pause and resume from a specific state in case of failure, serializing the entire memory dictionary.
-
-- **Web UI**: A lightweight Flask/Streamlit dashboard to visualize pipeline progress and convergence plots in real-time.
-
-# 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-# 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.
+Contributions are welcome! Please feel free to submit a Pull Request.This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.
