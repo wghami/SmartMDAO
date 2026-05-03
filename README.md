@@ -96,24 +96,6 @@ result = minimize(
 print(f"Optimization Success! Objective: {result.fun:.4f}")
 ```
 
-# 🛠️ Architecture Overview
-
-- `core.py`: The entry point. Manages steps and delegates execution to solvers.
-- `solvers.py`: The brains of the operation.
-    - `DAGSolver`: For standard linear pipelines.
-    - `IterativeSolver`: For fixed-point iteration problems.
-    - `HybridSolver`: Uses Tarjan's Algorithm to dynamically decompose graphs into linear and cyclic components.
-- `optimization.py`: Contains the stateful `PipelineEvaluator` bridge, providing callable factories for external optimizers.
-- `visualization.py`: Generates high-quality Graphviz diagrams (Data-Flow or Process-Flow) of your workflow in one line of code.
-
-# 🚀 Roadmap
-
-**Parallel Execution**: Integrating `asyncio` or `ProcessPoolExecutor` to allow independent branches of the DAG to run in parallel.
-
-**Pydantic Integration**: Replacing standard `dataclasses` with Pydantic models for robust runtime data validation.
-
-**Checkpointing**: Allowing pipelines to pause and resume from a specific state in case of failure.
-
 # 🤝 Contributing & License
 
 Contributions are welcome! Please feel free to submit a Pull Request.This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.
