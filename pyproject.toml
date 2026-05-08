@@ -1,6 +1,6 @@
 [project]
 name = "SmartMDAO"
-version = "1.2.2"
+version = "1.2.3"
 description = "Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization."
 readme = "README.md"
 requires-python = ">=3.11"

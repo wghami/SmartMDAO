@@ -22,7 +22,7 @@ Define your physics and engineering models, and let SmartMDAO handle the complex
 Here is how easily you can solve the classic Sellar coupled problem.
 
 <p align="center">
-  <img src="assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
+  <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/b59c0cd3c36c67cb23538a2e4c8f04e71bbe6f27/assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
 </p>
 
 Notice how SmartMDAO automatically converges the $y_1 \leftrightarrow y_2$ cyclic dependency, caches the heavy lifting, and elegantly bridges to SciPy - even allowing you to flip constraint signs on the fly.
