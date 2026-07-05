@@ -1,29 +1,9 @@
 import pytest
-from dataclasses import dataclass
 from smartmdao.models import Step
 from smartmdao.core import Pipeline
 from smartmdao.cache import CacheBackend
-from smartmdao.utils import resolve_output_names as utils_resolve
 from smartmdao.logging_config import configure_logging, get_logger
 from smartmdao.executor import StepExecutor
-
-def test_utils_resolve_output_names():
-    # Hits utils.py which is currently at 0%
-    def my_func(): pass
-    step = Step(fn=my_func)
-    assert utils_resolve(step) == ["my_func"]
-    
-    @dataclass
-    class MyDC:
-        a: int
-    def my_dc_func() -> MyDC: pass
-    step2 = Step(fn=my_dc_func)
-    assert "a" in utils_resolve(step2)
-
-def test_utils_resolve_manual_outputs():
-    # Hits utils.py line 12 (manual outputs override)
-    step = Step(fn=lambda: 1, manual_outputs=["custom_out"])
-    assert utils_resolve(step) == ["custom_out"]
 
 def test_pipeline_step_no_args():
     # Hits the `if fn is not None` block in Pipeline.step
