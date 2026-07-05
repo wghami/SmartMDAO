@@ -2,30 +2,54 @@
 
 ***Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization.***
 
-**SmartMDAO** is a lightweight, purely Pythonic framework for Multidisciplinary Design Analysis and Optimization (MDAO).
+[![PyPI version](https://img.shields.io/pypi/v/smartmdao.svg)](https://pypi.org/project/smartmdao/)
+[![Python versions](https://img.shields.io/pypi/pyversions/smartmdao.svg)](https://pypi.org/project/smartmdao/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/wghami/SmartMDAO/blob/main/LICENSE)
 
-Define your physics and engineering models, and let SmartMDAO handle the complex dependency mapping, cyclic feedback loops, and caching. Once your Multidisciplinary Analysis (MDA) is built, seamlessly plug it into your favorite optimization library.
-
-
-# 🌟 Why SmartMDAO?
-
-1. **Effortless MDA**: No heavy Domain-Specific Languages. Just use `@pipeline.step` and standard Python type hints. SmartMDAO automatically maps dependencies and resolves cyclic feedback loops. Compatible with **with any standard Python types, such as strings and user-specific objects**.
-
-2. **Built-in Caching**: Speed up your pipelines instantly by layering `@cached` decorators (RAM, HDF5, Pickle) onto expensive functions.
-
-3. **Agnostic MDO**: Bring your own optimizer. Our `PipelineEvaluator` bridge works flawlessly with SciPy, OpenTURNS, PyOptSparse, or any other algorithm you prefer.
-
-4. **Also Built for Researchers (Highly Extensible)** SmartMDAO is designed to be a sandbox for innovation. Our solvers are built on standard Python `Protocol` interfaces. If you want to research and implement your own custom MDA convergence algorithms, you can easily write a new solver class and inject it into the pipeline without touching the core framework.
-
-# ⚡ Quick Start: Caching, Constraints, and Optimization
-
-Here is how easily you can solve the classic Sellar coupled problem.
+**SmartMDAO** is a lightweight, purely Pythonic framework for Multidisciplinary Design Analysis and Optimization (MDAO). Define your disciplines as plain Python functions, and SmartMDAO maps the dependency graph, converges cyclic feedback loops, caches expensive calls, and bridges straight into your optimizer of choice.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/b59c0cd3c36c67cb23538a2e4c8f04e71bbe6f27/assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
 </p>
 
-Notice how SmartMDAO automatically converges the $y_1 \leftrightarrow y_2$ cyclic dependency, caches the heavy lifting, and elegantly bridges to SciPy - even allowing you to flip constraint signs on the fly.
+## 🔍 See It In Action
+
+**Without SmartMDAO** — you hand-write the convergence loop and track state yourself:
+
+```python
+y2 = 1.0  # initial guess
+for _ in range(100):
+    y1 = z1 ** 2 + z2 + x1 - 0.2 * y2
+    y2_next = math.sqrt(abs(y1)) + z1 + z2
+    if abs(y2_next - y2) < 1e-6:
+        break
+    y2 = y2_next
+```
+
+**With SmartMDAO** — declare each discipline once; the $y_1 \leftrightarrow y_2$ cycle is found and converged for you:
+
+```python
+@pipeline.step(outputs=["y1"])
+def discipline_1(z1, z2, x1, y2): return z1 ** 2 + z2 + x1 - 0.2 * y2
+
+@pipeline.step(outputs=["y2"])
+def discipline_2(z1, z2, y1): return math.sqrt(abs(y1)) + z1 + z2
+
+pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
+```
+
+# 🌟 Why SmartMDAO?
+
+- **Effortless MDA** — no DSL, just `@pipeline.step` and standard type hints. Works with plain types, dataclasses, or your own objects.
+- **Built-in Caching** — layer `@cached` (RAM, HDF5, Pickle) onto expensive functions for instant speedups.
+- **Agnostic MDO** — `PipelineEvaluator` bridges flawlessly to SciPy, OpenTURNS, PyOptSparse, or any optimizer you prefer.
+- **Type-Safe** — static validation catches mismatched disciplines before a single step runs; opt-in runtime checks catch the rest.
+- **Built Also for Researchers** — solvers are plain `Protocol` classes, so custom MDA convergence algorithms drop in without touching the core framework.
+
+<details>
+<summary><strong>⚡ Full Quick Start: Caching, Constraints & Optimization (click to expand)</strong></summary>
+
+Here is how easily you can solve the classic Sellar coupled problem end-to-end, from caching through SciPy optimization.
 
 ``` python
 import math
@@ -107,7 +131,7 @@ cons = [
 # ==============================================================================
 # PART 4: Run Optimization (MDO)
 # ==============================================================================
-print(f"Starting scipy optimization from initial guess: {initial_guess}")
+print(f"Starting scipy optimization from initial guess: {initial_guess}")NumericToleranceChecker
 result = minimize(
     evaluator.get_objective("objective"), 
     initial_guess, 
@@ -140,6 +164,8 @@ pipeline.visualize(inputs=["z1", "z2", "x1"],  # <-- if not provided, pipeline t
     graph_type = "bipartite",
     view = False)
 ```
+
+</details>
 
 ## 🧠 Advanced Examples
 
