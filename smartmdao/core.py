@@ -5,6 +5,7 @@ from typing import Callable, List, Literal
 from .models import Step
 from .solvers import Solver, DAGSolver
 from .visualization import visualize_pipeline
+from .validation import TypeChecker, StandardTypeChecker, validate_structure, validate_external_inputs
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)
@@ -13,15 +14,23 @@ logger = logging.getLogger(__name__)
 class Pipeline:
     steps: list[Step] = field(default_factory=list)
     solver: Solver = field(default_factory=DAGSolver)
+    # Static structural validation (producer/consumer type compatibility) always
+    # runs before the first execution of a given pipeline shape - it's free.
+    # Runtime per-call validation is opt-in since it adds overhead to every
+    # step invocation, which matters inside IterativeSolver's convergence loop.
+    runtime_type_checks: bool = False
+    type_checker: TypeChecker = field(default_factory=StandardTypeChecker)
+    _structure_validated: bool = field(default=False, init=False, repr=False, compare=False)
 
     def add(self, fn: Callable, outputs: list[str] = None):
         """
         Add a step to the pipeline.
         :param fn: The function to execute.
-        :param outputs: Optional list of variable names this function produces. 
+        :param outputs: Optional list of variable names this function produces.
         """
         step = Step(fn, outputs)
         self.steps.append(step)
+        self._structure_validated = False
         logger.debug(f"Added step '{step.name}' to pipeline.")
         return self
 
@@ -41,11 +50,21 @@ class Pipeline:
 
     def run(self, **inputs):
         """
-        Delegates the execution to the configured Solver.
+        Validates types, then delegates execution to the configured Solver.
         """
         logger.info(f"Starting pipeline execution with {len(self.steps)} steps and inputs: {list(inputs.keys())}")
         try:
-            result = self.solver.solve(self.steps, inputs)
+            if not self._structure_validated:
+                validate_structure(self.steps, self.type_checker)
+                self._structure_validated = True
+
+            validate_external_inputs(self.steps, inputs, self.type_checker)
+
+            if self.runtime_type_checks:
+                result = self.solver.solve(self.steps, inputs, type_checker=self.type_checker)
+            else:
+                result = self.solver.solve(self.steps, inputs)
+
             logger.info("Pipeline execution completed successfully.")
             return result
         except Exception as e:

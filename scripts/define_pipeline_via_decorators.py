@@ -55,8 +55,8 @@ def run_decorators_usage():
                    view = False)
     
     # Run the pipeline
-    logger.info("Starting pipeline execution with x=10...")
-    result = pipe.run(x=10)
+    logger.info("Starting pipeline execution with x=10.0...")
+    result = pipe.run(x=10.0)
     
     logger.info(f"Final Result Dictionary: {result}")
     # Accessing the specific dataclass field if present in memory
