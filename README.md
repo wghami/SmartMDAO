@@ -26,7 +26,7 @@ for _ in range(100):
     y2 = y2_next
 ```
 
-**With SmartMDAO** — declare each discipline once; the $y_1 \leftrightarrow y_2$ cycle is found and converged for you:
+**With SmartMDAO** — declare each discipline once; the y1 ↔ y2 cycle is found and converged for you:
 
 ```python
 @pipeline.step(outputs=["y1"])
@@ -131,7 +131,7 @@ cons = [
 # ==============================================================================
 # PART 4: Run Optimization (MDO)
 # ==============================================================================
-print(f"Starting scipy optimization from initial guess: {initial_guess}")NumericToleranceChecker
+print(f"Starting scipy optimization from initial guess: {initial_guess}")
 result = minimize(
     evaluator.get_objective("objective"), 
     initial_guess, 
