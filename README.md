@@ -42,23 +42,25 @@ pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
 
 - **Effortless MDA** — no DSL, just `@pipeline.step` and standard type hints. Works with plain types, dataclasses, or your own objects.
 - **Built-in Caching** — layer `@cached` (RAM, HDF5, Pickle) onto expensive functions for instant speedups.
-- **Agnostic MDO** — `PipelineEvaluator` bridges flawlessly to SciPy, OpenTURNS, PyOptSparse, or any optimizer you prefer.
+- **Agnostic MDO** — define your `OptimizationProblem` once, then run it through any backend with a single string: `optimize(problem, backend="scipy")` or `backend="openturns"`. Bring your own via `@register_backend`, or drop straight to `PipelineEvaluator` for full control.
 - **Type-Safe** — static validation catches mismatched disciplines before a single step runs; opt-in runtime checks catch the rest.
 - **Built Also for Researchers** — solvers are plain `Protocol` classes, so custom MDA convergence algorithms drop in without touching the core framework.
 
 <details>
 <summary><strong>⚡ Full Quick Start: Caching, Constraints & Optimization (click to expand)</strong></summary>
 
-Here is how easily you can solve the classic Sellar coupled problem end-to-end, from caching through SciPy optimization.
+Here is how easily you can solve the classic Sellar coupled problem end-to-end, from caching through optimization - swapping the solver backend with a single string.
 
 ``` python
 import math
 import logging
-from scipy.optimize import minimize
 from smartmdao import (
     Pipeline,
     HybridSolver,
     PipelineEvaluator,
+    OptimizationProblem,
+    ConstraintSpec,
+    optimize,
     cached,
     MemoryBackend,
     configure_logging
@@ -107,69 +109,46 @@ def compute_constraint_2(y2: float) -> float:
     return y2 - 24.0
 
 # ==============================================================================
-# PART 3: Setup the Evaluator Bridge
+# PART 3: Bridge the Pipeline to an Optimizer-Agnostic Problem
 # ==============================================================================
-# Map the optimizer's numeric array back to our named design variables
 evaluator = PipelineEvaluator(
     pipeline=pipeline,
     design_vars=["z1", "z2", "x1"],
     constants={"y2": 1.0} # Initial guess to kick off the cycle
 )
 
-# Setup Optimizer parameters
-initial_guess = [1.0, 1.0, 1.0] 
-bounds = [(-10.0, 10.0), (0.0, 10.0), (0.0, 10.0)]
-
-# Constraints for scipy.optimize
-# SciPy expects f(x) >= 0. Since our pipeline outputs f(x) <= 0, we use multiplier=-1.0
-# The evaluator returns a callable function so the optimizer can access it
-cons = [
-    {'type': 'ineq', 'fun': evaluator.get_constraint("constraint_1", multiplier=-1.0)},
-    {'type': 'ineq', 'fun': evaluator.get_constraint("constraint_2", multiplier=-1.0)}
-]
-
-# ==============================================================================
-# PART 4: Run Optimization (MDO)
-# ==============================================================================
-print(f"Starting scipy optimization from initial guess: {initial_guess}")
-result = minimize(
-    evaluator.get_objective("objective"), 
-    initial_guess, 
-    method='SLSQP', 
-    bounds=bounds, 
-    constraints=cons,
-    options={'disp': True, 'ftol': 1e-6}
+# Both backends expect h(x) >= 0; Sellar's constraints are naturally written
+# as g(x) <= 0, so we flip the sign with multiplier=-1.0.
+problem = OptimizationProblem(
+    evaluator=evaluator,
+    initial_guess=[1.0, 1.0, 1.0],
+    bounds=[(-10.0, 10.0), (0.0, 10.0), (0.0, 10.0)],
+    objective="objective",
+    constraints=[
+        ConstraintSpec(name="constraint_1", multiplier=-1.0),
+        ConstraintSpec(name="constraint_2", multiplier=-1.0),
+    ],
 )
 
 # ==============================================================================
-# PART 5: Extract Full State at Optimum
+# PART 4: Run the *same* problem through two different backends
 # ==============================================================================
-# By passing the optimal 'x' back to the evaluator, we retrieve the full dictionary
-# of intermediate variables, constraints, and objective values.
-# Results automatically recovered from cache (no additional run).
-# Change log to DEBUG to see cache hit. 
-optimal_state = evaluator.evaluate(result.x)
-
-print("\nOptimization Success! Final State:")
-for key, value in optimal_state.items():
-    if isinstance(value, float):
-        print(f"  {key}: {value:.4f}")
-    else:
-        print(f"  {key}: {value}")
-
-# Optional - visualizing the workflow
-pipeline.visualize(inputs=["z1", "z2", "x1"],  # <-- if not provided, pipeline tries to infer it
-    output_path = str("sellar_mdao.svg"), # choose your format svg, pdf, png
-    orientation = "LR",
-    graph_type = "bipartite",
-    view = False)
+for backend_name in ("scipy", "openturns"):
+    result = optimize(problem, backend=backend_name)
+    print(f"[{backend_name:>9}] objective={result.objective_value:.4f}")
 ```
 
 </details>
 
 ## 🧠 Advanced Examples
 
-The Quick Start above just scratches the surface! If you want to see how SmartMDAO handles deeper nesting, custom optimization solvers, or more complex multidisciplinary systems, check out the **[scripts folder in our GitHub repository](https://github.com/wghami/SmartMDAO/tree/main/scripts)**.
+The Quick Start above just scratches the surface! Notably:
+
+- **[`readme_quick_start.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/readme_quick_start.py)** — the complete version of the Quick Start above, including SciPy's raw `minimize()` call, full state extraction, and pipeline visualization.
+- **[`optimizer_backends_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/optimizer_backends_demo.py)** — define one `OptimizationProblem` and run the exact same Sellar problem through `scipy`, `openturns`, and a custom registered backend, just by swapping a string.
+- **[`type_validation_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/type_validation_demo.py)** — static and runtime type validation, `Optional`/`Union` support, and writing a custom `TypeChecker`.
+
+For deeper nesting, custom convergence solvers, or more complex multidisciplinary systems, check out the **[scripts folder in our GitHub repository](https://github.com/wghami/SmartMDAO/tree/main/scripts)**.
 
 # 📦 Installation
 

@@ -3,7 +3,15 @@ from .models import Step
 from .solvers import Solver, DAGSolver, IterativeSolver, HybridSolver
 from .cache import cached, MemoryBackend, HistoryBackend, HDF5Backend, PickleDiskBackend
 from .logging_config import configure_logging
-from .optimization import PipelineEvaluator
+from .optimization import (
+    PipelineEvaluator,
+    ConstraintSpec,
+    OptimizationProblem,
+    OptimizationResult,
+    OptimizerBackend,
+    register_backend,
+    optimize,
+)
 from .validation import TypeChecker, StandardTypeChecker, TypeMismatchError
 
 # Expose the configuration helper so users can easily do:
@@ -23,6 +31,12 @@ __all__ = [
     "PickleDiskBackend",
     "configure_logging",
     "PipelineEvaluator",
+    "ConstraintSpec",
+    "OptimizationProblem",
+    "OptimizationResult",
+    "OptimizerBackend",
+    "register_backend",
+    "optimize",
     "TypeChecker",
     "StandardTypeChecker",
     "TypeMismatchError",
