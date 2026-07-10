@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict, deque
-from dataclasses import dataclass
-from typing import List, Dict, Any, Set, Protocol, Optional
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Set, Protocol, Optional, runtime_checkable
 
 from .models import Step
 from .executor import StepExecutor
@@ -15,6 +15,42 @@ class Solver(Protocol):
     """Interface for execution logic."""
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
         ...
+
+@runtime_checkable
+class ConvergenceChecker(Protocol):
+    """
+    Pluggable strategy deciding how "close" two successive values of a
+    coupling variable are, i.e. what a MDA solver's residual means.
+
+    Implement this to customize convergence for domain-specific types
+    (e.g. relative error, a norm over arrays) without touching the
+    core solvers.
+    """
+    def distance(self, previous: Any, current: Any) -> float:
+        """0.0 means "unchanged"; larger (up to inf) means "still moving"."""
+        ...
+
+class StandardConvergenceChecker:
+    """
+    Numeric values (int/float) converge on shrinking |Δ|, same as before.
+
+    Everything else - strings, dicts, dataclasses, sets, custom objects -
+    converges on structural equality: unchanged since the last iteration
+    is treated as "at rest" (distance 0.0), anything else as "still moving"
+    (distance inf). This lets IterativeSolver/HybridSolver detect a fixed
+    point on non-numeric coupling variables (e.g. an agent-authored MDA
+    negotiating a shared plan or a resolved set of dependencies), which
+    OpenMDAO/GEMSEO-style numeric-residual solvers can't express.
+    """
+    def distance(self, previous: Any, current: Any) -> float:
+        if isinstance(previous, (int, float)) and isinstance(current, (int, float)):
+            return abs(current - previous)
+        try:
+            return 0.0 if previous == current else float('inf')
+        except Exception:
+            # Values that can't be compared (e.g. raise on `==`) are
+            # treated as "still moving" - never falsely claim convergence.
+            return float('inf')
 
 class DAGSolver:
     """
@@ -65,6 +101,7 @@ class IterativeSolver:
     tolerance: float = 1e-6
     target_var: Optional[str] = None
     execution_order: Optional[List[str]] = None
+    convergence_checker: ConvergenceChecker = field(default_factory=StandardConvergenceChecker)
 
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
         memory = inputs.copy()
@@ -105,31 +142,22 @@ class IterativeSolver:
 
     def _calculate_residual(self, prev_state: Dict, current_memory: Dict, produced_vars: Set[str]) -> float:
         """
-        Calculates the maximum change in variables. 
+        Calculates the maximum change across produced variables, via
+        `self.convergence_checker` (numeric |Δ| by default, structural
+        equality for anything else).
         """
         if self.target_var:
             p = prev_state.get(self.target_var)
             c = current_memory.get(self.target_var)
-            return abs(c - p) if (isinstance(p, (int, float)) and isinstance(c, (int, float))) else float('inf')
+            return self.convergence_checker.distance(p, c)
 
-        max_diff = 0.0
-        numeric_vars_found = False
+        if not produced_vars:
+            return float('inf')
 
-        for k in produced_vars:
-            p = prev_state.get(k)
-            c = current_memory.get(k)
-            
-            # Strictly require both to be numeric
-            if isinstance(p, (int, float)) and isinstance(c, (int, float)):
-                diff = abs(c - p)
-                max_diff = max(max_diff, diff)
-                numeric_vars_found = True
-        
-        if numeric_vars_found:
-            return max_diff
-            
-        # If no numeric variables updated, we can't judge convergence numerically.
-        return float('inf')
+        return max(
+            self.convergence_checker.distance(prev_state.get(k), current_memory.get(k))
+            for k in produced_vars
+        )
 
     def _determine_execution_order(self, steps: List[Step]) -> List[Step]:
         if not self.execution_order:
@@ -144,9 +172,11 @@ class HybridSolver:
     Advanced solver that automatically decomposes the pipeline into 
     Linear (DAG) and Iterative (Cyclic) components (Strongly Connected Components).
     """
-    def __init__(self, max_iterations: int = 100, tolerance: float = 1e-6):
+    def __init__(self, max_iterations: int = 100, tolerance: float = 1e-6,
+                 convergence_checker: Optional[ConvergenceChecker] = None):
         self.max_iterations = max_iterations
         self.tolerance = tolerance
+        self.convergence_checker = convergence_checker or StandardConvergenceChecker()
 
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
         logger.info("HybridSolver started.")
@@ -209,7 +239,8 @@ class HybridSolver:
             logger.info(f"Cyclic Block Detected: {[s.name for s in group_sorted]}")
             sub_solver = IterativeSolver(
                 max_iterations=self.max_iterations,
-                tolerance=self.tolerance
+                tolerance=self.tolerance,
+                convergence_checker=self.convergence_checker
             )
 
             cycle_results = sub_solver.solve(group_sorted, memory, type_checker=type_checker)

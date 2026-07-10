@@ -1,6 +1,6 @@
 from .core import Pipeline
 from .models import Step
-from .solvers import Solver, DAGSolver, IterativeSolver, HybridSolver
+from .solvers import Solver, DAGSolver, IterativeSolver, HybridSolver, ConvergenceChecker, StandardConvergenceChecker
 from .cache import cached, MemoryBackend, HistoryBackend, HDF5Backend, PickleDiskBackend
 from .logging_config import configure_logging
 from .optimization import (
@@ -24,6 +24,8 @@ __all__ = [
     "DAGSolver",
     "IterativeSolver",
     "HybridSolver",
+    "ConvergenceChecker",
+    "StandardConvergenceChecker",
     "cached",
     "MemoryBackend",
     "HistoryBackend",
