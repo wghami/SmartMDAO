@@ -2,6 +2,7 @@
 
 ***Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization.***
 
+[![CI](https://github.com/wghami/SmartMDAO/actions/workflows/ci.yml/badge.svg)](https://github.com/wghami/SmartMDAO/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/smartmdao.svg)](https://pypi.org/project/smartmdao/)
 [![Python versions](https://img.shields.io/pypi/pyversions/smartmdao.svg)](https://pypi.org/project/smartmdao/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/wghami/SmartMDAO/blob/main/LICENSE)
@@ -41,10 +42,45 @@ pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
 # 🌟 Why SmartMDAO?
 
 - **Effortless MDA** — no DSL, just `@pipeline.step` and standard type hints. Works with plain types, dataclasses, or your own objects.
+- **Convergence Beyond Numbers** — coupling variables don't have to be floats. Dicts, sets, dataclasses, or any equatable type converge too: SmartMDAO falls back to structural equality when there's no numeric residual to drive to zero, so a feedback loop over a negotiated plan or a resolved dependency set converges exactly like a numeric MDA loop does. See it in action below.
 - **Built-in Caching** — layer `@cached` (RAM, HDF5, Pickle) onto expensive functions for instant speedups.
 - **Agnostic MDO** — define your `OptimizationProblem` once, then run it through any backend with a single string: `optimize(problem, backend="scipy")` or `backend="openturns"`. Bring your own via `@register_backend`, or drop straight to `PipelineEvaluator` for full control.
 - **Type-Safe** — static validation catches mismatched disciplines before a single step runs; opt-in runtime checks catch the rest.
 - **Built Also for Researchers** — solvers are plain `Protocol` classes, so custom MDA convergence algorithms drop in without touching the core framework.
+
+## 🔄 Convergence Beyond Numbers
+
+OpenMDAO and GEMSEO converge coupled disciplines by driving a *numeric* residual (`|Δ|` between
+successive floats) to zero. That assumption breaks the moment a discipline exchanges something
+that isn't a number — a resolved set of dependencies, a negotiated plan, a piece of state an AI
+agent is refining across a feedback loop. SmartMDAO's `StandardConvergenceChecker` falls back to
+structural equality for non-numeric values: "did this value change since the last iteration?" is
+a perfectly good convergence criterion when there's no derivative to speak of.
+
+```python
+from smartmdao import Pipeline, IterativeSolver
+
+pipeline = Pipeline(solver=IterativeSolver(max_iterations=10))
+
+depends_on = {
+    "billing": frozenset({"database", "auth"}),
+    "auth": frozenset({"database"}),
+}
+
+@pipeline.step(outputs=["enabled"])
+def resolve_dependencies(requested: frozenset, enabled: frozenset) -> frozenset:
+    expanded = set(enabled) | set(requested)
+    for feature in list(expanded):
+        expanded |= depends_on.get(feature, frozenset())
+    return frozenset(expanded)
+
+result = pipeline.run(requested=frozenset({"billing"}), enabled=frozenset())
+# result["enabled"] -> frozenset({"billing", "auth", "database"}) - converged in
+# 2 iterations, with not a single float anywhere in the coupling variable.
+```
+
+Bring your own equatable type — a `dict`, a `set`, a frozen `@dataclass` — and the same
+`IterativeSolver`/`HybridSolver` machinery converges it, no numeric tolerance required.
 
 <details>
 <summary><strong>⚡ Full Quick Start: Caching, Constraints & Optimization (click to expand)</strong></summary>
@@ -147,6 +183,7 @@ The Quick Start above just scratches the surface! Notably:
 - **[`readme_quick_start.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/readme_quick_start.py)** — the complete version of the Quick Start above, including SciPy's raw `minimize()` call, full state extraction, and pipeline visualization.
 - **[`optimizer_backends_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/optimizer_backends_demo.py)** — define one `OptimizationProblem` and run the exact same Sellar problem through `scipy`, `openturns`, and a custom registered backend, just by swapping a string.
 - **[`type_validation_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/type_validation_demo.py)** — static and runtime type validation, `Optional`/`Union` support, and writing a custom `TypeChecker`.
+- **[`non_numeric_convergence_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/non_numeric_convergence_demo.py)** — two full non-numeric convergence cases: a single-discipline dependency closure over a `frozenset`, and a two-discipline negotiation over a shared `Plan` dataclass with an auto-detected `HybridSolver` cycle.
 
 For deeper nesting, custom convergence solvers, or more complex multidisciplinary systems, check out the **[scripts folder in our GitHub repository](https://github.com/wghami/SmartMDAO/tree/main/scripts)**.
 

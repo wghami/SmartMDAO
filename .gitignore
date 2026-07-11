@@ -13,3 +13,7 @@ wheels/
 results/
 !results/.keep
 .ipynb_checkpoints/
+
+# Coverage cache (regenerated on every pytest run)
+.coverage
+htmlcov/
