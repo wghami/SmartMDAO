@@ -72,3 +72,51 @@ def test_render_closes_figure_to_avoid_leaks(tmp_path):
         viz = PipelineVisualizer([step], input_keys={"x"})
         viz.build().render(output_path=str(tmp_path / f"loop_{i}.pdf"), view=False)
     assert len(plt.get_fignums()) == before
+
+
+def test_render_before_build_raises():
+    step = Step(fn=lambda x: x)
+    viz = PipelineVisualizer([step], input_keys={"x"})
+    with pytest.raises(RuntimeError, match="Call build\\(\\) before render\\(\\)"):
+        viz.render()
+
+
+def test_render_with_output_path_and_view_shows_and_saves(tmp_path):
+    # Agg backend makes plt.show() a no-op, so this just exercises the
+    # view=True branch after a file save without popping a window.
+    step = Step(fn=lambda x: x)
+    out = tmp_path / "diagram.pdf"
+    viz = PipelineVisualizer([step], input_keys={"x"})
+    viz.build().render(output_path=str(out), view=True)
+    assert out.exists()
+
+
+def test_empty_pipeline_renders_placeholder_text(tmp_path):
+    viz = PipelineVisualizer([], input_keys=set())
+    viz.build().render(output_path=str(tmp_path / "empty.pdf"), view=False)
+    texts = [t.get_text() for t in viz.ax.texts]
+    assert "No steps in pipeline." in texts
+
+
+def test_self_loop_step_draws_offset_feedback_edges(tmp_path):
+    # A step that consumes and produces the same variable name creates a
+    # self-loop data cell, which must be drawn as two offset parallel edges
+    # instead of a single indistinguishable line.
+    def accumulate(total): return total
+
+    step = Step(fn=accumulate, manual_outputs=["total"])
+    viz = PipelineVisualizer([step], input_keys=set())
+    viz.build().render(output_path=str(tmp_path / "self_loop.pdf"), view=False)
+    texts = [t.get_text() for t in viz.ax.texts]
+    assert "total" in texts
+
+
+def test_long_step_name_shrinks_fontsize_to_fit_box():
+    def extremely_long_discipline_name_used_to_trigger_the_box_width_cap(x):
+        return x
+
+    step = Step(fn=extremely_long_discipline_name_used_to_trigger_the_box_width_cap)
+    viz = PipelineVisualizer([step], input_keys={"x"})
+    width, height, fontsize = viz._step_layout(step.name)
+    assert fontsize < PipelineVisualizer.STEP_FONTSIZE
+    assert fontsize >= PipelineVisualizer.STEP_MIN_FONTSIZE
