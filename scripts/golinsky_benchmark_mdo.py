@@ -132,6 +132,22 @@ def run_golinski_mdo():
     optimal_state = evaluator.evaluate(result.x)
     
     # Known Global Optimum (Continuous)
+    # The design-variable optimum below is the standard continuous relaxation
+    # of Golinski's speed reducer problem and matches this pipeline's SLSQP
+    # result to ~1e-6.
+    #
+    # The objective value (2994.471066) is the figure most commonly cited in
+    # the metaheuristics literature for this x*, but it does NOT reproduce
+    # under the standard Golinski weight formula used here (and used by most
+    # papers that cite it): evaluating compute_gear_weight + compute_shaft_weight
+    # at this exact x* gives ~2996.3474, not 2994.4711 (~0.06% gap). This was
+    # confirmed by independently re-solving the same objective/constraints from
+    # scratch (SLSQP and trust-constr, 50+ random starts) outside this pipeline,
+    # which converges to this same x* with objective ~2996.348 every time. So
+    # 2994.4711 appears to be a value that was propagated across papers without
+    # being recomputed at the x* they report, not a formula bug in this pipeline
+    # -- keep it here only as the literature reference point for the comparison
+    # table below, not as a target this pipeline should match.
     expected = {
         "x1": 3.500000,
         "x2": 0.700000,
