@@ -4,8 +4,10 @@ from collections import defaultdict, deque
 from typing import List, Set, Dict, Literal, Optional, Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
 from matplotlib.path import Path
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, PathPatch
+from matplotlib.textpath import TextPath
 
 from .models import Step
 from .graph import map_producers, build_dependency_graph, tarjan_scc
@@ -77,12 +79,31 @@ class PipelineVisualizer:
     STYLE_MISSING = {"facecolor": "#FFEBEE", "edgecolor": "#C62828", "linewidth": 2.0}
 
     STYLE_FORWARD_EDGE = {"color": "#616161", "linewidth": 1.2, "linestyle": "solid"}
-    STYLE_FEEDBACK_EDGE = {"color": "#D32F2F", "linewidth": 1.8, "linestyle": (0, (5, 3))}
+    STYLE_FEEDBACK_EDGE = {"color": "#D32F2F", "linewidth": 1.6, "linestyle": "solid"}
     STYLE_MISSING_EDGE = {"color": "#C62828", "linewidth": 1.2, "linestyle": (0, (1, 2))}
 
     GUTTER = 0.3
+    PAD = 0.3
     INPUT_COL = -1
     MISSING_COL = -2
+
+    # Two edges of a self-loop connect the exact same pair of points, so they'd
+    # otherwise draw as one indistinguishable line; this offsets them vertically
+    # so both directions are visible as parallel straight arrows.
+    SELF_LOOP_OFFSET = 0.07
+
+    # Inches-per-data-unit used both to size the figure (_compute_figsize) and to
+    # convert measured text extents (points) into data units (_text_width_units) -
+    # keeping both in the same ratio is what guarantees text fits inside its box.
+    INCHES_PER_UNIT = 1.15
+
+    STEP_FONTSIZE = 11.0
+    STEP_MIN_FONTSIZE = 7.5
+    STEP_BOX_PAD = 0.32
+    STEP_BOX_MAX_WIDTH = 1.9
+
+    DATA_FONTSIZE = 9.0
+    DATA_BOX_PAD = 0.32
 
     def __init__(
         self,
@@ -175,6 +196,13 @@ class PipelineVisualizer:
         _, _, finals, missing, producers = self._analyze_variables()
 
         self.fig, self.ax = plt.subplots()
+        # plt.subplots() reserves default margins around the axes (for tick
+        # labels etc.) even with axis('off') - without removing them, the axes
+        # only fills a fraction of the figure, so the actual inches-per-data-unit
+        # ratio ends up smaller than INCHES_PER_UNIT and text (sized against the
+        # intended ratio) overflows its box. Filling the figure exactly makes
+        # that assumption hold precisely.
+        self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.ax.set_aspect('equal')
         self.ax.axis('off')
 
@@ -189,10 +217,10 @@ class PipelineVisualizer:
         cells: Dict[str, dict] = {}
 
         for i, step in enumerate(self.steps):
-            w, h = self._step_box_size(step.name)
+            w, h, fontsize = self._step_layout(step.name)
             cells[f"step_{i}"] = dict(
                 col=i, row=i, w=w, h=h, shape="step", style=self.STYLE_STEP,
-                label=step.name, fontsize=self._step_fontsize(step.name), bold=True,
+                label=step.name, fontsize=fontsize, bold=True,
             )
 
         for i, step in enumerate(self.steps):
@@ -270,7 +298,14 @@ class PipelineVisualizer:
             cursor += row_height[row] + self.GUTTER
         total_height = cursor - self.GUTTER
 
-        self.fig.set_size_inches(*self._compute_figsize(total_width, total_height))
+        # Figure size and axis limits must scale by the exact same factor
+        # (INCHES_PER_UNIT) - any mismatch (e.g. a fractional ax.margins() call)
+        # changes the effective inches-per-data-unit ratio that box sizing in
+        # _step_layout/_label_size assumed, which is what caused text to overflow
+        # its box previously.
+        padded_width = total_width + 2 * self.PAD
+        padded_height = total_height + 2 * self.PAD
+        self.fig.set_size_inches(*self._compute_figsize(padded_width, padded_height))
 
         # ---- Pass 3: build patches at their placed positions (each keeps its own size) ----
         patches: Dict[str, object] = {}
@@ -305,13 +340,15 @@ class PipelineVisualizer:
             is_feedback = j >= i
             style = self.STYLE_FEEDBACK_EDGE if is_feedback else self.STYLE_FORWARD_EDGE
             data_key = f"data_{i}_{j}"
-            rad = 0.15 + 0.05 * abs(i - j) if is_feedback else 0.0
-            # A self-loop's two segments (step->cell, cell->step) share both endpoints,
-            # so bowing them the same way makes them nearly coincide; curve them in
-            # opposite directions instead so the loop is visually legible.
-            rad_out, rad_in = (rad, -rad) if i == j else (rad, rad)
-            self._add_edge(f"step_{j}", data_key, positions, patches, style, rad=rad_out)
-            self._add_edge(data_key, f"step_{i}", positions, patches, style, rad=rad_in)
+            if i == j:
+                # A self-loop's two segments (step->cell, cell->step) share both
+                # endpoints, so drawing them on the same line would make them
+                # indistinguishable - offset them vertically instead.
+                offset_out, offset_in = (0, self.SELF_LOOP_OFFSET), (0, -self.SELF_LOOP_OFFSET)
+            else:
+                offset_out = offset_in = (0.0, 0.0)
+            self._add_edge(f"step_{j}", data_key, positions, patches, style, offset=offset_out)
+            self._add_edge(data_key, f"step_{i}", positions, patches, style, offset=offset_in)
 
         # ---- Draw boxes on top, then labels ----
         for patch in patches.values():
@@ -324,7 +361,8 @@ class PipelineVisualizer:
                 fontsize=spec["fontsize"], fontweight='bold' if spec["bold"] else 'normal', zorder=5,
             )
 
-        self.ax.margins(0.1)
+        self.ax.set_xlim(-self.PAD, total_width + self.PAD)
+        self.ax.set_ylim(-total_height - self.PAD, self.PAD)
 
     def _data_style(self) -> Dict[str, str]:
         return {"facecolor": "#F5F5F5", "edgecolor": "#757575", "linewidth": 1.0}
@@ -332,29 +370,51 @@ class PipelineVisualizer:
     # --- Geometry helpers ---
 
     def _compute_figsize(self, total_width: float, total_height: float) -> Tuple[float, float]:
-        scale = 1.15
-        w = min(max(total_width * scale, 4.0), 26.0)
-        h = min(max(total_height * scale, 4.0), 26.0)
+        # Only a floor, no ceiling: capping the max would shrink the effective
+        # inches-per-data-unit ratio below INCHES_PER_UNIT for large pipelines,
+        # reintroducing the text/box scale mismatch this method exists to avoid.
+        # A floor is safe in the other direction (text only ends up relatively
+        # smaller, never overflowing).
+        w = max(total_width * self.INCHES_PER_UNIT, 4.0)
+        h = max(total_height * self.INCHES_PER_UNIT, 4.0)
         return w, h
+
+    def _text_width_units(self, text: str, fontsize: float, bold: bool) -> float:
+        # Measures the actual rendered glyph width (via TextPath, which needs no
+        # live renderer) instead of approximating from character count - the
+        # character-count approximation was the root cause of text overflowing
+        # its box for certain name lengths, since it didn't match real font metrics.
+        prop = FontProperties(weight='bold' if bold else 'normal')
+        width_pts = max(
+            (TextPath((0, 0), line, size=fontsize, prop=prop).get_extents().width
+             for line in text.split("\n")),
+            default=0.0,
+        )
+        return width_pts / 72.0 / self.INCHES_PER_UNIT
 
     def _label_size(self, label: str) -> Tuple[float, float]:
         lines = label.split("\n") if label else [""]
-        max_len = max((len(line) for line in lines), default=0)
-        width = min(0.9 + 0.055 * max_len, 2.6)
-        height = min(0.4 + 0.16 * (len(lines) - 1), 1.4)
+        width = self._text_width_units(label, self.DATA_FONTSIZE, bold=False) + self.DATA_BOX_PAD
+        line_height = self.DATA_FONTSIZE * 1.35 / 72.0 / self.INCHES_PER_UNIT
+        height = max(len(lines) * line_height + 0.15, 0.4)
         return width, height
 
-    def _step_box_size(self, name: str) -> Tuple[float, float]:
-        # Bold diagonal labels are wider per-character than data-cell labels,
-        # so the box has to grow faster with name length to keep text inside it,
-        # with extra margin so incoming arrowheads don't visually crowd the text.
-        width = min(0.75 + 0.085 * len(name), 1.6)
-        return width, 0.5
-
-    def _step_fontsize(self, name: str) -> float:
-        # Long step names shrink to keep fitting inside the capped box width
-        # from _step_box_size rather than spilling outside it.
-        return 11.0 if len(name) <= 12 else max(7.5, 11.0 - (len(name) - 12) * 0.35)
+    def _step_layout(self, name: str) -> Tuple[float, float, float]:
+        """Returns (box_width, box_height, fontsize) sized to fit `name` exactly."""
+        fontsize = self.STEP_FONTSIZE
+        text_w = self._text_width_units(name, fontsize, bold=True)
+        width = text_w + self.STEP_BOX_PAD
+        if width > self.STEP_BOX_MAX_WIDTH:
+            # Use the linear width/fontsize relationship to jump close to a
+            # fontsize that fits the cap, then re-measure at that exact fontsize
+            # rather than trusting the linear estimate - font metrics aren't
+            # perfectly linear with point size (hinting/rounding), so the box is
+            # always sized to the real measured text, never an assumption.
+            target_text_w = self.STEP_BOX_MAX_WIDTH - self.STEP_BOX_PAD
+            fontsize = max(self.STEP_MIN_FONTSIZE, fontsize * target_text_w / text_w)
+            text_w = self._text_width_units(name, fontsize, bold=True)
+            width = text_w + self.STEP_BOX_PAD
+        return width, 0.5, fontsize
 
     def _make_rect(self, cx: float, cy: float, w: float, h: float, style: Dict[str, str]) -> PathPatch:
         verts = [
@@ -389,14 +449,18 @@ class PipelineVisualizer:
         positions: Dict[str, Tuple[float, float]],
         patches: Dict[str, object],
         style: Dict[str, str],
-        rad: float = 0.0,
+        offset: Tuple[float, float] = (0.0, 0.0),
     ):
+        pos_a = positions[key_a]
+        pos_b = positions[key_b]
+        if offset != (0.0, 0.0):
+            pos_a = (pos_a[0] + offset[0], pos_a[1] + offset[1])
+            pos_b = (pos_b[0] + offset[0], pos_b[1] + offset[1])
         arrow = FancyArrowPatch(
-            posA=positions[key_a], posB=positions[key_b],
+            posA=pos_a, posB=pos_b,
             patchA=patches[key_a], patchB=patches[key_b],
             shrinkA=4, shrinkB=4,
             arrowstyle='-|>', mutation_scale=12,
-            connectionstyle=f"arc3,rad={rad}",
             zorder=1,
             **style,
         )
