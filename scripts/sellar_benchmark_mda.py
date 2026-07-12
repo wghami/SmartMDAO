@@ -76,7 +76,7 @@ def run_sellar_benchmark():
     logger.info(f"Constraint 1 = {results['constraint_1']:.4f} (Expected: <= 0)")
     logger.info(f"Constraint 2 = {results['constraint_2']:.4f} (Expected: <= 0)")
     
-    # Optional: Generate your Graphviz diagram!
+    # Optional: Generate your XDSM diagram!
     pipeline.visualize(inputs=list(inputs.keys()),
                        output_path="results/sellar_mda",
                        orientation="LR",

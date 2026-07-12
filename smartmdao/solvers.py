@@ -5,7 +5,11 @@ from typing import List, Dict, Any, Set, Protocol, Optional, runtime_checkable
 
 from .models import Step
 from .executor import StepExecutor
-from .graph import map_producers as _map_producers, build_dependency_graph as _build_dependency_graph
+from .graph import (
+    map_producers as _map_producers,
+    build_dependency_graph as _build_dependency_graph,
+    tarjan_scc as _tarjan_scc,
+)
 from .validation import TypeChecker
 
 # Initialize module-level logger
@@ -187,7 +191,7 @@ class HybridSolver:
         adj_list, _ = _build_dependency_graph(steps, input_keys, producers_map)
 
         # 2. Find Strongly Connected Components (SCCs)
-        sccs = self._tarjan_scc(steps, adj_list)
+        sccs = _tarjan_scc(steps, adj_list)
         logger.debug(f"Detected {len(sccs)} execution blocks (SCCs).")
         
         # 3. Build Condensation Graph (DAG of SCCs)
@@ -247,42 +251,3 @@ class HybridSolver:
             memory.update(cycle_results)
 
         return memory
-
-    def _tarjan_scc(self, steps: List[Step], adj_list: Dict[Step, List[Step]]) -> List[List[Step]]:
-        index = 0
-        indices = {}
-        lowlinks = {}
-        stack = []
-        on_stack = set()
-        sccs = []
-
-        def strongconnect(v):
-            nonlocal index
-            indices[v] = index
-            lowlinks[v] = index
-            index += 1
-            stack.append(v)
-            on_stack.add(v)
-
-            for w in adj_list[v]:
-                if w not in indices:
-                    strongconnect(w)
-                    lowlinks[v] = min(lowlinks[v], lowlinks[w])
-                elif w in on_stack:
-                    lowlinks[v] = min(lowlinks[v], indices[w])
-
-            if lowlinks[v] == indices[v]:
-                new_scc = []
-                while True:
-                    w = stack.pop()
-                    on_stack.remove(w)
-                    new_scc.append(w)
-                    if w == v:
-                        break
-                sccs.append(new_scc)
-
-        for step in steps:
-            if step not in indices:
-                strongconnect(step)
-
-        return sccs

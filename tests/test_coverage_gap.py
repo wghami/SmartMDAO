@@ -111,55 +111,32 @@ def test_visualization_no_extension(tmp_path):
     viz = PipelineVisualizer([step], input_keys={"x"})
     viz.build().render(output_path=str(tmp_path / "graph_no_ext"), view=False)
 
-def test_visualization_graphviz_missing(monkeypatch):
-    # Simulates what happens if graphviz isn't installed (hits visualization.py top level exception)
-    import sys
-    import importlib
-    import smartmdao.visualization as viz
-    
-    # Hide graphviz
-    monkeypatch.setitem(sys.modules, "graphviz", None)
-    
-    # Reload the module to trigger the ImportError except block at the top
-    importlib.reload(viz)
-    assert viz.graphviz is None
-    
-    with pytest.raises(ImportError, match="library is required"):
-        viz.PipelineVisualizer([], set())
-        
-    # Restore for other tests
-    monkeypatch.undo()
-    importlib.reload(viz)
-
 def test_visualization_render_exception(monkeypatch, tmp_path):
     # Hits the exception fallback in PipelineVisualizer.render
     from smartmdao.visualization import PipelineVisualizer
     step = Step(fn=lambda x: x)
     viz = PipelineVisualizer([step], input_keys={"x"})
     viz.build()
-    
-    def mock_render(*args, **kwargs):
-        raise RuntimeError("Mock Viewer Failed")
-        
-    monkeypatch.setattr(viz.dot, "render", mock_render)
-    monkeypatch.setattr(viz.dot, "view", mock_render)
-    
-    # Trigger exception without output_path
-    viz.render()
-    
-    # Trigger exception with output_path
+
+    def mock_savefig(*args, **kwargs):
+        raise RuntimeError("Mock Save Failed")
+
+    monkeypatch.setattr(viz.fig, "savefig", mock_savefig)
+
+    # Trigger exception with output_path (savefig path)
     viz.render(output_path=str(tmp_path / "fail.pdf"))
 
 def test_visualization_render_view_success(monkeypatch):
-    # Hits visualization.py line 126 (successful viewer opening log)
+    # Hits the successful "displayed" log path in PipelineVisualizer.render
     from smartmdao.visualization import PipelineVisualizer
+    import matplotlib.pyplot as plt
     step = Step(fn=lambda x: x)
     viz = PipelineVisualizer([step], input_keys={"x"})
     viz.build()
-    
-    # Mock view to prevent actually opening a PDF viewer during tests
-    monkeypatch.setattr(viz.dot, "view", lambda cleanup: None)
-    
+
+    # Mock show to avoid popping a window during tests
+    monkeypatch.setattr(plt, "show", lambda: None)
+
     # Trigger the successful path without an output_path
     viz.render()
 

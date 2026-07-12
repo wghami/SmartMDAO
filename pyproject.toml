@@ -12,7 +12,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "graphviz>=0.21",
     "h5py>=3.15.1",
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.7",
@@ -23,7 +22,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "graphviz>=0.21",
     "h5py>=3.15.1",
     "pytest>=9.0.1",
     "pytest-cov>=7.1.0",

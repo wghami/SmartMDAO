@@ -78,7 +78,7 @@ class Pipeline:
                   graph_type: Literal["flow", "bipartite"] = "flow",
                   view: bool = True):
         """
-        Generates a Graphviz diagram of the pipeline.
+        Generates an XDSM diagram of the pipeline.
         """
         input_set = set(inputs or [])
         logger.debug(f"Generating visualization ({graph_type}) for pipeline.")

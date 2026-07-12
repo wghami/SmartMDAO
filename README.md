@@ -10,7 +10,7 @@
 **SmartMDAO** is a lightweight, purely Pythonic framework for Multidisciplinary Design Analysis and Optimization (MDAO). Define your disciplines as plain Python functions, and SmartMDAO maps the dependency graph, converges cyclic feedback loops, caches expensive calls, and bridges straight into your optimizer of choice.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/b59c0cd3c36c67cb23538a2e4c8f04e71bbe6f27/assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
+  <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/main/assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
 </p>
 
 ## 🔍 See It In Action
@@ -203,28 +203,7 @@ Using `pip`:
 pip install smartmdao
 ```
 
-*(Note: Visualization features require the graphviz system binary to be installed on your OS).*
-
-### Installing Graphviz (Optional System Requirement)
-
-While `smartmdao` works perfectly on its own, generating pipeline diagrams requires the `graphviz` system binary to be installed on your OS.
-
-**macOS (Homebrew):**
-```bash
-brew install graphviz
-```
-
-**Linux (Ubuntu/Debian):**
-``` bash
-sudo apt-get install graphviz
-```
-
-**Windows (winget):**
-``` bash
-winget install graphviz
-```
-
-*(Alternatively, you can download the Windows installer directly from the [official Graphviz website](https://graphviz.org/download/))*
+*(Visualization is built in via matplotlib — no extra system packages required.)*
 
 # 🤝 Contributing & License
 

@@ -4,6 +4,47 @@ from typing import List, Dict, Set
 from .models import Step
 
 
+def tarjan_scc(steps: List[Step], adj_list: Dict[Step, List[Step]]) -> List[List[Step]]:
+    """Groups steps into strongly connected components (Tarjan's algorithm)."""
+    index = 0
+    indices = {}
+    lowlinks = {}
+    stack = []
+    on_stack = set()
+    sccs = []
+
+    def strongconnect(v):
+        nonlocal index
+        indices[v] = index
+        lowlinks[v] = index
+        index += 1
+        stack.append(v)
+        on_stack.add(v)
+
+        for w in adj_list[v]:
+            if w not in indices:
+                strongconnect(w)
+                lowlinks[v] = min(lowlinks[v], lowlinks[w])
+            elif w in on_stack:
+                lowlinks[v] = min(lowlinks[v], indices[w])
+
+        if lowlinks[v] == indices[v]:
+            new_scc = []
+            while True:
+                w = stack.pop()
+                on_stack.remove(w)
+                new_scc.append(w)
+                if w == v:
+                    break
+            sccs.append(new_scc)
+
+    for step in steps:
+        if step not in indices:
+            strongconnect(step)
+
+    return sccs
+
+
 def map_producers(steps: List[Step]) -> Dict[str, Step]:
     """Maps each variable name to the step that produces it."""
     mapping = {}

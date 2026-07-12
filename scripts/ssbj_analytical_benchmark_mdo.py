@@ -161,7 +161,7 @@ def run_ssbj_mdo():
     print(f"Weight Constraint limit (<=0) = {optimal_state['range_constraint']:>8.4f}")
     
     # Optional: Prove the topology extraction works!
-    print("\nGenerating graphviz output (ssbj_topology.pdf) to prove cycle detection...")
+    print("\nGenerating XDSM diagram (ssbj_topology.pdf) to prove cycle detection...")
     pipeline.visualize(
         inputs=design_vars, 
         output_path="results/ssbj_topology", 

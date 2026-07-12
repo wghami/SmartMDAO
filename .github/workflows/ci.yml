@@ -13,11 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # test_pipeline_visualization actually shells out to `dot` to render
-      # real PDFs - not preinstalled on the ubuntu-latest runner image.
-      - name: Install graphviz system binary
-        run: sudo apt-get update && sudo apt-get install -y graphviz
-
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
@@ -30,4 +25,6 @@ jobs:
         run: uv sync
 
       - name: Run tests
+        env:
+          MPLBACKEND: Agg
         run: uv run pytest tests/
