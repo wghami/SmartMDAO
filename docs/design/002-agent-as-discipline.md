@@ -196,7 +196,7 @@ state out through the exception system.
 Cost of the workaround: the run raises instead of returning, so `memory['residual_history']` is
 lost. The error carries the cycle, which is the more useful artifact, but the trace is gone.
 
-### Oscillation detection is incompatible with `HybridSolver`
+### Oscillation detection is incompatible with `HybridSolver` — *fixed in 1.8.0*
 
 A stateful checker needs `distance()` called once per iteration. That only happens with
 `IterativeSolver(target_var=...)`; otherwise the residual is a `max()` across every produced
@@ -213,9 +213,19 @@ This undercuts one of the four advantages claimed above. "Only the cycle iterate
 of `HybridSolver` in general, but a pipeline that needs oscillation detection cannot currently
 have both.
 
-**Resolved in practice, not in code.** See [Topologies](#topologies-where-the-model-sits) below:
-moving the model out of the cycle avoids the conflict entirely and is the better default anyway.
-The incompatibility remains real for topology A.
+**Resolved twice over.** First in practice: see [Topologies](#topologies-where-the-model-sits)
+below — moving the model out of the cycle avoids the conflict entirely and is the better default
+anyway. Then in code, in **1.8.0**: `HybridSolver(target_var=...)` forwards to the cyclic block
+producing that variable, so topology A can now have both automatic cycle detection and oscillation
+detection. `scripts/hybrid_target_var_demo.py` demonstrates it.
+
+The fix carries a guard worth knowing about. A target is only given to the block that *produces*
+it, because handing it to another block makes the residual `distance(None, None)` — which is
+`0.0`, i.e. *converged*, on the first sweep, without iterating. The fix for one silent failure
+mode had to avoid introducing a worse one.
+
+Topology B+D remains the recommended default on cost grounds; this removes the correctness
+argument against topology A, not the economic one.
 
 ### Step registration order is load-bearing, and failing it is silent
 

@@ -43,27 +43,30 @@ graph — it is specific to hand-ordered `IterativeSolver` use.
 
 ---
 
-## 🟡 Oscillation detection cannot be combined with `HybridSolver`
+## ✅ RESOLVED in 1.8.0 — oscillation detection could not be combined with `HybridSolver`
 
 `OscillationAwareConvergenceChecker` is stateful and needs `distance()` called exactly once per
-iteration. That only holds when `IterativeSolver(target_var=...)` is set; otherwise the residual is
-a `max()` across every produced variable ([solvers.py:161](../smartmdao/solvers.py:161)), iterating
-a `set` in arbitrary order, and one history cannot separate those interleaved calls.
+iteration. That only holds when a `target_var` is set; otherwise the residual is a `max()` across
+every produced variable ([solvers.py:161](../smartmdao/solvers.py:161)), iterating a `set` in
+arbitrary order, and one history cannot separate those interleaved calls.
 
-`HybridSolver` builds its sub-solvers without forwarding `target_var`
-([solvers.py:244](../smartmdao/solvers.py:244)), so a pipeline cannot currently have both
-automatic cycle detection and oscillation detection. See
-[002-agent-as-discipline.md](design/002-agent-as-discipline.md).
+`HybridSolver` used to build its sub-solvers without forwarding `target_var`, so a pipeline could
+have automatic cycle detection *or* oscillation detection, never both.
 
-*Severity downgraded* from blocking: there is a clean way around it. Keeping the model on the
-*linear* part of the pipeline and driving feedback from an outer Python loop avoids `target_var`
-altogether, works with `HybridSolver`'s automatic cycle detection, and costs one model call per
-outer iteration instead of one per sweep. See the Topologies section of
-[002-agent-as-discipline.md](design/002-agent-as-discipline.md); Case 4 of the demo runs it.
+**Fixed:** `HybridSolver(target_var=...)` now forwards to the cyclic block that produces that
+variable. `scripts/hybrid_target_var_demo.py` shows the same pipeline burning all 30 sweeps without
+a target and being caught at sweep 4 with one.
 
-*Fix direction:* let `HybridSolver` accept and forward `target_var`, or give the checker the
-variable name. The latter means widening the `ConvergenceChecker` protocol, which is a bigger
-change than it first appears.
+**The guard matters more than the feature.** A target is only ever given to the block that
+*produces* it. Handing it to any other block would be silently catastrophic: that block's snapshot
+has no entry for the name, so the residual becomes `distance(None, None)` — which is `0.0`, i.e.
+*converged*. The block would report success on its first sweep without iterating at all. A target
+matching no cyclic block is ignored, with a warning.
+
+`validate()` now reports two related mistakes statically: `checker-needs-target-var` (a custom
+checker with no target) and `target-var-not-produced`. Deliberately *not* reported: `HybridSolver`
+with the standard checker and no target — that is the idiomatic default and flagging it would fire
+on almost every correct pipeline.
 
 ---
 
@@ -101,18 +104,19 @@ Breaking change to a public `Protocol`; deferred.
 
 ---
 
-## 🟡 `ipykernel` is a hard runtime dependency
+## ✅ RESOLVED in 1.7.0 / 1.8.0 — heavy runtime dependencies
 
-[pyproject.toml](../pyproject.toml) lists `ipykernel` in `dependencies`. A library has no business
-pulling a Jupyter kernel into every install, and **nothing in `smartmdao/` imports it** — so it is
-pure install weight.
+The base install used to pull `openturns` (needed by exactly one optimizer backend) and
+`ipykernel` (needed by nothing at all).
 
-*Half fixed in 1.7.0:* `openturns` moved behind an `[openturns]` extra, which was the larger of
-the two. `ipykernel` was deliberately left alone: removing a dependency is a breaking change for
-anyone relying on the transitive install, and that is the maintainer's call, not a tidy-up.
+- **1.7.0** moved `openturns` behind an `[openturns]` extra.
+- **1.8.0** moved `ipykernel` to the `dev` group. Investigation found the only reference to it
+  anywhere in the repository was the `pyproject.toml` line itself, added in the first commit — and
+  it pulled **14 packages**, including a debugger, a Jupyter kernel, ZeroMQ and Tornado.
 
-*Fix direction:* move it to the `dev` group. Nothing imports it, so the only risk is to someone
-who was getting Jupyter for free.
+Both are breaking for anyone who relied on the transitive install, hence the version bumps.
+`OpenTURNSBackend` still registers without OpenTURNS present and raises an actionable `ImportError`
+at the call rather than at import.
 
 ---
 

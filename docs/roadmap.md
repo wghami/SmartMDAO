@@ -4,7 +4,7 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0, 1 and 2 complete and merged to `main`. Phase 3 not started.
-**Baseline:** `v1.7.0` — 227 tests, 100% coverage.
+**Baseline:** `v1.8.0` — 239 tests, 100% coverage, 22/22 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -122,9 +122,9 @@ behind HTTP is not.
 
 Recorded so they are not lost, with no commitment.
 
-- **Move `ipykernel` to the dev group.** Nothing imports it, so it is pure install weight — but
-  removing a dependency is a breaking change and the maintainer's call.
-  (`openturns` was moved behind an extra in 1.7.0; see [known-issues.md](known-issues.md).)
+*(The dependency diet is done: `openturns` behind an extra in 1.7.0, `ipykernel` to `dev` in
+1.8.0. `HybridSolver` forwarding `target_var` landed in 1.8.0. See
+[known-issues.md](known-issues.md).)*
 - **OpenMDAO / GEMSEO importer.** Translate competitor definitions into SmartMDAO. An adoption
   lever rather than a capability.
 - **MCP sampling integration.** The Phase 1 stub replaced by a real call back into the client's

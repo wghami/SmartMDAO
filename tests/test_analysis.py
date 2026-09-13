@@ -285,6 +285,73 @@ def test_iterative_solver_on_a_cycle_without_target_var_is_informational():
     assert "target_var" in info.message
 
 
+def test_custom_checker_without_a_target_is_a_warning():
+    from smartmdao import OscillationAwareConvergenceChecker
+
+    pipeline = sellar_pipeline(
+        solver=HybridSolver(convergence_checker=OscillationAwareConvergenceChecker())
+    )
+    findings = validate(pipeline, inputs=["z1", "x1", "y2"])
+
+    warning = next(f for f in findings if f.code == "checker-needs-target-var")
+    assert warning.severity == WARNING
+    assert "OscillationAwareConvergenceChecker" in warning.message
+
+
+def test_custom_checker_with_a_target_is_fine():
+    from smartmdao import OscillationAwareConvergenceChecker
+
+    pipeline = sellar_pipeline(
+        solver=HybridSolver(
+            target_var="y1",
+            convergence_checker=OscillationAwareConvergenceChecker(),
+        )
+    )
+    assert validate(pipeline, inputs=["z1", "x1", "y2"]) == ()
+
+
+def test_the_standard_checker_without_a_target_is_not_flagged():
+    """HybridSolver with defaults is idiomatic; warning on it would be noise."""
+    findings = validate(sellar_pipeline(solver=HybridSolver()), inputs=["z1", "x1", "y2"])
+    assert "checker-needs-target-var" not in codes(findings)
+    assert "no-target-var" not in codes(findings)
+
+
+def test_hybrid_target_var_outside_every_cycle_is_flagged():
+    pipeline = sellar_pipeline(solver=HybridSolver(target_var="objective"))
+    findings = validate(pipeline, inputs=["z1", "x1", "y2"])
+
+    warning = next(f for f in findings if f.code == "target-var-not-produced")
+    assert warning.severity == WARNING
+    assert warning.variable == "objective"
+    assert "any cyclic block" in warning.message
+    assert "first sweep without iterating" in warning.message
+
+
+def test_hybrid_target_var_inside_a_cycle_is_accepted():
+    pipeline = sellar_pipeline(solver=HybridSolver(target_var="y1"))
+    assert "target-var-not-produced" not in codes(
+        validate(pipeline, inputs=["z1", "x1", "y2"])
+    )
+
+
+def test_iterative_target_var_that_nothing_produces_is_flagged():
+    pipeline = sellar_pipeline(solver=IterativeSolver(target_var="ghost"))
+    findings = validate(pipeline, inputs=["z1", "x1", "y2"])
+
+    warning = next(f for f in findings if f.code == "target-var-not-produced")
+    assert warning.variable == "ghost"
+    assert "any step" in warning.message
+
+
+def test_iterative_target_var_may_be_any_produced_variable():
+    """IterativeSolver sweeps everything as one block, so scope is wider."""
+    pipeline = sellar_pipeline(solver=IterativeSolver(target_var="objective"))
+    assert "target-var-not-produced" not in codes(
+        validate(pipeline, inputs=["z1", "x1", "y2"])
+    )
+
+
 def test_target_var_suppresses_the_informational_finding():
     pipeline = sellar_pipeline(solver=IterativeSolver(target_var="y1"))
     assert "no-target-var" not in codes(validate(pipeline, inputs=["z1", "x1", "y2"]))

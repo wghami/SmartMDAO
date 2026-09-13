@@ -1,6 +1,6 @@
 [project]
 name = "SmartMDAO"
-version = "1.7.0"
+version = "1.8.0"
 description = "Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,6 @@ classifiers = [
 ]
 dependencies = [
     "h5py>=3.15.1",
-    "ipykernel>=7.1.0",
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
     "scipy>=1.17.1",
@@ -46,6 +45,10 @@ dev = [
     # is reachable. Neither is in the base install.
     "mcp>=2.2.0",
     "openturns>=1.27",
+    # Notebook kernel for local experimentation. Nothing in smartmdao/ imports
+    # it; it was a runtime dependency until 1.8.0, which meant every install
+    # dragged in 14 packages (a debugger, a Jupyter kernel, ZeroMQ, Tornado).
+    "ipykernel>=7.1.0",
 ]
 
 [build-system]

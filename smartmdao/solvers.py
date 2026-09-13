@@ -288,14 +288,26 @@ class IterativeSolver:
 
 class HybridSolver:
     """
-    Advanced solver that automatically decomposes the pipeline into 
+    Advanced solver that automatically decomposes the pipeline into
     Linear (DAG) and Iterative (Cyclic) components (Strongly Connected Components).
+
+    `target_var` narrows convergence to a single coupling variable, the same way
+    `IterativeSolver.target_var` does, and is forwarded to the cyclic block that
+    produces it. Two reasons to set it:
+
+      - one noisy variable in a block otherwise holds the whole system back,
+        since the default residual is a max() across every produced variable;
+      - a stateful `ConvergenceChecker` (e.g. `OscillationAwareConvergenceChecker`)
+        needs `distance()` called exactly once per iteration, which only happens
+        when a target is set.
     """
     def __init__(self, max_iterations: int = 100, tolerance: float = 1e-6,
-                 convergence_checker: Optional[ConvergenceChecker] = None):
+                 convergence_checker: Optional[ConvergenceChecker] = None,
+                 target_var: Optional[str] = None):
         self.max_iterations = max_iterations
         self.tolerance = tolerance
         self.convergence_checker = convergence_checker or StandardConvergenceChecker()
+        self.target_var = target_var
 
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
         logger.info("HybridSolver started.")
@@ -306,6 +318,7 @@ class HybridSolver:
         logger.debug(f"Detected {len(execution_plan)} execution blocks.")
 
         memory = inputs.copy()
+        target_applied = False
 
         for block in execution_plan:
             # Case A: Linear
@@ -316,14 +329,35 @@ class HybridSolver:
             # Case B: Cyclic - already ordered deterministically by the planner.
             group_sorted = list(block.steps)
 
+            # Only the block that actually produces `target_var` may receive it.
+            # Handing it to any other block would be silently catastrophic: the
+            # block's own snapshot has no entry for it, so the residual becomes
+            # distance(None, ...) - which is 0.0 when nothing else produced it
+            # either, and the block would "converge" on its first sweep without
+            # having iterated at all.
+            block_outputs = {
+                name for step in group_sorted for name in step.resolve_output_names()
+            }
+            block_target = self.target_var if self.target_var in block_outputs else None
+            if block_target is not None:
+                target_applied = True
+
             logger.info(f"Cyclic Block Detected: {[s.name for s in group_sorted]}")
             sub_solver = IterativeSolver(
                 max_iterations=self.max_iterations,
                 tolerance=self.tolerance,
-                convergence_checker=self.convergence_checker
+                convergence_checker=self.convergence_checker,
+                target_var=block_target,
             )
 
             cycle_results = sub_solver.solve(group_sorted, memory, type_checker=type_checker)
             memory.update(cycle_results)
+
+        if self.target_var is not None and not target_applied:
+            logger.warning(
+                f"target_var={self.target_var!r} was never applied: no cyclic block "
+                f"produces it. Every block converged on the default max() across "
+                f"all of its produced variables instead."
+            )
 
         return memory

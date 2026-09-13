@@ -158,6 +158,12 @@ So only genuinely cyclic blocks iterate. Steps downstream of a feedback loop are
 after it has converged. Within a cyclic block, steps are sorted alphabetically by name to keep
 execution order deterministic.
 
+`target_var` is forwarded to the cyclic block that **produces** that variable, and to no other.
+This scoping is not a nicety: a block that does not produce the name has no entry for it in its
+own snapshot, so the residual becomes `distance(None, None)` — which is `0.0`, meaning *converged*.
+The block would report success on its first sweep having never iterated. A target matching no
+cyclic block is ignored with a warning.
+
 ---
 
 ## `StepExecutor`

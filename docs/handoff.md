@@ -3,8 +3,8 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.7.0:** `main` is clean. 227 tests, 100% coverage, 21/21 scripts passing.
-Roadmap Phases 0–2 are merged; Phase 3 has not started.
+**State as of v1.8.0:** `main` is clean. 239 tests, 100% coverage, 22/22 scripts passing.
+Roadmap Phases 0–2 are merged; Phase 3 has not started and is **blocked on a decision** (below).
 
 ---
 
@@ -81,8 +81,8 @@ fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_m
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 227 tests, 100% coverage
-uv run python run_all.py             # 21 scripts
+uv run pytest                        # 239 tests, 100% coverage
+uv run python run_all.py             # 22 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -131,6 +131,9 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
   deep inside the solve.
 - **Duplicate output names overwrite silently.** The earlier step still runs; its result is
   unreachable.
+- **`distance(None, None)` is `0.0`, which means *converged*.** Any code path that can compare a
+  variable a block does not produce will report convergence on the first sweep without iterating.
+  This is why `HybridSolver` scopes `target_var` to the block producing it.
 - **`@cached` functions are keyword-only.** Invisible inside a pipeline, surprising outside one.
 - **A step returning `None` stores nothing**, leaving the previous value in place — which a
   convergence checker reads as *converged*. A discipline must be total.
@@ -141,18 +144,22 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 
 Not bugs — judgement calls left deliberately to the maintainer.
 
-1. **`ipykernel` in runtime dependencies.** Nothing imports it. Pure install weight. Removing it
-   is a breaking change for anyone relying on the transitive install.
-2. **Phase 3's execution model.** Running a pipeline means executing arbitrary user code.
+1. **Phase 3's execution model.** Running a pipeline means executing arbitrary user code.
    [001](design/001-mcp-connector.md) commits to subprocess + mandatory timeout, and to never
    shipping a remote transport without real sandboxing. **This needs explicit sign-off before
    anyone builds it.**
-3. **Widening the `ConvergenceChecker` protocol.** It has no way to report "this will never
+2. **Widening the `ConvergenceChecker` protocol.** It has no way to report "this will never
    converge"; `OscillationAwareConvergenceChecker` raises from inside `distance()` as a
    workaround, which costs the `residual_history`. A proper verdict type is a breaking change to
    a public `Protocol`.
-4. **`HybridSolver` does not forward `target_var`**, so automatic cycle detection and oscillation
-   detection cannot currently be combined.
+
+### Settled
+
+- ~~`ipykernel` in runtime dependencies~~ — moved to `dev` in **1.8.0**. It pulled 14 packages and
+  nothing imported it.
+- ~~`openturns` in runtime dependencies~~ — moved behind an `[openturns]` extra in **1.7.0**.
+- ~~`HybridSolver` does not forward `target_var`~~ — fixed in **1.8.0**, scoped to the cyclic block
+  that produces the variable.
 
 ---
 
