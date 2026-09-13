@@ -1,5 +1,5 @@
 import logging
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Set, Protocol, Optional, runtime_checkable
 
@@ -8,7 +8,7 @@ from .executor import StepExecutor
 from .graph import (
     map_producers as _map_producers,
     build_dependency_graph as _build_dependency_graph,
-    tarjan_scc as _tarjan_scc,
+    build_execution_plan as _build_execution_plan,
 )
 from .validation import TypeChecker
 
@@ -56,9 +56,124 @@ class StandardConvergenceChecker:
             # treated as "still moving" - never falsely claim convergence.
             return float('inf')
 
+class OscillationDetectedError(RuntimeError):
+    """
+    Raised when a coupling variable is cycling between repeating values
+    instead of settling, so the run can be abandoned rather than burning
+    the remaining iterations on a fixed point that will never arrive.
+
+    Carries the detected `period` and the `cycle` of values themselves,
+    because "which two answers is it flip-flopping between?" is the
+    actionable part.
+    """
+    def __init__(self, period: int, cycle: List[Any], iteration: int):
+        self.period = period
+        self.cycle = cycle
+        self.iteration = iteration
+        super().__init__(
+            f"Coupling variable is oscillating with period {period} "
+            f"(detected at iteration {iteration}); it cycles between: {cycle!r}. "
+            f"This will never satisfy the convergence tolerance."
+        )
+
+
+@dataclass
+class OscillationAwareConvergenceChecker:
+    """
+    Wraps another ConvergenceChecker and additionally notices when a value
+    is *cycling* rather than settling - A -> B -> A -> B forever.
+
+    `StandardConvergenceChecker` reports non-numeric distance as a binary
+    0.0-or-inf, so a 2-cycle is indistinguishable from steady progress: both
+    look like inf every sweep. The loop therefore runs to `max_iterations`.
+    That is merely slow for cheap numeric disciplines and genuinely expensive
+    when a step costs an LLM call, which is the case this exists for
+    (see docs/design/002-agent-as-discipline.md).
+
+    IMPORTANT - use with `IterativeSolver(target_var=...)`.
+    `_calculate_residual` calls `distance()` once per *produced variable* when
+    no target is set, iterating a `set` whose order is arbitrary. This checker
+    keeps a single history and cannot tell those interleaved calls apart, so
+    without `target_var` its history is meaningless. With a target it is called
+    exactly once per iteration, which is the contract it needs.
+
+    Detection requires two full repetitions of a block, so a period-p cycle is
+    reported after 2p sweeps. Period 1 is not a cycle - it is convergence, and
+    the inner checker already reports it as 0.0.
+    """
+    inner: ConvergenceChecker = field(default_factory=StandardConvergenceChecker)
+    max_period: int = 4
+    raise_on_detection: bool = True
+
+    history: List[Any] = field(default_factory=list, init=False, repr=False)
+    detected_period: Optional[int] = field(default=None, init=False)
+    detected_cycle: Optional[List[Any]] = field(default=None, init=False)
+
+    def reset(self) -> None:
+        """
+        Clears accumulated history.
+
+        Call this between runs. The instance is stateful and nothing in the
+        solvers resets it: `HybridSolver` reuses one checker across every
+        cyclic block, and a `Pipeline` reuses its solver across every
+        `run()`. History is cleared automatically on convergence, but a block
+        that exhausts `max_iterations` leaves its history behind.
+        """
+        self.history.clear()
+        self.detected_period = None
+        self.detected_cycle = None
+
+    def distance(self, previous: Any, current: Any) -> float:
+        distance = self.inner.distance(previous, current)
+
+        if distance == 0.0:
+            # At rest - this run is over as far as this variable is concerned.
+            self.reset()
+            return distance
+
+        self.history.append(current)
+
+        period = self._find_period()
+        if period is not None:
+            self.detected_period = period
+            self.detected_cycle = list(self.history[-period:])
+            if self.raise_on_detection:
+                raise OscillationDetectedError(
+                    period=period,
+                    cycle=self.detected_cycle,
+                    iteration=len(self.history),
+                )
+
+        # Keep only what the widest period comparison can still need.
+        excess = len(self.history) - 2 * self.max_period
+        if excess > 0:
+            del self.history[:excess]
+
+        return distance
+
+    def _find_period(self) -> Optional[int]:
+        """
+        Smallest p in [2, max_period] whose last two p-length blocks match.
+
+        Values only have to support `==` (the same contract
+        `StandardConvergenceChecker` relies on). A type that raises on
+        comparison is treated as "no cycle here" rather than being allowed to
+        break the solve.
+        """
+        for period in range(2, self.max_period + 1):
+            if len(self.history) < 2 * period:
+                return None
+            try:
+                if self.history[-period:] == self.history[-2 * period:-period]:
+                    return period
+            except Exception:
+                continue
+        return None
+
+
 class DAGSolver:
     """
-    Standard Topological Sort Solver. 
+    Standard Topological Sort Solver.
     Ideal for linear workflows.
     """
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
@@ -111,7 +226,7 @@ class IterativeSolver:
         memory = inputs.copy()
         residuals = []
 
-        run_sequence = self._determine_execution_order(steps)
+        run_sequence = self.determine_execution_order(steps)
         logger.info(f"IterativeSolver started. Sequence: {[s.name for s in run_sequence]}")
 
         # Identify variables produced by these steps (for auto-convergence)
@@ -163,7 +278,7 @@ class IterativeSolver:
             for k in produced_vars
         )
 
-    def _determine_execution_order(self, steps: List[Step]) -> List[Step]:
+    def determine_execution_order(self, steps: List[Step]) -> List[Step]:
         if not self.execution_order:
             return steps 
         
@@ -184,61 +299,22 @@ class HybridSolver:
 
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
         logger.info("HybridSolver started.")
-        input_keys = set(inputs.keys())
-        producers_map = _map_producers(steps)
-        
-        # 1. Build Adjacency Graph (Producer -> Consumer)
-        adj_list, _ = _build_dependency_graph(steps, input_keys, producers_map)
 
-        # 2. Find Strongly Connected Components (SCCs)
-        sccs = _tarjan_scc(steps, adj_list)
-        logger.debug(f"Detected {len(sccs)} execution blocks (SCCs).")
-        
-        # 3. Build Condensation Graph (DAG of SCCs)
-        scc_map = {step: i for i, cluster in enumerate(sccs) for step in cluster}
-        scc_adj = defaultdict(set)
-        scc_indegree = defaultdict(int)
+        # Structural decomposition lives in graph.py, so smartmdao.analysis can
+        # describe what this solve *would* do without running it.
+        execution_plan = _build_execution_plan(steps, set(inputs.keys()))
+        logger.debug(f"Detected {len(execution_plan)} execution blocks.")
 
-        for u in steps:
-            u_scc = scc_map[u]
-            for v in adj_list[u]:
-                v_scc = scc_map[v]
-                if u_scc != v_scc:
-                    if v_scc not in scc_adj[u_scc]:
-                        scc_adj[u_scc].add(v_scc)
-                        scc_indegree[v_scc] += 1
-        
-        # Ensure all SCCs have an entry
-        for i in range(len(sccs)):
-            if i not in scc_indegree:
-                scc_indegree[i] = 0
-
-        # 4. Topological Sort of SCCs
-        queue = deque([i for i, deg in scc_indegree.items() if deg == 0])
-        execution_plan = []
-        
-        while queue:
-            current_scc_idx = queue.popleft()
-            execution_plan.append(sccs[current_scc_idx])
-            
-            for neighbor_scc in scc_adj[current_scc_idx]:
-                scc_indegree[neighbor_scc] -= 1
-                if scc_indegree[neighbor_scc] == 0:
-                    queue.append(neighbor_scc)
-
-        # 5. Execute
         memory = inputs.copy()
-        
-        for group in execution_plan:
+
+        for block in execution_plan:
             # Case A: Linear
-            if len(group) == 1 and group[0] not in adj_list[group[0]]:
-                step = group[0]
-                StepExecutor.run_step(step, memory, type_checker=type_checker)
+            if not block.is_cyclic:
+                StepExecutor.run_step(block.steps[0], memory, type_checker=type_checker)
                 continue
 
-            # Case B: Cyclic
-            # Sort alphabetically to ensure deterministic execution order within the cycle
-            group_sorted = sorted(group, key=lambda s: s.name)
+            # Case B: Cyclic - already ordered deterministically by the planner.
+            group_sorted = list(block.steps)
 
             logger.info(f"Cyclic Block Detected: {[s.name for s in group_sorted]}")
             sub_solver = IterativeSolver(

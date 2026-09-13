@@ -1,0 +1,529 @@
+"""
+Static analysis of a pipeline: what a solve *would* do, without doing it.
+
+Every fact here is derived from step signatures, type annotations and the
+dependency graph. No discipline function is ever invoked, which is what makes
+this safe to expose to tooling (see docs/design/001-mcp-connector.md).
+
+Three entry points:
+
+    analyze(pipeline)   -> PipelineAnalysis   what will run, in what order
+    validate(pipeline)  -> tuple[Finding]     what is wrong with it
+    explain(pipeline)   -> str                the same thing, in prose
+
+The planning itself is delegated to `graph.build_execution_plan`, the same
+function `HybridSolver` uses to drive a real solve. Reimplementing it here
+would let the analysis drift away from the behaviour it claims to describe.
+"""
+import inspect
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Set, Tuple
+
+from .graph import ExecutionBlock, build_execution_plan, map_producers
+from .models import Step
+from .solvers import DAGSolver, HybridSolver, IterativeSolver
+from .validation import (
+    StandardTypeChecker,
+    TypeChecker,
+    _format_type,
+)
+
+logger = logging.getLogger(__name__)
+
+ERROR = "error"
+WARNING = "warning"
+INFO = "info"
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One problem, or potential problem, found without running anything."""
+    code: str
+    severity: str
+    message: str
+    step: Optional[str] = None
+    variable: Optional[str] = None
+
+    def __str__(self) -> str:
+        location = ""
+        if self.step:
+            location = f" [{self.step}]"
+        elif self.variable:
+            location = f" [{self.variable}]"
+        return f"{self.severity.upper()}: {self.message}{location}"
+
+
+@dataclass(frozen=True)
+class InitialGuess:
+    """A variable that must be seeded before a cycle's first sweep."""
+    variable: str
+    consumed_by: str
+
+
+@dataclass(frozen=True)
+class CycleAnalysis:
+    """A feedback loop the solver will have to converge."""
+    steps: Tuple[str, ...]
+    feedback_variables: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PipelineAnalysis:
+    steps: Tuple[str, ...]
+    execution_order: Tuple[str, ...]
+    cycles: Tuple[CycleAnalysis, ...]
+    external_inputs: Tuple[str, ...]
+    terminal_outputs: Tuple[str, ...]
+    initial_guesses_required: Tuple[InitialGuess, ...]
+    recommended_solver: str
+    reason: str
+
+    @property
+    def has_cycles(self) -> bool:
+        return bool(self.cycles)
+
+
+# ==============================================================================
+# Shared derivation
+# ==============================================================================
+
+def _step_inputs(step: Step) -> Tuple[str, ...]:
+    """Parameter names, seen through decorators like @cached."""
+    return tuple(step.get_signature().parameters)
+
+
+def _required_inputs(step: Step) -> Tuple[str, ...]:
+    """Parameters with no default - the ones that must come from somewhere."""
+    return tuple(
+        name
+        for name, parameter in step.get_signature().parameters.items()
+        if parameter.default is inspect.Parameter.empty
+    )
+
+
+def _guesses_for_order(
+    ordered_steps: Sequence[Step], available: Set[str]
+) -> Tuple[InitialGuess, ...]:
+    """
+    Which variables must be seeded before the first sweep, and which step
+    reaches for each one first.
+
+    Walks the steps in the order the *configured solver* will actually run
+    them, tracking what has been produced so far. Anything a step needs that is
+    neither already available nor produced earlier in the walk has to be
+    supplied to `run()` as an initial guess.
+
+    This is why the answer depends on the solver and on step names: HybridSolver
+    runs cyclic blocks in alphabetical order, while IterativeSolver runs every
+    step in registration order. Renaming a step, or swapping the solver, can
+    change which variable you must seed. See docs/known-issues.md.
+    """
+    produced_so_far: Set[str] = set()
+    needed: List[InitialGuess] = []
+    seen: Set[str] = set()
+
+    for step in ordered_steps:
+        for name in _required_inputs(step):
+            if name not in available and name not in produced_so_far and name not in seen:
+                needed.append(InitialGuess(variable=name, consumed_by=step.name))
+                seen.add(name)
+        produced_so_far.update(step.resolve_output_names())
+
+    return tuple(needed)
+
+
+def _ordered_steps(pipeline, steps: List[Step], input_keys: Set[str]) -> List[Step]:
+    """
+    The order the configured solver will actually execute steps in.
+
+    `IterativeSolver` sweeps every step in registration order (or its explicit
+    `execution_order`); the graph plays no part. Everything else follows the
+    dependency graph. Calling the solver's own method rather than guessing is
+    what keeps this honest.
+    """
+    solver = pipeline.solver
+    if isinstance(solver, IterativeSolver):
+        return list(solver.determine_execution_order(steps))
+
+    return [
+        step
+        for block in build_execution_plan(steps, input_keys)
+        for step in block.steps
+    ]
+
+
+def _feedback_variables(block: ExecutionBlock) -> Tuple[str, ...]:
+    """Variables produced inside a cyclic block and consumed inside it too."""
+    produced = {
+        name for step in block.steps for name in step.resolve_output_names()
+    }
+    consumed = {name for step in block.steps for name in _step_inputs(step)}
+    return tuple(sorted(produced & consumed))
+
+
+# ==============================================================================
+# analyze
+# ==============================================================================
+
+def analyze(pipeline, inputs: Sequence[str] = ()) -> PipelineAnalysis:
+    """
+    Describes what running `pipeline` would do.
+
+    `inputs` is the set of variable names that would be passed to `run()`.
+    Supplying it sharpens the analysis - without it, every external input looks
+    like a missing initial guess.
+    """
+    steps = list(pipeline.steps)
+    input_keys = set(inputs)
+
+    producers = map_producers(steps)
+
+    all_consumed = {name for step in steps for name in _step_inputs(step)}
+    all_produced = set(producers)
+
+    external_inputs = tuple(sorted(all_consumed - all_produced))
+    terminal_outputs = tuple(sorted(all_produced - all_consumed))
+
+    # Cycles are a property of the dependency graph, independent of which
+    # solver is configured - DAGSolver does not make a feedback loop go away,
+    # it just refuses to run it.
+    cycles = tuple(
+        CycleAnalysis(
+            steps=tuple(step.name for step in block.steps),
+            feedback_variables=_feedback_variables(block),
+        )
+        for block in build_execution_plan(steps, input_keys)
+        if block.is_cyclic
+    )
+
+    # Ordering and seeding, by contrast, depend entirely on the solver.
+    ordered = _ordered_steps(pipeline, steps, input_keys)
+    execution_order = [step.name for step in ordered]
+    initial_guesses_required = _guesses_for_order(
+        ordered, set(input_keys) | set(external_inputs)
+    )
+
+    if cycles:
+        solver = "HybridSolver"
+        reason = (
+            f"{len(cycles)} feedback loop(s) detected; DAGSolver would raise. "
+            "HybridSolver runs acyclic steps once and iterates only the cyclic blocks."
+        )
+    else:
+        solver = "DAGSolver"
+        reason = "No feedback loops; a single topological pass is enough."
+
+    return PipelineAnalysis(
+        steps=tuple(step.name for step in steps),
+        execution_order=tuple(execution_order),
+        cycles=cycles,
+        external_inputs=external_inputs,
+        terminal_outputs=terminal_outputs,
+        initial_guesses_required=initial_guesses_required,
+        recommended_solver=solver,
+        reason=reason,
+    )
+
+
+# ==============================================================================
+# validate
+# ==============================================================================
+
+def _check_duplicate_outputs(steps: List[Step]) -> List[Finding]:
+    """
+    Two steps declaring the same output name. `map_producers` keeps only the
+    last, so the earlier step still runs but its result is unreachable and
+    consumers silently wire to the wrong producer.
+    """
+    seen: Dict[str, str] = {}
+    findings = []
+
+    for step in steps:
+        for name in step.resolve_output_names():
+            if name in seen:
+                findings.append(
+                    Finding(
+                        code="duplicate-output",
+                        severity=ERROR,
+                        message=(
+                            f"'{name}' is declared as an output by both "
+                            f"'{seen[name]}' and '{step.name}'. Only "
+                            f"'{step.name}' will be wired up; the other result "
+                            f"is computed and discarded."
+                        ),
+                        step=step.name,
+                        variable=name,
+                    )
+                )
+            seen[name] = step.name
+
+    return findings
+
+
+def _check_type_edges(steps: List[Step], checker: TypeChecker) -> List[Finding]:
+    """
+    Producer/consumer type compatibility. Mirrors `validate_structure`, but
+    collects every mismatch instead of raising on the first - an agent fixing
+    generated code wants the whole list.
+    """
+    producers = map_producers(steps)
+    findings = []
+
+    for consumer in steps:
+        for name, expected in consumer.resolve_input_types().items():
+            producer = producers.get(name)
+            if producer is None:
+                continue
+
+            produced = producer.resolve_output_types().get(name)
+            if produced is None:
+                continue
+
+            if not checker.check_types(produced, expected):
+                findings.append(
+                    Finding(
+                        code="type-mismatch",
+                        severity=ERROR,
+                        message=(
+                            f"'{producer.name}' declares {name} -> "
+                            f"{_format_type(produced)}, but '{consumer.name}' "
+                            f"expects {name}: {_format_type(expected)}."
+                        ),
+                        step=consumer.name,
+                        variable=name,
+                    )
+                )
+
+    return findings
+
+
+def _check_missing_inputs(
+    steps: List[Step], input_keys: Set[str]
+) -> List[Finding]:
+    """
+    Required parameters that nothing produces and nobody passes in.
+
+    Grouped by variable rather than by step: a shared input like `z2` consumed
+    by five disciplines is one thing to fix, not five, and an agent reading a
+    finding list should see it that way.
+    """
+    producers = map_producers(steps)
+    missing: Dict[str, List[str]] = {}
+
+    for step in steps:
+        for name in _required_inputs(step):
+            if name not in producers and name not in input_keys:
+                missing.setdefault(name, []).append(step.name)
+
+    return [
+        Finding(
+            code="missing-input",
+            severity=ERROR,
+            message=(
+                f"'{name}' is required by {', '.join(repr(s) for s in consumers)} "
+                f"but no step produces it and it was not listed as an input."
+            ),
+            step=consumers[0] if len(consumers) == 1 else None,
+            variable=name,
+        )
+        for name, consumers in missing.items()
+    ]
+
+
+def _check_initial_guesses(
+    analysis: PipelineAnalysis, solver_name: str
+) -> List[Finding]:
+    """
+    Feedback variables that need a starting value before the first sweep.
+
+    Which ones they are depends on the *alphabetical* order of step names
+    inside the cyclic block, which nobody guesses correctly. Getting it wrong
+    is a KeyError from deep inside the solve rather than an up-front complaint.
+    """
+    # Anything already passed to run() is treated as available when the guesses
+    # are derived, so everything reaching here is genuinely unseeded.
+    findings = []
+
+    for guess in analysis.initial_guesses_required:
+        findings.append(
+            Finding(
+                code="initial-guess-required",
+                severity=ERROR,
+                message=(
+                    f"'{guess.consumed_by}' consumes '{guess.variable}' before "
+                    f"anything produces it, so the first sweep has nothing to "
+                    f"read. Ordering here is decided by {solver_name}, so "
+                    f"renaming a step or swapping solvers can change which "
+                    f"variable this is. Pass {guess.variable}=... to run()."
+                ),
+                step=guess.consumed_by,
+                variable=guess.variable,
+            )
+        )
+
+    return findings
+
+
+def _check_solver_fit(
+    pipeline,
+    analysis: PipelineAnalysis,
+    steps: List[Step],
+    input_keys: Set[str],
+) -> List[Finding]:
+    """
+    Whether the configured solver can actually run this pipeline.
+
+    The expensive mistake is `IterativeSolver` on an acyclic pipeline whose
+    registration order is not a valid execution order: it will sweep - possibly
+    to `max_iterations` - and can report convergence on a state that was never
+    properly evaluated. See docs/known-issues.md.
+    """
+    solver = pipeline.solver
+    findings = []
+
+    if isinstance(solver, DAGSolver) and analysis.has_cycles:
+        findings.append(
+            Finding(
+                code="solver-mismatch",
+                severity=ERROR,
+                message=(
+                    f"Pipeline has {len(analysis.cycles)} feedback loop(s) but "
+                    f"uses DAGSolver, which raises on cycles. Use HybridSolver."
+                ),
+            )
+        )
+
+    if isinstance(solver, IterativeSolver):
+        # `analysis.execution_order` IS registration order for this solver, so
+        # compare against what the dependency graph would have chosen instead.
+        # Compared by Step identity, not by name: two anonymous lambdas are both
+        # called "<lambda>" and would otherwise look identically ordered.
+        actual = _ordered_steps(pipeline, steps, input_keys)
+        planned_steps = [
+            step
+            for block in build_execution_plan(steps, input_keys)
+            for step in block.steps
+        ]
+        registered = [step.name for step in actual]
+        planned = [step.name for step in planned_steps]
+
+        if not analysis.has_cycles and actual != planned_steps:
+            findings.append(
+                Finding(
+                    code="avoidable-iteration",
+                    severity=WARNING,
+                    message=(
+                        "Pipeline is acyclic, but IterativeSolver runs steps in "
+                        f"registration order {registered} rather than dependency "
+                        f"order {planned}. It will sweep repeatedly, and a step "
+                        "that returns its input unchanged on the first sweep can "
+                        "make the solver report convergence before anything was "
+                        "evaluated. Use DAGSolver or HybridSolver, or reorder."
+                    ),
+                )
+            )
+
+        if analysis.has_cycles and solver.target_var is None:
+            findings.append(
+                Finding(
+                    code="no-target-var",
+                    severity=INFO,
+                    message=(
+                        "IterativeSolver without target_var judges convergence on "
+                        "a max() across every produced variable, so one noisy "
+                        "variable holds the whole system back. Set target_var to "
+                        "converge on the variable that matters."
+                    ),
+                )
+            )
+
+    return findings
+
+
+def validate(
+    pipeline,
+    inputs: Sequence[str] = (),
+    type_checker: Optional[TypeChecker] = None,
+) -> Tuple[Finding, ...]:
+    """
+    Collects everything statically wrong with `pipeline`, worst first.
+
+    Unlike `validate_structure`, this never raises and never stops at the first
+    problem - the point is to hand back a complete list to fix in one pass.
+    """
+    steps = list(pipeline.steps)
+    input_keys = set(inputs)
+    checker = type_checker or StandardTypeChecker()
+
+    analysis = analyze(pipeline, inputs)
+
+    findings: List[Finding] = []
+    findings.extend(_check_duplicate_outputs(steps))
+    findings.extend(_check_type_edges(steps, checker))
+    findings.extend(_check_missing_inputs(steps, input_keys))
+    findings.extend(
+        _check_initial_guesses(analysis, type(pipeline.solver).__name__)
+    )
+    findings.extend(_check_solver_fit(pipeline, analysis, steps, input_keys))
+
+    rank = {ERROR: 0, WARNING: 1, INFO: 2}
+    findings.sort(key=lambda finding: rank[finding.severity])
+
+    logger.debug(f"Validation produced {len(findings)} finding(s).")
+    return tuple(findings)
+
+
+# ==============================================================================
+# explain
+# ==============================================================================
+
+def explain(pipeline, inputs: Sequence[str] = ()) -> str:
+    """Human-readable account of the pipeline - for docs, review, or an agent."""
+    analysis = analyze(pipeline, inputs)
+    findings = validate(pipeline, inputs)
+
+    lines = [
+        f"Pipeline with {len(analysis.steps)} step(s): {', '.join(analysis.steps)}.",
+        "",
+        f"Recommended solver: {analysis.recommended_solver}",
+        f"  {analysis.reason}",
+        "",
+    ]
+
+    if analysis.external_inputs:
+        lines.append(f"External inputs: {', '.join(analysis.external_inputs)}")
+    else:
+        lines.append("External inputs: none - every variable is produced internally.")
+
+    if analysis.terminal_outputs:
+        lines.append(f"Final outputs:   {', '.join(analysis.terminal_outputs)}")
+    lines.append("")
+
+    if analysis.cycles:
+        lines.append(f"Feedback loops ({len(analysis.cycles)}):")
+        for index, cycle in enumerate(analysis.cycles, start=1):
+            lines.append(f"  {index}. {' -> '.join(cycle.steps)}")
+            lines.append(
+                f"     coupling on: {', '.join(cycle.feedback_variables) or 'nothing detectable'}"
+            )
+    else:
+        lines.append("Feedback loops: none.")
+    lines.append("")
+
+    if analysis.initial_guesses_required:
+        names = ", ".join(
+            f"{guess.variable} (for {guess.consumed_by})"
+            for guess in analysis.initial_guesses_required
+        )
+        lines.append(f"Needs initial values for: {names}")
+        lines.append("")
+
+    lines.append(f"Execution order: {' -> '.join(analysis.execution_order)}")
+
+    if findings:
+        lines.append("")
+        lines.append(f"Findings ({len(findings)}):")
+        lines.extend(f"  {finding}" for finding in findings)
+
+    return "\n".join(lines)

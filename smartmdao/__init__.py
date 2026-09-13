@@ -1,6 +1,15 @@
 from .core import Pipeline
 from .models import Step
-from .solvers import Solver, DAGSolver, IterativeSolver, HybridSolver, ConvergenceChecker, StandardConvergenceChecker
+from .solvers import (
+    Solver,
+    DAGSolver,
+    IterativeSolver,
+    HybridSolver,
+    ConvergenceChecker,
+    StandardConvergenceChecker,
+    OscillationAwareConvergenceChecker,
+    OscillationDetectedError,
+)
 from .cache import cached, MemoryBackend, HistoryBackend, HDF5Backend, PickleDiskBackend
 from .logging_config import configure_logging
 from .optimization import (
@@ -13,6 +22,15 @@ from .optimization import (
     optimize,
 )
 from .validation import TypeChecker, StandardTypeChecker, TypeMismatchError
+from .analysis import (
+    analyze,
+    validate,
+    explain,
+    Finding,
+    CycleAnalysis,
+    InitialGuess,
+    PipelineAnalysis,
+)
 
 # Expose the configuration helper so users can easily do:
 # import pipeline; pipeline.configure_logging()
@@ -26,6 +44,8 @@ __all__ = [
     "HybridSolver",
     "ConvergenceChecker",
     "StandardConvergenceChecker",
+    "OscillationAwareConvergenceChecker",
+    "OscillationDetectedError",
     "cached",
     "MemoryBackend",
     "HistoryBackend",
@@ -42,4 +62,11 @@ __all__ = [
     "TypeChecker",
     "StandardTypeChecker",
     "TypeMismatchError",
+    "analyze",
+    "validate",
+    "explain",
+    "Finding",
+    "CycleAnalysis",
+    "InitialGuess",
+    "PipelineAnalysis",
 ]

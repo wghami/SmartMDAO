@@ -1,5 +1,6 @@
-from collections import defaultdict
-from typing import List, Dict, Set
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from typing import List, Dict, Set, Tuple
 
 from .models import Step
 
@@ -78,3 +79,76 @@ def build_dependency_graph(steps: List[Step], input_keys: Set[str], producers_ma
                 continue
 
     return adj_list, indegree
+
+
+@dataclass(frozen=True)
+class ExecutionBlock:
+    """
+    One unit of work in a decomposed pipeline: either a single step that runs
+    once, or a strongly connected group that has to be iterated to convergence.
+
+    `steps` is already in execution order. For a cyclic block that order is
+    alphabetical by step name, which is what keeps a solve deterministic - and
+    is also why which variable needs an initial guess depends on what the steps
+    are called.
+    """
+    steps: Tuple[Step, ...]
+    is_cyclic: bool
+
+
+def build_execution_plan(steps: List[Step], input_keys: Set[str]) -> List[ExecutionBlock]:
+    """
+    Decomposes a pipeline into the blocks a solver would run, in order.
+
+    This is pure structural analysis - nothing is executed. `HybridSolver` uses
+    it to drive a solve; `smartmdao.analysis` uses it to describe what a solve
+    *would* do without running one. Sharing the function is deliberate: a
+    second implementation would drift, and the analysis would start lying.
+    """
+    producers_map = map_producers(steps)
+    adj_list, _ = build_dependency_graph(steps, input_keys, producers_map)
+
+    sccs = tarjan_scc(steps, adj_list)
+
+    # Condensation graph: a DAG whose nodes are the SCCs.
+    scc_map = {step: i for i, cluster in enumerate(sccs) for step in cluster}
+    scc_adj = defaultdict(set)
+    scc_indegree = defaultdict(int)
+
+    for producer in steps:
+        producer_scc = scc_map[producer]
+        for consumer in adj_list[producer]:
+            consumer_scc = scc_map[consumer]
+            if producer_scc != consumer_scc and consumer_scc not in scc_adj[producer_scc]:
+                scc_adj[producer_scc].add(consumer_scc)
+                scc_indegree[consumer_scc] += 1
+
+    for index in range(len(sccs)):
+        if index not in scc_indegree:
+            scc_indegree[index] = 0
+
+    queue = deque([i for i, degree in scc_indegree.items() if degree == 0])
+    plan = []
+
+    while queue:
+        current = queue.popleft()
+        group = sccs[current]
+
+        # A lone step that doesn't depend on itself runs once; anything else
+        # is a feedback loop and has to be iterated.
+        if len(group) == 1 and group[0] not in adj_list[group[0]]:
+            plan.append(ExecutionBlock(steps=(group[0],), is_cyclic=False))
+        else:
+            plan.append(
+                ExecutionBlock(
+                    steps=tuple(sorted(group, key=lambda step: step.name)),
+                    is_cyclic=True,
+                )
+            )
+
+        for neighbor in scc_adj[current]:
+            scc_indegree[neighbor] -= 1
+            if scc_indegree[neighbor] == 0:
+                queue.append(neighbor)
+
+    return plan
