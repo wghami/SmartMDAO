@@ -3,9 +3,9 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0, 1 and 2 complete and merged to `main`. **Phase 2.5 is next** —
-promoted ahead of execution because the connector currently cannot see most real pipelines.
-**Baseline:** `v1.9.0` — 250 tests, 100% coverage, 23/23 scripts.
+**Current position:** Phases 0–2.5 complete and merged to `main`. **Phase 3 is next**, and blocked
+on a decision about the execution model.
+**Baseline:** `v1.10.0` — 269 tests, 100% coverage, 24/24 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -102,25 +102,40 @@ pipeline and was wrong — caught by running it against the Phase 1 demo.
 
 ---
 
-## Phase 2.5 — Make the connector reach real code ⬜
+## Phase 2.5 — Make the connector reach real code ✅
 
 Promoted ahead of execution after working through the concept of operations. The analysis tools
-only see a `Pipeline` assigned to a module-level variable, and **7 of this repository's own 23
-scripts qualify.** Every failure is a pipeline built inside a function, which is normal Python.
+only saw a `Pipeline` assigned to a module-level variable — **7 of this repository's own 23
+scripts.** Every failure was a pipeline built inside a factory function, which is normal Python.
 
-Until this is fixed, Phases 0–2 deliver their value to a minority of realistic files — a better
-engine in a car nobody can get into.
+- [x] `load_pipeline` calls factories: a module-level callable declaring `-> Pipeline`, or one the
+      caller names explicitly
+- [x] A factory needing arguments is reported **with the argument names**, not generically
+- [x] Ambiguity lists every candidate, instances and factories alike
+- [x] `LoadedPipeline.source` records whether a pipeline was *read* or *called*, and the MCP
+      handlers return it — how a result was obtained is part of what the engineer needs to know
+      ([003](design/003-determinism-and-the-engineer-in-the-loop.md))
+- [x] [`scripts/pipeline_discovery_demo.py`](../scripts/pipeline_discovery_demo.py) — seven shapes
+      and what the loader makes of each
 
-- [ ] `load_pipeline` accepts a factory: if `variable` names a zero-argument callable returning a
-      `Pipeline`, call it; if it needs arguments, say which rather than failing generically
-- [ ] Report candidates helpfully when nothing loads — list the factories it *could* have called
-- [ ] Re-measure against `scripts/`; the number should be most of 23, not 7
+**The safety rule, which matters more than the feature:** a function is only ever called when it
+*declares* `-> Pipeline`, or when the caller names it. Nothing is called speculatively to see what
+it returns — a module's `run_demo()` would execute the entire study, and *no discipline is ever
+invoked* is the promise the whole analysis layer rests on. Calling a factory registers steps; it
+does not evaluate them.
 
-**Exit criterion:** the connector can analyse the pipelines in this repository's own demo scripts.
-If it cannot read our code, it will not read anyone's.
+### Exit criterion, corrected
 
-No new security surface: calling a factory is no more dangerous than the module import that already
-happens, and it still invokes no discipline.
+The original read: *"the number should be most of 23."* **That was not achievable, and writing it
+without measuring was the mistake.** Measured after the change: **9 auto-discovered, 1 more by
+name, 14 unreachable.**
+
+The 14 build their pipelines inside `run_*_demo()` and never return them — there is nothing to call
+and nothing to read. That is normal for a *script* and unusual for a *model*, so the number
+understates the picture for real engineering code. It is still the honest number, and it is not 23.
+
+The revised criterion — met — is that **every shape a model file plausibly uses is reachable**, and
+every shape that is not says exactly why.
 
 ---
 

@@ -272,6 +272,8 @@ pip install smartmdao[mcp]
 
 Then point your client at the `smartmdao-mcp` command. It exposes `analyze_pipeline`,
 `validate_pipeline`, `explain_pipeline` and `render_pipeline_diagram`, plus the docs as resources.
+It finds your pipeline either as a module-level `Pipeline`, or by calling a factory annotated
+`-> Pipeline` — it never calls a function speculatively to see what comes back.
 Nothing it does executes a discipline. See
 [the design record](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md)
 for why it verifies rather than writes code for you.
