@@ -76,13 +76,30 @@ structure requires importing the module that defines it, and importing Python ru
 code. The distinction that holds is narrower but still real — **no discipline function is
 invoked** — and it must be documented as such rather than oversold as sandboxing.
 
-### Phase 3 — execution
+### Phase 3 — execution, as a cost ladder
 
-| Tool | Returns |
-|---|---|
-| `run_pipeline` | Final state, `residual_history`, iterations used, convergence status. |
-| `optimize` | Normalised `OptimizationResult` plus evaluation count. |
-| `sweep` | A design-variable sweep table, for what-if reasoning. |
+Revised after working through the concept of operations. The original plan was a flat
+`run_pipeline` / `optimize` / `sweep`; what an engineer actually needs is to choose a rung *and be
+told what it costs* before committing.
+
+| Rung | Cost | Answers |
+|---|---|---|
+| `analyze` / `validate` | free | Is it wired correctly? *(shipped)* |
+| **single sweep** | one call per discipline | Does the code run at all? What does one evaluation cost? |
+| **budgeted run** | capped sweeps + wall clock | Does it converge, within a budget the engineer set? |
+| full run | unbounded | The answer |
+| `optimize` | full run × 10²–10³ | The design |
+
+The single sweep earns its place twice: it is the cheapest possible smoke test, and it *measures
+the unit cost*, so the estimate for every rung above it falls out of it. That turns "this might
+take a while" into "one sweep is 4.2 s, your loop needs 15–40, so budget 1–3 minutes; the optimizer
+will call it ~200 times, about 4 hours." The engineer then consents with a number instead of a
+guess. It is already expressible today via `max_iterations=1` — it is simply not exposed.
+
+**`compare_runs`** — run two pipelines on the same inputs and diff the resulting state — is a
+better justification for execution tooling than a generic `run_pipeline`. It is what makes a
+translation from hand-written code trustworthy, and it is the one thing neither the agent nor
+static analysis can do alone. See [known-issues.md](../known-issues.md).
 
 ## Execution model
 
@@ -99,6 +116,24 @@ arbitrary user code. Three options:
 **Decision:** ship Phase 2 with no execution. Add execution in Phase 3 via subprocess with a
 mandatory timeout. Never ship a remote transport without real sandboxing, and document the
 execution model prominently wherever the server is installed.
+
+### Correction (post-Phase 2): the safety argument above is wrong for the local case
+
+The table frames subprocess isolation as *protection*. Working through the concept of operations
+showed that is not what it buys, because **the agent driving this connector already has a shell**.
+When it cannot run a pipeline through us, it runs `python model.py` — unsandboxed, untimed, results
+scraped from stdout. Our refusal to execute does not create a boundary; it pushes the work
+somewhere with *less* control and a worse result format.
+
+The honest case for subprocess + timeout is therefore **reliability, structure and a kill switch**:
+
+- a hard stop for a non-converging solve, which is otherwise unbounded;
+- a clean JSON boundary, so results arrive typed rather than scraped;
+- crash isolation, so a segfaulting discipline does not take the server with it.
+
+Safety only becomes the real argument for a hosted server, or for a client whose agent has no shell
+access. Both remain out of scope, and the "no remote transport without real sandboxing" constraint
+stands unchanged. What changes is that we should stop claiming a protection we do not provide.
 
 ## Packaging
 
@@ -204,6 +239,9 @@ message.
 
 ## Related
 
+- [003-determinism-and-the-engineer-in-the-loop.md](003-determinism-and-the-engineer-in-the-loop.md)
+  — the governing principle. It is what makes the cost ladder above mandatory rather than a nicety:
+  an engineer cannot consent to a run whose cost nobody quoted.
 - [002-agent-as-discipline.md](002-agent-as-discipline.md) — the inverse direction, where
   SmartMDAO orchestrates the agent rather than the other way round.
 - [../roadmap.md](../roadmap.md) — phasing and exit criteria.

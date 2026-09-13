@@ -4,7 +4,12 @@ For whoever picks this up next — a contributor, a maintainer returning after a
 agent. Read this before starting work.
 
 **State as of v1.9.0:** `main` is clean. 250 tests, 100% coverage, 23/23 scripts passing.
-Roadmap Phases 0–2 are merged; Phase 3 has not started and is **blocked on a decision** (below).
+Roadmap Phases 0–2 are merged. **Phase 2.5 is next** — the connector can only see 7 of this
+repository's own 23 scripts, which gates the value of everything already built.
+
+Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
+says *why the project is built the way it is*: determinism, traceability, and giving the engineer
+enough information to decide rather than deciding for them. Read both before designing anything.
 
 ---
 
@@ -137,6 +142,9 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 - **`@cached` functions are keyword-only.** Invisible inside a pipeline, surprising outside one.
 - **A step returning `None` stores nothing**, leaving the previous value in place — which a
   convergence checker reads as *converged*. A discipline must be total.
+- **The MCP loader only sees module-level pipelines.** A factory function is invisible to it —
+  which is 16 of this repository's own 23 scripts. Verify against real files before assuming the
+  connector works.
 
 ---
 
@@ -146,8 +154,16 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 1. **Phase 3's execution model.** Running a pipeline means executing arbitrary user code.
    [001](design/001-mcp-connector.md) commits to subprocess + mandatory timeout, and to never
-   shipping a remote transport without real sandboxing. **This needs explicit sign-off before
-   anyone builds it.** It is the only thing currently blocking the roadmap.
+   shipping a remote transport without real sandboxing. **Needs explicit sign-off before anyone
+   builds it.**
+
+   Note the correction recorded in 001: subprocess isolation buys *reliability, structure and a
+   kill switch*, **not safety**, because the agent driving the connector already has a shell and
+   will run the file itself if refused. Do not repeat the original safety framing.
+
+2. **Where the ASP layer lives** ([003](design/003-determinism-and-the-engineer-in-the-loop.md)) —
+   this repository or a companion package. The dependency is trivial (`clingo` is one package with
+   no transitive deps); the concern is what is distinct.
 
 ### Settled
 

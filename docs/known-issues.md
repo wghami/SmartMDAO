@@ -26,6 +26,85 @@ users, so it needs its own decision rather than being folded in here.
 
 ---
 
+## 🔴 The MCP loader only sees module-level pipelines — 7 of our own 23 scripts
+
+`load_pipeline` requires exactly one `Pipeline` assigned to a **module-level variable**
+([loader.py](../smartmdao/mcp/loader.py)). Anything built inside a function is invisible:
+
+```python
+def build_pipeline(solver) -> Pipeline:      # ← no MCP tool can see this
+    ...
+```
+
+Measured against this repository's own `scripts/` directory: **7 loadable, 16 not.** Every failure
+is the same cause, and it includes every demo written for Phases 1–2. A factory function is normal,
+good Python — and real user code is worse, with pipelines behind `if __name__ == "__main__"`, in
+classes, or parameterised by config.
+
+This is currently the **largest single constraint on the connector being useful**. If the tools
+cannot see the engineer's pipeline, none of the analysis matters — the value of Phases 0–2 is
+gated behind it.
+
+*Fix direction:* accept a callable. If `variable` names a zero-argument function returning a
+`Pipeline`, call it; if it needs arguments, say so rather than failing generically. No new security
+surface — calling a factory is no more dangerous than the module import that already happened, and
+it still invokes no discipline.
+
+---
+
+## 🟡 No way to run a pipeline cheaply, or to know what running it will cost
+
+An engineer will ask the agent to run the model. Refusing is not available to us: the agent has a
+shell and will run `python model.py` instead — unsandboxed, untimed, with results scraped from
+stdout. Refusal does not create a boundary, it moves the work somewhere with less control.
+
+What is missing is the middle of the cost ladder:
+
+| Rung | Cost | Status |
+|---|---|---|
+| `analyze` / `validate` | free, nothing runs | shipped |
+| single sweep | one call per discipline | **expressible today** via `max_iterations=1`, not exposed |
+| budgeted run | capped sweeps + wall clock | missing |
+| full run | whatever it takes | missing |
+| `optimize` | full run × 10²–10³ | missing |
+
+The single sweep is the interesting rung twice over: it is the cheapest possible smoke test *and*
+it measures the unit cost, so the estimate for every rung above it falls out of it. Measured on a
+toy model with a 20 ms discipline: one sweep 0.04 s, full run 0.90 s — a 22× ratio the engineer
+could have been told before committing.
+
+*Fix direction:* expose the rungs, and have the agent quote a number rather than a disclaimer.
+See [001](design/001-mcp-connector.md).
+
+---
+
+## 🟡 A translated pipeline can silently change the answer
+
+Converting hand-written code to SmartMDAO is a stated use case, and the risk is semantic drift that
+nothing detects. The README's own "without SmartMDAO" example is the illustration:
+
+```python
+if abs(y2_next - y2) < 1e-6: break     # converges on y2 ALONE
+```
+
+The obvious translation converges on a `max()` across **both** `y1` and `y2` — a different
+criterion, which can stop at a different iteration or not at all. Faithfulness requires
+`target_var="y2"`, and nothing warns you. Similarly, a hand loop using under-relaxation
+(`y2 = 0.5*y2 + 0.5*y2_next`) loses its damping entirely, since SmartMDAO has no built-in
+relaxation, and may diverge where the original converged.
+
+A translation that quietly changes the answer is worse than no translation: it looks cleaner, so it
+gets trusted.
+
+*Fix direction:* an equivalence check — run original and translation on the same inputs, diff the
+state. This is a better justification for execution tooling than a generic `run_pipeline`, because
+it is the one thing neither the agent nor static analysis can do alone. Whether a translation
+should be *faithful* (preserve the original's exact convergence semantics) or *idiomatic* (use
+`HybridSolver`, accept small numerical differences) is the engineer's explicit choice, per
+[003](design/003-determinism-and-the-engineer-in-the-loop.md).
+
+---
+
 ## 🔴 Step registration order is load-bearing, and getting it wrong is silent
 
 `IterativeSolver` runs steps in registration order. If a step that *consumes* a feedback variable

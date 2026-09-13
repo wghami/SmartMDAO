@@ -3,7 +3,8 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0, 1 and 2 complete and merged to `main`. Phase 3 not started.
+**Current position:** Phases 0, 1 and 2 complete and merged to `main`. **Phase 2.5 is next** —
+promoted ahead of execution because the connector currently cannot see most real pipelines.
 **Baseline:** `v1.9.0` — 250 tests, 100% coverage, 23/23 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -101,20 +102,74 @@ pipeline and was wrong — caught by running it against the Phase 1 demo.
 
 ---
 
-## Phase 3 — Sandboxed execution ⬜
+## Phase 2.5 — Make the connector reach real code ⬜
+
+Promoted ahead of execution after working through the concept of operations. The analysis tools
+only see a `Pipeline` assigned to a module-level variable, and **7 of this repository's own 23
+scripts qualify.** Every failure is a pipeline built inside a function, which is normal Python.
+
+Until this is fixed, Phases 0–2 deliver their value to a minority of realistic files — a better
+engine in a car nobody can get into.
+
+- [ ] `load_pipeline` accepts a factory: if `variable` names a zero-argument callable returning a
+      `Pipeline`, call it; if it needs arguments, say which rather than failing generically
+- [ ] Report candidates helpfully when nothing loads — list the factories it *could* have called
+- [ ] Re-measure against `scripts/`; the number should be most of 23, not 7
+
+**Exit criterion:** the connector can analyse the pipelines in this repository's own demo scripts.
+If it cannot read our code, it will not read anyone's.
+
+No new security surface: calling a factory is no more dangerous than the module import that already
+happens, and it still invokes no discipline.
+
+---
+
+## Phase 3 — Execution as a cost ladder ⬜
+
+Reframed. The original plan was a flat `run_pipeline` / `optimize` / `sweep`, justified by
+sandboxing. Two things changed that — see [001](design/001-mcp-connector.md):
+
+**The safety argument was wrong for the local case.** The agent already has a shell. Refusing to
+execute does not create a boundary; it pushes the run somewhere unsandboxed, untimed, and scraped
+from stdout. Subprocess + timeout buys **reliability, structure and a kill switch** — not
+protection. We should stop claiming otherwise.
+
+**Engineers need to choose a rung and be told the cost.** An unbounded run is not a reasonable
+thing to ask someone to consent to blindly.
 
 - [ ] Subprocess runner with a mandatory timeout and a JSON boundary
-- [ ] `run_pipeline` — final state, `residual_history`, iteration count, convergence status
-- [ ] `optimize` — normalised `OptimizationResult` plus evaluation count
-- [ ] `sweep` — design-variable sweep table for what-if reasoning
-- [ ] Execution model documented prominently at the install surface
+- [ ] **Single sweep** — one call per discipline. Cheapest smoke test, and it measures the unit
+      cost so every estimate above it falls out of it. Already expressible via `max_iterations=1`;
+      just not exposed
+- [ ] **Budgeted run** — capped sweeps plus wall clock, with the estimate quoted first
+- [ ] **`compare_runs`** — same inputs, two pipelines, diff the state. The thing that makes a
+      translation from hand-written code trustworthy
+- [ ] Result summarisation; `MAX_ITEMS` was written for names, not numpy arrays
+- [ ] `optimize` / `sweep` deferred until someone asks for them
 
-**Exit criterion:** a non-converging pipeline is killed by timeout and reported as such rather than
-hanging the server; no code path executes user disciplines in the server process.
+**Exit criterion:** an engineer is told what a run will cost before it starts, a non-converging
+pipeline is killed by timeout and reported as such, and a translated pipeline can be checked
+against its original.
 
-**Constraint:** no remote transport without real sandboxing. A local stdio server executing user
-code is defensible because the coding agent already runs code on that machine; the same server
-behind HTTP is not.
+**Constraint unchanged:** no remote transport without real sandboxing.
+
+---
+
+## Phase 4 — ASP-backed disciplines ⬜
+
+Direction set by [003](design/003-determinism-and-the-engineer-in-the-loop.md). Not scheduled, and
+deliberately not designed in detail yet.
+
+A language model generates an ASP program (clingo) once, at authoring time, under engineer review.
+That program — not the model — becomes the discipline: deterministic at run time, inspectable,
+diffable, version-controlled. It targets the gap gradient-based MDO cannot reach (discrete
+architectural choice) while satisfying the reproducibility and traceability this audience requires.
+
+Open before anything is built: where the program lives, how far the symbolic/numeric discretisation
+is declared, how answer-set multiplicity is pinned, and whether this belongs in this repository at
+all. `clingo` is one package with zero transitive dependencies.
+
+**This supersedes MCP sampling.** The library never calls a model.
 
 ---
 
@@ -127,7 +182,8 @@ Recorded so they are not lost, with no commitment.
 [known-issues.md](known-issues.md).)*
 - **OpenMDAO / GEMSEO importer.** Translate competitor definitions into SmartMDAO. An adoption
   lever rather than a capability.
-- **MCP sampling integration.** The Phase 1 stub replaced by a real call back into the client's
-  model, making 002 live rather than demonstrative.
+- ~~**MCP sampling integration.**~~ Dropped — see Phase 4. The library will not call a model.
+- **Under-relaxation in the solvers.** Absent today, which is a translation hazard: a hand-written
+  loop that relied on damping loses it silently. See [known-issues.md](known-issues.md).
 - **Duplicate-output detection in core.** Currently silent; would be a behaviour change to raise.
 - **Positional-argument support in `@cached`.**
