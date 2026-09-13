@@ -24,19 +24,53 @@ separately.
 
 ---
 
-## 🔴 No oscillation detection in the convergence loop
+## 🔴 Step registration order is load-bearing, and getting it wrong is silent
 
-`IterativeSolver` compares only the previous sweep to the current one. A coupling variable that
-alternates A→B→A→B never satisfies the tolerance and burns all `max_iterations`.
+`IterativeSolver` runs steps in registration order. If a step that *consumes* a feedback variable
+is registered before the step that *produces* it, the first sweep sees that variable's initial
+value only. A step that returns its input unchanged in that situation makes the solver report
+**convergence at iteration 1** — on a state that was never evaluated.
 
-Harmless for well-posed numeric MDA, where oscillation usually shows up as a diverging residual.
-Material for non-numeric convergence, where structural equality is binary and a 2-cycle is
-indistinguishable from steady progress — and expensive if a step costs a model call.
+No error, no warning. Demonstrated by
+`tests/regression/test_agent_as_discipline.py::test_registering_the_model_first_converges_prematurely`,
+where a pipeline confidently converges on an architecture that violates its own requirements.
 
-*Blocks:* Phase 1 in [roadmap.md](roadmap.md).
-*Fix direction:* `ConvergenceChecker` is a `Protocol` and the instance persists across iterations,
-so a stateful checker can retain a short value history and report a detected cycle. No solver
-changes needed.
+*Fix direction:* this is exactly what static analysis should catch, and it is a listed target for
+`validate_pipeline` in Phase 2. `HybridSolver` avoids the trap entirely by deriving order from the
+graph — it is specific to hand-ordered `IterativeSolver` use.
+
+---
+
+## 🔴 Oscillation detection cannot be combined with `HybridSolver`
+
+`OscillationAwareConvergenceChecker` is stateful and needs `distance()` called exactly once per
+iteration. That only holds when `IterativeSolver(target_var=...)` is set; otherwise the residual is
+a `max()` across every produced variable ([solvers.py:161](../smartmdao/solvers.py:161)), iterating
+a `set` in arbitrary order, and one history cannot separate those interleaved calls.
+
+`HybridSolver` builds its sub-solvers without forwarding `target_var`
+([solvers.py:244](../smartmdao/solvers.py:244)), so a pipeline cannot currently have both
+automatic cycle detection and oscillation detection. See
+[002-agent-as-discipline.md](design/002-agent-as-discipline.md).
+
+*Fix direction:* let `HybridSolver` accept and forward `target_var`, or give the checker the
+variable name. The latter means widening the `ConvergenceChecker` protocol, which is a bigger
+change than it first appears.
+
+---
+
+## 🟡 `ConvergenceChecker` has no way to signal "this will never converge"
+
+`distance()` returns a float, and `IterativeSolver` exits only on tolerance or exhausted
+iterations. There is no third verdict. `OscillationAwareConvergenceChecker` therefore *raises*
+from inside `distance()` to abort a hopeless run — effective, but a poor fit for a function whose
+contract is to return a magnitude.
+
+Side effect: an aborted run raises rather than returning, so `memory['residual_history']` is lost.
+The exception carries the detected cycle, which is more useful, but the trace does not survive.
+
+*Fix direction:* a richer verdict type (moving / at rest / hopeless) rather than a bare float.
+Breaking change to a public `Protocol`; deferred.
 
 ---
 

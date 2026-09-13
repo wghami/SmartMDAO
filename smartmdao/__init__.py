@@ -1,6 +1,15 @@
 from .core import Pipeline
 from .models import Step
-from .solvers import Solver, DAGSolver, IterativeSolver, HybridSolver, ConvergenceChecker, StandardConvergenceChecker
+from .solvers import (
+    Solver,
+    DAGSolver,
+    IterativeSolver,
+    HybridSolver,
+    ConvergenceChecker,
+    StandardConvergenceChecker,
+    OscillationAwareConvergenceChecker,
+    OscillationDetectedError,
+)
 from .cache import cached, MemoryBackend, HistoryBackend, HDF5Backend, PickleDiskBackend
 from .logging_config import configure_logging
 from .optimization import (
@@ -26,6 +35,8 @@ __all__ = [
     "HybridSolver",
     "ConvergenceChecker",
     "StandardConvergenceChecker",
+    "OscillationAwareConvergenceChecker",
+    "OscillationDetectedError",
     "cached",
     "MemoryBackend",
     "HistoryBackend",

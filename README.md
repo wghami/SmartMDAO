@@ -86,9 +86,13 @@ Bring your own equatable type — a `dict`, a `set`, a frozen `@dataclass` — a
 > producing it could be an LLM — converging inside the feedback loop, with termination decided by
 > the solver rather than by the model declaring itself done. We've written up what that would take,
 > what it's good for, and where it breaks, in
-> [`docs/design/002-agent-as-discipline.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/design/002-agent-as-discipline.md).
-> *This is a documented design direction, not a shipped feature* — the convergence machinery above
-> is real and tested today; the agent-in-the-loop part is not yet built.
+> [`docs/design/002-agent-as-discipline.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/design/002-agent-as-discipline.md),
+> and [`scripts/agent_as_discipline_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/agent_as_discipline_demo.py)
+> runs it end to end: a discrete architecture converges in two sweeps, infeasible requirements
+> converge on an explicit "no", and a naive model that oscillates is caught at sweep 4 of 100 by
+> `OscillationAwareConvergenceChecker`.
+> *The model call in that demo is a deterministic stub* — the convergence machinery is real and
+> tested; wiring it to a live model is future work.
 
 <details>
 <summary><strong>⚡ Full Quick Start: Caching, Constraints & Optimization (click to expand)</strong></summary>

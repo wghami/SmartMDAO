@@ -1,7 +1,7 @@
 # 002 — An agent as an MDA discipline
 
-**Status:** proposed, unproven
-**Date:** 2026-09-13
+**Status:** mechanics proven with a stubbed model; no live model call yet
+**Date:** 2026-09-13 · findings added after Phase 1
 
 ---
 
@@ -139,19 +139,101 @@ near-identical states.
 nondeterministic discipline is a hard sell. Cache aggressively, pin the model version, log every
 call, and treat the `HistoryBackend` record as part of the result rather than as debug output.
 
-## Open questions
+---
 
-- Does structural equality on a frozen dataclass behave well enough in practice, or does every
-  real use need a custom `ConvergenceChecker` with domain-specific normalisation?
-- Is "converged" even the right target, or is the useful signal *where* it failed to converge —
-  i.e. which requirement the model could not satisfy? A non-converged run may be the more
-  informative result.
-- How should a model step declare a *retraction* — "no feasible architecture exists"? Returning
-  `None` currently means "store nothing", which would silently freeze the previous value.
+# Phase 1 findings
 
-## Next step
+Evidence comes from [`scripts/agent_as_discipline_demo.py`](../../scripts/agent_as_discipline_demo.py)
+— a discrete propulsion-architecture problem with a deterministic stubbed `ask_model()` — and its
+regression tests. The convergence mechanics work. Three things we did not anticipate turned out to
+matter more than the things we did.
 
-Phase 1 in [../roadmap.md](../roadmap.md): an oscillation-aware `ConvergenceChecker` plus a demo
-script in `scripts/` using a stubbed `ask_model()`. No MCP dependency — the stub proves the
-convergence mechanics, and the real model call is swapped in later. Until that exists, everything
-above is a hypothesis.
+## The three open questions, answered
+
+**1. Is structural equality on a frozen dataclass good enough?** Yes, with no custom
+normalisation needed. Case 1 converges to `Architecture(n_motors=2, battery="li-s")` in two
+sweeps; Case 2 converges in three. But this is a weaker result than it looks: the coupling
+variable was *designed* low-entropy — two discrete fields and a boolean. It confirms the machinery,
+not that real model output will behave. The normalisation question moves to Phase 3, where a live
+model replaces the stub.
+
+One incidental discovery: `list.__eq__` compares elements by identity before calling `__eq__`, so
+a recurring value is recognised even when its type raises on comparison. Pinned by test.
+
+**2. Is "converged" the right target?** Not by itself — and the interesting answer is that
+*all three* outcomes are informative:
+
+| Outcome | Meaning |
+|---|---|
+| Converged on a feasible architecture | The design closes. |
+| Converged on the infeasible sentinel | **No architecture satisfies these requirements** — a real MDA result, arrived at normally. |
+| Oscillation detected | The most diagnostic of the three: the cycle *names the tradeoff the model cannot resolve*. |
+
+Case 3 returns `[4 motors, 2 motors]` — which says, precisely, that range and mass are in
+conflict and the model has no move that satisfies both. That is more actionable than either
+converged answer.
+
+**3. How does a step retract?** With an explicit sentinel value. Returning `None` is actively
+dangerous: `_update_memory` stores nothing ([executor.py:91](../../smartmdao/executor.py:91)), the
+previous architecture stays in memory unchanged, and the checker reads that as **converged** — a
+wrong answer presented as a correct one. The rule: *a discipline must be total.* "No answer" is a
+value, not the absence of one. The demo uses a module-level `INFEASIBLE` instance.
+
+## Three findings we did not expect
+
+### The `ConvergenceChecker` protocol cannot say "give up"
+
+`distance()` returns a float, and `IterativeSolver` has exactly two exits: distance below
+tolerance, or `max_iterations` exhausted. There is no way to report *"this will never converge,
+stop now"* — which is precisely what oscillation detection needs to communicate.
+
+`OscillationAwareConvergenceChecker` raises `OscillationDetectedError` from inside `distance()`.
+That works and it stops the loop, but a distance function that raises is a poor fit for the
+protocol's shape. The honest description is a workaround. A cleaner protocol would let a checker
+return a verdict — *moving / at rest / hopeless* — rather than a float that has to smuggle a third
+state out through the exception system.
+
+Cost of the workaround: the run raises instead of returning, so `memory['residual_history']` is
+lost. The error carries the cycle, which is the more useful artifact, but the trace is gone.
+
+### Oscillation detection is incompatible with `HybridSolver`
+
+A stateful checker needs `distance()` called once per iteration. That only happens with
+`IterativeSolver(target_var=...)`; otherwise the residual is a `max()` across every produced
+variable ([solvers.py:161](../../smartmdao/solvers.py:161)), iterating a `set` in arbitrary order,
+and a single history cannot tell those interleaved calls apart.
+
+`HybridSolver` constructs its sub-solvers without forwarding `target_var`
+([solvers.py:244](../../smartmdao/solvers.py:244)). So the automatic SCC detection that makes
+SmartMDAO pleasant — "just add steps, the cycle is found for you" — is **unavailable** to
+agent-as-discipline pipelines today. The demo drives `IterativeSolver` directly and declares its
+step order by hand.
+
+This undercuts one of the four advantages claimed above. "Only the cycle iterates" is still true
+of `HybridSolver` in general, but a pipeline that needs oscillation detection cannot currently
+have both.
+
+### Step registration order is load-bearing, and failing it is silent
+
+`IterativeSolver` runs steps in registration order. Register the model discipline *before* the
+numeric one and sweep 1 hands it an empty violation set; it returns the architecture unchanged;
+the solver sees no movement and reports **convergence at iteration 1** on an architecture that was
+never evaluated and in fact violates its requirements.
+
+No error, no warning — a confidently wrong answer. Pinned by
+`test_registering_the_model_first_converges_prematurely`.
+
+This is the single strongest argument for [001](001-mcp-connector.md)'s framing: it is exactly
+the class of mistake an agent assembling a pipeline would make, and exactly the class of mistake
+static analysis can catch. It belongs in `validate_pipeline`.
+
+## What remains unproven
+
+Everything about *real* model behaviour. The stub is deterministic and rule-based; it converges
+because it was written to. Open until Phase 3 swaps in a live call:
+
+- Whether real output normalises to a stable low-entropy value often enough to converge at all.
+- Whether temperature 0 is sufficient, or whether convergence needs structural canonicalisation on
+  top.
+- Whether `max_period=4` is the right detection window for a real model's failure modes.
+- What the actual call cost of a converging run looks like, and how much `@cached` recovers.

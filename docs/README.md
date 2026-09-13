@@ -26,7 +26,7 @@ time. Superseding one means writing a new record, not editing the old.
 | # | Record | Status |
 |---|---|---|
 | 001 | [MCP connector](design/001-mcp-connector.md) — why the server verifies rather than authors | accepted, not implemented |
-| 002 | [An agent as an MDA discipline](design/002-agent-as-discipline.md) — a model inside an MDA feedback loop | proposed, unproven |
+| 002 | [An agent as an MDA discipline](design/002-agent-as-discipline.md) — a model inside an MDA feedback loop | mechanics proven, no live model yet |
 
 ## Conventions
 

@@ -56,9 +56,124 @@ class StandardConvergenceChecker:
             # treated as "still moving" - never falsely claim convergence.
             return float('inf')
 
+class OscillationDetectedError(RuntimeError):
+    """
+    Raised when a coupling variable is cycling between repeating values
+    instead of settling, so the run can be abandoned rather than burning
+    the remaining iterations on a fixed point that will never arrive.
+
+    Carries the detected `period` and the `cycle` of values themselves,
+    because "which two answers is it flip-flopping between?" is the
+    actionable part.
+    """
+    def __init__(self, period: int, cycle: List[Any], iteration: int):
+        self.period = period
+        self.cycle = cycle
+        self.iteration = iteration
+        super().__init__(
+            f"Coupling variable is oscillating with period {period} "
+            f"(detected at iteration {iteration}); it cycles between: {cycle!r}. "
+            f"This will never satisfy the convergence tolerance."
+        )
+
+
+@dataclass
+class OscillationAwareConvergenceChecker:
+    """
+    Wraps another ConvergenceChecker and additionally notices when a value
+    is *cycling* rather than settling - A -> B -> A -> B forever.
+
+    `StandardConvergenceChecker` reports non-numeric distance as a binary
+    0.0-or-inf, so a 2-cycle is indistinguishable from steady progress: both
+    look like inf every sweep. The loop therefore runs to `max_iterations`.
+    That is merely slow for cheap numeric disciplines and genuinely expensive
+    when a step costs an LLM call, which is the case this exists for
+    (see docs/design/002-agent-as-discipline.md).
+
+    IMPORTANT - use with `IterativeSolver(target_var=...)`.
+    `_calculate_residual` calls `distance()` once per *produced variable* when
+    no target is set, iterating a `set` whose order is arbitrary. This checker
+    keeps a single history and cannot tell those interleaved calls apart, so
+    without `target_var` its history is meaningless. With a target it is called
+    exactly once per iteration, which is the contract it needs.
+
+    Detection requires two full repetitions of a block, so a period-p cycle is
+    reported after 2p sweeps. Period 1 is not a cycle - it is convergence, and
+    the inner checker already reports it as 0.0.
+    """
+    inner: ConvergenceChecker = field(default_factory=StandardConvergenceChecker)
+    max_period: int = 4
+    raise_on_detection: bool = True
+
+    history: List[Any] = field(default_factory=list, init=False, repr=False)
+    detected_period: Optional[int] = field(default=None, init=False)
+    detected_cycle: Optional[List[Any]] = field(default=None, init=False)
+
+    def reset(self) -> None:
+        """
+        Clears accumulated history.
+
+        Call this between runs. The instance is stateful and nothing in the
+        solvers resets it: `HybridSolver` reuses one checker across every
+        cyclic block, and a `Pipeline` reuses its solver across every
+        `run()`. History is cleared automatically on convergence, but a block
+        that exhausts `max_iterations` leaves its history behind.
+        """
+        self.history.clear()
+        self.detected_period = None
+        self.detected_cycle = None
+
+    def distance(self, previous: Any, current: Any) -> float:
+        distance = self.inner.distance(previous, current)
+
+        if distance == 0.0:
+            # At rest - this run is over as far as this variable is concerned.
+            self.reset()
+            return distance
+
+        self.history.append(current)
+
+        period = self._find_period()
+        if period is not None:
+            self.detected_period = period
+            self.detected_cycle = list(self.history[-period:])
+            if self.raise_on_detection:
+                raise OscillationDetectedError(
+                    period=period,
+                    cycle=self.detected_cycle,
+                    iteration=len(self.history),
+                )
+
+        # Keep only what the widest period comparison can still need.
+        excess = len(self.history) - 2 * self.max_period
+        if excess > 0:
+            del self.history[:excess]
+
+        return distance
+
+    def _find_period(self) -> Optional[int]:
+        """
+        Smallest p in [2, max_period] whose last two p-length blocks match.
+
+        Values only have to support `==` (the same contract
+        `StandardConvergenceChecker` relies on). A type that raises on
+        comparison is treated as "no cycle here" rather than being allowed to
+        break the solve.
+        """
+        for period in range(2, self.max_period + 1):
+            if len(self.history) < 2 * period:
+                return None
+            try:
+                if self.history[-period:] == self.history[-2 * period:-period]:
+                    return period
+            except Exception:
+                continue
+        return None
+
+
 class DAGSolver:
     """
-    Standard Topological Sort Solver. 
+    Standard Topological Sort Solver.
     Ideal for linear workflows.
     """
     def solve(self, steps: List[Step], inputs: Dict[str, Any], type_checker: Optional[TypeChecker] = None) -> Dict[str, Any]:
