@@ -1,7 +1,7 @@
 import logging
 from collections import deque
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Set, Protocol, Optional, runtime_checkable
+from typing import List, Dict, Any, Set, Protocol, Optional, Tuple, runtime_checkable
 
 from .models import Step
 from .executor import StepExecutor
@@ -33,6 +33,67 @@ class ConvergenceChecker(Protocol):
     def distance(self, previous: Any, current: Any) -> float:
         """0.0 means "unchanged"; larger (up to inf) means "still moving"."""
         ...
+
+@runtime_checkable
+class AbandonmentAware(Protocol):
+    """
+    Optional companion to `ConvergenceChecker`, for checkers that can tell the
+    difference between "not there yet" and "this is never going to arrive".
+
+    `distance()` returns a magnitude, and a magnitude has no way to express
+    "stop". A solver therefore has only two exits - below tolerance, or out of
+    iterations - so a checker that *knows* the system is hopeless (because the
+    coupling variable is cycling, say) has historically had to raise from
+    inside `distance()`, which kills the run and takes the residual history
+    with it.
+
+    Implement this instead and the solver stops cleanly, records why, and
+    still returns everything it learned on the way. Structural typing - no
+    inheritance, and checkers that do not implement it are unaffected.
+    """
+    def abandon_reason(self) -> Optional[str]:
+        """`None` to keep iterating; a human-readable reason to stop now."""
+        ...
+
+
+CONVERGED = "converged"
+MAX_ITERATIONS = "max_iterations"
+ABANDONED = "abandoned"
+
+
+@dataclass(frozen=True)
+class ConvergenceReport:
+    """
+    What actually happened in one iterative block.
+
+    Before this existed a caller got `residual_history` and had to infer the
+    outcome from it - and could not distinguish "converged" from "ran out of
+    iterations" without re-checking the tolerance by hand.
+
+    `status` is one of `CONVERGED`, `MAX_ITERATIONS` or `ABANDONED`.
+    """
+    status: str
+    iterations: int
+    residuals: Tuple[float, ...] = ()
+    reason: str = ""
+    steps: Tuple[str, ...] = ()
+
+    @property
+    def converged(self) -> bool:
+        return self.status == CONVERGED
+
+    @property
+    def final_residual(self) -> float:
+        return self.residuals[-1] if self.residuals else float("inf")
+
+    def __str__(self) -> str:
+        where = f" [{', '.join(self.steps)}]" if self.steps else ""
+        detail = f" - {self.reason}" if self.reason else ""
+        return (
+            f"{self.status} after {self.iterations} iteration(s), "
+            f"residual {self.final_residual:.3e}{detail}{where}"
+        )
+
 
 class StandardConvergenceChecker:
     """
@@ -100,14 +161,29 @@ class OscillationAwareConvergenceChecker:
     Detection requires two full repetitions of a block, so a period-p cycle is
     reported after 2p sweeps. Period 1 is not a cycle - it is convergence, and
     the inner checker already reports it as 0.0.
+
+    On detection the solver stops and records a `ConvergenceReport` with status
+    `ABANDONED`, keeping the residual history. Set `raise_on_detection=True` to
+    get an `OscillationDetectedError` out of `distance()` instead - louder, but
+    it destroys the run before anything can be recorded.
     """
     inner: ConvergenceChecker = field(default_factory=StandardConvergenceChecker)
     max_period: int = 4
-    raise_on_detection: bool = True
+    raise_on_detection: bool = False
 
     history: List[Any] = field(default_factory=list, init=False, repr=False)
     detected_period: Optional[int] = field(default=None, init=False)
     detected_cycle: Optional[List[Any]] = field(default=None, init=False)
+
+    def abandon_reason(self) -> Optional[str]:
+        """Satisfies `AbandonmentAware`: a detected cycle is a hopeless solve."""
+        if self.detected_period is None:
+            return None
+        return (
+            f"coupling variable is oscillating with period {self.detected_period}, "
+            f"cycling between {self.detected_cycle!r}; it will never satisfy the "
+            f"convergence tolerance"
+        )
 
     def reset(self) -> None:
         """
@@ -234,30 +310,65 @@ class IterativeSolver:
         for s in steps:
             produced_vars.update(s.resolve_output_names())
 
+        status = MAX_ITERATIONS
+        reason = ""
+        iterations = 0
+
         for i in range(self.max_iterations):
+            iterations = i + 1
+
             # Snapshot state for convergence check
             prev_state = {k: memory.get(k) for k in produced_vars if k in memory}
 
             # Execute
             for step in run_sequence:
                 StepExecutor.run_step(step, memory, type_checker=type_checker)
-            
+
             # Check Convergence
             diff = self._calculate_residual(prev_state, memory, produced_vars)
             residuals.append(diff)
-            
+
             # Only break if we actually calculated a numeric difference (not inf)
             if diff != float('inf') and diff < self.tolerance:
-                logger.info(f"Converged at iteration {i+1} with residual {diff:.6e}")
+                logger.info(f"Converged at iteration {iterations} with residual {diff:.6e}")
+                status = CONVERGED
                 break
-            
-            logger.debug(f"Iteration {i+1}: residual {diff:.6e}")
+
+            # A checker that knows this is hopeless gets to say so, rather than
+            # having to raise and destroy the run's own record of itself.
+            reason = self._abandon_reason()
+            if reason:
+                logger.warning(f"Abandoned at iteration {iterations}: {reason}")
+                status = ABANDONED
+                break
+
+            logger.debug(f"Iteration {iterations}: residual {diff:.6e}")
         else:
-             logger.warning(f"Reached max_iterations ({self.max_iterations}) without converging. Last residual: {residuals[-1]:.6e}")
-        
+            if residuals:
+                logger.warning(
+                    f"Reached max_iterations ({self.max_iterations}) without converging. "
+                    f"Last residual: {residuals[-1]:.6e}"
+                )
+
         # Store residuals (append to potentially existing history from other cycles)
         memory.setdefault('residual_history', []).append(residuals)
+        memory.setdefault('convergence_reports', []).append(
+            ConvergenceReport(
+                status=status,
+                iterations=iterations,
+                residuals=tuple(residuals),
+                reason=reason,
+                steps=tuple(s.name for s in run_sequence),
+            )
+        )
         return memory
+
+    def _abandon_reason(self) -> str:
+        """Asks the checker whether to give up, if it is able to answer."""
+        checker = self.convergence_checker
+        if isinstance(checker, AbandonmentAware):
+            return checker.abandon_reason() or ""
+        return ""
 
     def _calculate_residual(self, prev_state: Dict, current_memory: Dict, produced_vars: Set[str]) -> float:
         """

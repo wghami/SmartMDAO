@@ -17,3 +17,6 @@ results/
 # Coverage cache (regenerated on every pytest run)
 .coverage
 htmlcov/
+
+# Sync-tool conflict copies (e.g. "file [conflicted].ext")
+*[conflicted]*

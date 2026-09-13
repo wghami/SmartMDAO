@@ -9,6 +9,11 @@ from .solvers import (
     StandardConvergenceChecker,
     OscillationAwareConvergenceChecker,
     OscillationDetectedError,
+    AbandonmentAware,
+    ConvergenceReport,
+    CONVERGED,
+    MAX_ITERATIONS,
+    ABANDONED,
 )
 from .cache import cached, MemoryBackend, HistoryBackend, HDF5Backend, PickleDiskBackend
 from .logging_config import configure_logging
@@ -46,6 +51,11 @@ __all__ = [
     "StandardConvergenceChecker",
     "OscillationAwareConvergenceChecker",
     "OscillationDetectedError",
+    "AbandonmentAware",
+    "ConvergenceReport",
+    "CONVERGED",
+    "MAX_ITERATIONS",
+    "ABANDONED",
     "cached",
     "MemoryBackend",
     "HistoryBackend",

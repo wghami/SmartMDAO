@@ -325,22 +325,23 @@ def run_agent_as_discipline_demo():
     # CASE 3: a naive model oscillates - and is caught
     # ==========================================================================
     print("\n=== CASE 3: oscillation is detected instead of burning iterations ===")
-    print("  (the ERROR line below is expected - Pipeline.run logs the abort)")
     requirements = Requirements(min_range_km=600.0, max_mass_kg=950.0)
     pipeline = build_pipeline(naive_ask_model, max_iterations=100)
 
-    try:
-        pipeline.run(
-            architecture=Architecture(n_motors=2, battery="li-s"),
-            requirements=requirements,
-        )
-        print("  unexpected: no oscillation detected")
-    except OscillationDetectedError as error:
-        print(f"  detected   : period {error.period}, at sweep {error.iteration} of 100")
-        for architecture in error.cycle:
-            print(f"    - {describe(architecture)}")
-        print("  -> Without detection this burns all 100 sweeps. Each sweep is a")
-        print("     model call, so this is the difference between 4 calls and 100.")
+    result = pipeline.run(
+        architecture=Architecture(n_motors=2, battery="li-s"),
+        requirements=requirements,
+    )
+    report = result["convergence_reports"][-1]
+
+    print(f"  status     : {report.status}")
+    print(f"  stopped at : sweep {report.iterations} of 100")
+    print(f"  reason     : {report.reason}")
+    print(f"  trace kept : {len(result['residual_history'][-1])} residuals")
+    print("  -> Without detection this burns all 100 sweeps. Each sweep is a")
+    print("     model call, so this is the difference between 4 calls and 100.")
+    print("     And the run returns normally with a report, so the history of")
+    print("     what it tried survives instead of being lost to an exception.")
 
     # ==========================================================================
     # CASE 4: the model on the LINEAR part, with an outer feedback loop

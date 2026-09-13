@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.8.0:** `main` is clean. 239 tests, 100% coverage, 22/22 scripts passing.
+**State as of v1.9.0:** `main` is clean. 250 tests, 100% coverage, 23/23 scripts passing.
 Roadmap Phases 0–2 are merged; Phase 3 has not started and is **blocked on a decision** (below).
 
 ---
@@ -71,7 +71,7 @@ not the same as checking it.
 uv run python run_all.py
 ```
 
-It runs every script in `scripts/` and fails on any non-zero exit. **21/21 currently.** A script
+It runs every script in `scripts/` and fails on any non-zero exit. **23/23 currently.** A script
 that depends on an optional extra must *skip cleanly* (exit 0 with an explanatory message), not
 fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_mdo_openturns.py).
 
@@ -81,8 +81,8 @@ fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_m
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 239 tests, 100% coverage
-uv run python run_all.py             # 22 scripts
+uv run pytest                        # 250 tests, 100% coverage
+uv run python run_all.py             # 23 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -147,11 +147,7 @@ Not bugs — judgement calls left deliberately to the maintainer.
 1. **Phase 3's execution model.** Running a pipeline means executing arbitrary user code.
    [001](design/001-mcp-connector.md) commits to subprocess + mandatory timeout, and to never
    shipping a remote transport without real sandboxing. **This needs explicit sign-off before
-   anyone builds it.**
-2. **Widening the `ConvergenceChecker` protocol.** It has no way to report "this will never
-   converge"; `OscillationAwareConvergenceChecker` raises from inside `distance()` as a
-   workaround, which costs the `residual_history`. A proper verdict type is a breaking change to
-   a public `Protocol`.
+   anyone builds it.** It is the only thing currently blocking the roadmap.
 
 ### Settled
 
@@ -160,6 +156,10 @@ Not bugs — judgement calls left deliberately to the maintainer.
 - ~~`openturns` in runtime dependencies~~ — moved behind an `[openturns]` extra in **1.7.0**.
 - ~~`HybridSolver` does not forward `target_var`~~ — fixed in **1.8.0**, scoped to the cyclic block
   that produces the variable.
+- ~~Widening the `ConvergenceChecker` protocol~~ — solved in **1.9.0** *without* widening it. A
+  companion `AbandonmentAware` protocol sits alongside the untouched `distance()`, so no existing
+  checker broke. Worth remembering as a pattern: the instinct to widen an interface was wrong;
+  adding a second optional one did the same job for free.
 
 ---
 

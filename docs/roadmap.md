@@ -4,7 +4,7 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0, 1 and 2 complete and merged to `main`. Phase 3 not started.
-**Baseline:** `v1.8.0` — 239 tests, 100% coverage, 22/22 scripts.
+**Baseline:** `v1.9.0` — 250 tests, 100% coverage, 23/23 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 

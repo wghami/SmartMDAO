@@ -19,6 +19,7 @@ do and why, and `python run_all.py` executes every one of them.
 | [`mcp_connector_demo.py`](../scripts/mcp_connector_demo.py) | The MCP connector end to end, without an MCP client — plus the tools, resources and prompts a client would see |
 | [`agent_as_discipline_demo.py`](../scripts/agent_as_discipline_demo.py) | A model discipline inside an MDA loop, and the cheaper topology beside it |
 | [`hybrid_target_var_demo.py`](../scripts/hybrid_target_var_demo.py) | Narrowing convergence to one variable — and why a target on the wrong block would silently fake convergence |
+| [`convergence_report_demo.py`](../scripts/convergence_report_demo.py) | Telling converged from exhausted from abandoned, and writing a checker that can give up |
 | [`non_numeric_convergence_demo.py`](../scripts/non_numeric_convergence_demo.py) | Convergence on frozensets and dataclasses, with no floats involved |
 
 ## Reading order
