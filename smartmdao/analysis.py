@@ -22,7 +22,12 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from .graph import ExecutionBlock, build_execution_plan, map_producers
 from .models import Step
-from .solvers import DAGSolver, HybridSolver, IterativeSolver
+from .solvers import (
+    DAGSolver,
+    HybridSolver,
+    IterativeSolver,
+    StandardConvergenceChecker,
+)
 from .validation import (
     StandardTypeChecker,
     TypeChecker,
@@ -425,6 +430,10 @@ def _check_solver_fit(
             )
 
         if analysis.has_cycles and solver.target_var is None:
+            # Specific to IterativeSolver: it sweeps the whole pipeline as one
+            # block, so the max() spans every variable including ones with
+            # nothing to do with the loop. HybridSolver scopes it to the cycle,
+            # which is why this is not raised for it.
             findings.append(
                 Finding(
                     code="no-target-var",
@@ -435,6 +444,78 @@ def _check_solver_fit(
                         "variable holds the whole system back. Set target_var to "
                         "converge on the variable that matters."
                     ),
+                )
+            )
+
+    # `target_var` is offered by both IterativeSolver and HybridSolver.
+    solver_name = type(solver).__name__
+    target = getattr(solver, "target_var", None)
+    checker = getattr(solver, "convergence_checker", None)
+
+    # A custom ConvergenceChecker without a target is the case that actually
+    # bites. `_calculate_residual` calls distance() once per *produced variable*
+    # when no target is set, iterating a set in arbitrary order - so a checker
+    # carrying state across calls (OscillationAwareConvergenceChecker, say)
+    # cannot tell those interleaved calls apart and its history is meaningless.
+    #
+    # Deliberately NOT flagged: HybridSolver with the standard checker and no
+    # target. That is the idiomatic default, it works, and warning about it
+    # would fire on almost every correct pipeline.
+    if (
+        analysis.has_cycles
+        and target is None
+        and checker is not None
+        and not isinstance(checker, StandardConvergenceChecker)
+    ):
+        findings.append(
+            Finding(
+                code="checker-needs-target-var",
+                severity=WARNING,
+                message=(
+                    f"{solver_name} uses a custom convergence checker "
+                    f"({type(checker).__name__}) but sets no target_var. Without "
+                    "one, distance() is called once per produced variable in "
+                    "arbitrary order, so any checker that keeps state across "
+                    "calls will see interleaved values and misbehave. Set "
+                    "target_var to the coupling variable that matters."
+                ),
+            )
+        )
+
+    if target is not None:
+        # IterativeSolver sweeps everything as one block, so any produced
+        # variable is a legitimate target. HybridSolver only forwards the
+        # target to the cyclic block producing it, so a target outside every
+        # cycle is silently ignored.
+        if isinstance(solver, HybridSolver):
+            targetable = {
+                name
+                for block in build_execution_plan(steps, input_keys)
+                if block.is_cyclic
+                for step in block.steps
+                for name in step.resolve_output_names()
+            }
+            scope = "any cyclic block"
+        else:
+            targetable = {
+                name for step in steps for name in step.resolve_output_names()
+            }
+            scope = "any step"
+
+        if target not in targetable:
+            findings.append(
+                Finding(
+                    code="target-var-not-produced",
+                    severity=WARNING,
+                    message=(
+                        f"target_var={target!r} is not produced by {scope}, so it "
+                        f"cannot be converged on. {solver_name} falls back to the "
+                        "default max() across all produced variables. Worse, if "
+                        "nothing produces the name at all, the residual becomes "
+                        "distance(None, None) = 0.0 and the loop reports "
+                        "convergence on its first sweep without iterating."
+                    ),
+                    variable=target,
                 )
             )
 

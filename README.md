@@ -224,8 +224,8 @@ pip install smartmdao
 
 ### Optional extras
 
-The base install ships SciPy, the default optimizer backend. Two things are opt-in because they
-are large and most users do not need them:
+The base install ships SciPy, the default optimizer backend, and nothing you do not need — as of
+1.8.0 it no longer drags in a Jupyter kernel or OpenTURNS. Two things are opt-in:
 
 ``` bash
 pip install smartmdao[openturns]   # the 'openturns' optimizer backend

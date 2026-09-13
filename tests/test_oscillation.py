@@ -230,6 +230,136 @@ def test_solver_still_converges_normally_with_the_checker_installed():
     assert result["val"] < 0.1
 
 
+# --- Integration with HybridSolver -------------------------------------------
+
+def test_hybrid_solver_forwards_target_var_to_the_cycle():
+    """The combination that was impossible before target_var was forwarded."""
+    from smartmdao import HybridSolver, Pipeline
+
+    calls = []
+    pipeline = Pipeline(
+        solver=HybridSolver(
+            max_iterations=100,
+            target_var="architecture",
+            convergence_checker=OscillationAwareConvergenceChecker(),
+        )
+    )
+
+    @pipeline.step(outputs=["architecture"])
+    def propose(violations: frozenset, architecture: str) -> str:
+        calls.append(architecture)
+        return "B" if architecture == "A" else "A"
+
+    @pipeline.step(outputs=["violations"])
+    def check(architecture: str) -> frozenset:
+        return frozenset({"bad"})
+
+    with pytest.raises(OscillationDetectedError) as excinfo:
+        pipeline.run(architecture="A", violations=frozenset())
+
+    assert excinfo.value.period == 2
+    assert len(calls) == 4          # caught at 2p, not at max_iterations
+
+
+def test_hybrid_solver_still_converges_normally_with_a_target():
+    from smartmdao import HybridSolver, Pipeline
+
+    pipeline = Pipeline(solver=HybridSolver(tolerance=1e-6, target_var="y2"))
+
+    @pipeline.step(outputs=["y1"])
+    def d1(y2: float) -> float:
+        return y2 * 0.5
+
+    @pipeline.step(outputs=["y2"])
+    def d2(y1: float) -> float:
+        return y1 + 1.0
+
+    result = pipeline.run(y2=1.0)
+    assert result["y2"] == pytest.approx(2.0, abs=1e-4)
+
+
+def test_hybrid_solver_only_targets_the_block_that_produces_the_variable():
+    """Forwarding a target to the wrong block would be silently catastrophic.
+
+    A block that does not produce `target_var` has no entry for it in its own
+    snapshot, so the residual becomes distance(None, ...) - which is 0.0 when
+    nothing else produces the name either. The block would report convergence
+    on its first sweep without iterating.
+    """
+    from smartmdao import HybridSolver, Pipeline
+
+    sweeps = []
+    pipeline = Pipeline(
+        solver=HybridSolver(max_iterations=20, target_var="not_produced_anywhere")
+    )
+
+    @pipeline.step(outputs=["y1"])
+    def d1(y2: float) -> float:
+        sweeps.append(1)
+        return y2 * 0.5
+
+    @pipeline.step(outputs=["y2"])
+    def d2(y1: float) -> float:
+        return y1 + 1.0
+
+    result = pipeline.run(y2=1.0)
+
+    # It really iterated rather than faking convergence at sweep 1.
+    assert len(sweeps) > 1
+    assert result["y2"] == pytest.approx(2.0, abs=1e-3)
+
+
+def test_hybrid_solver_warns_when_the_target_is_never_applied(caplog):
+    from smartmdao import HybridSolver, Pipeline
+
+    pipeline = Pipeline(solver=HybridSolver(max_iterations=5, target_var="ghost"))
+
+    # Named, not lambdas: a cyclic block executes in alphabetical order, and
+    # two `<lambda>`s sort equal, leaving Tarjan's reversed order in place -
+    # which would run the consumer before its producer.
+    @pipeline.step(outputs=["y1"])
+    def a_step(y2: float) -> float:
+        return y2 * 0.5
+
+    @pipeline.step(outputs=["y2"])
+    def z_step(y1: float) -> float:
+        return y1 + 1.0
+
+    with caplog.at_level("WARNING", logger="smartmdao.solvers"):
+        pipeline.run(y2=1.0)
+
+    assert any("was never applied" in record.message for record in caplog.records)
+
+
+def test_hybrid_solver_targets_only_the_relevant_block_of_several():
+    """Two independent cycles; the target belongs to exactly one of them."""
+    from smartmdao import HybridSolver, Pipeline
+
+    pipeline = Pipeline(solver=HybridSolver(max_iterations=50, target_var="b2"))
+
+    @pipeline.step(outputs=["a1"])
+    def a_first(a2: float) -> float:
+        return a2 * 0.5
+
+    @pipeline.step(outputs=["a2"])
+    def a_second(a1: float) -> float:
+        return a1 + 1.0
+
+    @pipeline.step(outputs=["b1"])
+    def b_first(b2: float, a2: float) -> float:
+        return (b2 * 0.5) + (a2 * 0.0)
+
+    @pipeline.step(outputs=["b2"])
+    def b_second(b1: float) -> float:
+        return b1 + 1.0
+
+    result = pipeline.run(a2=1.0, b2=1.0)
+
+    # Both cycles converged to the same fixed point, x = 0.5x + 1 -> 2.
+    assert result["a2"] == pytest.approx(2.0, abs=1e-3)
+    assert result["b2"] == pytest.approx(2.0, abs=1e-3)
+
+
 def test_solver_converges_on_a_non_numeric_fixed_point():
     def settle(plan):
         return frozenset(plan) | {"database"}
