@@ -79,6 +79,8 @@ a discipline function.
 - [x] Response truncation (`MAX_ITEMS`)
 - [x] 79 new tests, 100% coverage held
 - [x] `smartmdao-mcp` console entry point
+- [x] Runnable demos: [`scripts/pipeline_analysis_demo.py`](../scripts/pipeline_analysis_demo.py)
+      and [`scripts/mcp_connector_demo.py`](../scripts/mcp_connector_demo.py)
 
 **Exit criterion met.** Verified against Sellar: the tools identify the `y1↔y2` loop, recommend
 `HybridSolver`, name `y2` as the variable needing a seed, and render a diagram — with no

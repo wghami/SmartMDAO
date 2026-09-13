@@ -199,6 +199,8 @@ The Quick Start above just scratches the surface! Notably:
 - **[`optimizer_backends_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/optimizer_backends_demo.py)** — define one `OptimizationProblem` and run the exact same Sellar problem through `scipy`, `openturns`, and a custom registered backend, just by swapping a string.
 - **[`type_validation_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/type_validation_demo.py)** — static and runtime type validation, `Optional`/`Union` support, and writing a custom `TypeChecker`.
 - **[`non_numeric_convergence_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/non_numeric_convergence_demo.py)** — two full non-numeric convergence cases: a single-discipline dependency closure over a `frozenset`, and a two-discipline negotiation over a shared `Plan` dataclass with an auto-detected `HybridSolver` cycle.
+- **[`pipeline_analysis_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/pipeline_analysis_demo.py)** — `analyze`, `validate` and `explain` on a clean pipeline and a deliberately broken one, plus why identical steps need *different* initial guesses depending on the solver.
+- **[`mcp_connector_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/mcp_connector_demo.py)** — the MCP connector driven end to end without an MCP client: an agent-written wing model that accidentally closes a mass-growth loop, caught before it ever runs.
 
 For deeper nesting, custom convergence solvers, or more complex multidisciplinary systems, check out the **[scripts folder in our GitHub repository](https://github.com/wghami/SmartMDAO/tree/main/scripts)**.
 
