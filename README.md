@@ -82,6 +82,14 @@ result = pipeline.run(requested=frozenset({"billing"}), enabled=frozenset())
 Bring your own equatable type — a `dict`, a `set`, a frozen `@dataclass` — and the same
 `IterativeSolver`/`HybridSolver` machinery converges it, no numeric tolerance required.
 
+> 🧭 **Where this leads.** If a coupling variable can be a negotiated plan, one of the disciplines
+> producing it could be an LLM — converging inside the feedback loop, with termination decided by
+> the solver rather than by the model declaring itself done. We've written up what that would take,
+> what it's good for, and where it breaks, in
+> [`docs/design/002-agent-as-discipline.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/design/002-agent-as-discipline.md).
+> *This is a documented design direction, not a shipped feature* — the convergence machinery above
+> is real and tested today; the agent-in-the-loop part is not yet built.
+
 <details>
 <summary><strong>⚡ Full Quick Start: Caching, Constraints & Optimization (click to expand)</strong></summary>
 
@@ -204,6 +212,16 @@ pip install smartmdao
 ```
 
 *(Visualization is built in via matplotlib — no extra system packages required.)*
+
+# 📚 Documentation
+
+Design records and internals reference live in
+[`docs/`](https://github.com/wghami/SmartMDAO/tree/main/docs):
+
+- **[Architecture](https://github.com/wghami/SmartMDAO/blob/main/docs/architecture.md)** — how the library works internally: the execution path, `Step` introspection, the graph layer, `HybridSolver`'s SCC decomposition, and the optimizer bridge.
+- **[Roadmap](https://github.com/wghami/SmartMDAO/blob/main/docs/roadmap.md)** — what's planned, phase by phase, with exit criteria.
+- **[Known issues](https://github.com/wghami/SmartMDAO/blob/main/docs/known-issues.md)** — sharp edges, each with a severity and a fix direction. Worth a look before filing a bug; several are deliberate.
+- **[Design records](https://github.com/wghami/SmartMDAO/tree/main/docs/design)** — why things are the way they are, including the in-progress design for an [MCP connector](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md) that lets a coding agent analyze and verify SmartMDAO pipelines.
 
 # 🤝 Contributing & License
 
