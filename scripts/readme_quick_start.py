@@ -5,6 +5,7 @@ sign flipping, visualization, and running the same problem through a
 second backend - kept here so it's continuously exercised by run_all.py
 and never silently drifts from the documentation.
 """
+import importlib.util
 import math
 import logging
 from pathlib import Path
@@ -140,7 +141,15 @@ def run_readme_quick_start():
         ],
     )
 
-    for backend_name in ("scipy", "openturns"):
+    # OpenTURNS is an optional extra (pip install smartmdao[openturns]), so
+    # this demonstrates whichever backends are actually available.
+    backends = ["scipy"]
+    if importlib.util.find_spec("openturns") is not None:
+        backends.append("openturns")
+    else:
+        print("[openturns] skipped - install with: pip install smartmdao[openturns]")
+
+    for backend_name in backends:
         backend_result = optimize(problem, backend=backend_name)
         print(f"[{backend_name:>9}] objective={backend_result.objective_value:.4f}")
 

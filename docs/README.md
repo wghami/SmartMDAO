@@ -4,6 +4,10 @@ Design records and internals reference. User-facing documentation — installati
 examples — lives in the [top-level README](../README.md) and the runnable scripts in
 [`scripts/`](../scripts).
 
+> **Contributing, or picking this up cold?** Start with **[handoff.md](handoff.md)**. It states
+> what "done" means here — docs updated, 100% coverage, a didactic script, and `run_all.py`
+> green — plus the traps that have already cost time.
+
 ## Start here if you prefer running things
 
 Each design record has a runnable counterpart in [`scripts/`](../scripts). They print what they

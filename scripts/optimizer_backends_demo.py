@@ -13,9 +13,15 @@ the same "name it once, use it everywhere" pattern as `@pipeline.step`. You
 are never locked into the two built-ins: register your own backend the same
 way, or pass an object implementing `OptimizerBackend` directly.
 """
+import importlib.util
 import logging
 import math
 import random
+
+# OpenTURNS is an optional extra (pip install smartmdao[openturns]). The
+# backend-swapping story still works without it - there just happens to be one
+# fewer backend to swap to.
+HAS_OPENTURNS = importlib.util.find_spec("openturns") is not None
 
 from smartmdao import (
     ConstraintSpec,
@@ -84,7 +90,11 @@ def build_sellar_problem() -> OptimizationProblem:
 def demo_swap_backend_by_name():
     logger.info("=== PART 1: Same OptimizationProblem, swap the backend with one string ===")
 
-    for backend_name in ("scipy", "openturns"):
+    backends = ("scipy", "openturns") if HAS_OPENTURNS else ("scipy",)
+    if not HAS_OPENTURNS:
+        logger.info("[openturns] skipped - pip install smartmdao[openturns]")
+
+    for backend_name in backends:
         # A fresh evaluator per run: PipelineEvaluator is stateful (it caches
         # the last evaluation), so each backend gets a clean one to run.
         problem = build_sellar_problem()
@@ -105,9 +115,10 @@ def demo_backend_specific_options():
     result = optimize(problem, backend="scipy", tol=1e-8, options={"maxiter": 200})
     logger.info(f"scipy (tol=1e-8, maxiter=200): objective={result.objective_value:.4f}")
 
-    problem = build_sellar_problem()
-    result = optimize(problem, backend="openturns", max_iterations=2000)
-    logger.info(f"openturns (max_iterations=2000): objective={result.objective_value:.4f}")
+    if HAS_OPENTURNS:
+        problem = build_sellar_problem()
+        result = optimize(problem, backend="openturns", max_iterations=2000)
+        logger.info(f"openturns (max_iterations=2000): objective={result.objective_value:.4f}")
 
 
 # ==============================================================================
