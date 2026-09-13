@@ -1,7 +1,8 @@
 # 002 — An agent as an MDA discipline
 
-**Status:** mechanics proven with a stubbed model; no live model call yet
-**Date:** 2026-09-13 · findings added after Phase 1
+**Status:** mechanics proven with a stubbed model. **Production path superseded by
+[003](003-determinism-and-the-engineer-in-the-loop.md)** — see *Superseded, and why* at the end.
+**Date:** 2026-09-13 · findings added after Phase 1 · superseded 2026-09-13
 
 ---
 
@@ -315,10 +316,40 @@ otherwise; that was wrong.
 ## What remains unproven
 
 Everything about *real* model behaviour. The stub is deterministic and rule-based; it converges
-because it was written to. Open until Phase 3 swaps in a live call:
+because it was written to.
 
 - Whether real output normalises to a stable low-entropy value often enough to converge at all.
 - Whether temperature 0 is sufficient, or whether convergence needs structural canonicalisation on
   top.
 - Whether `max_period=4` is the right detection window for a real model's failure modes.
 - What the actual call cost of a converging run looks like, and how much `@cached` recovers.
+
+---
+
+# Superseded, and why
+
+**The mechanics in this document stand. The production path does not.**
+
+Everything above about how a non-numeric discipline couples, converges, oscillates and gets caught
+is unchanged and in the shipped library. What is superseded is the assumption that the thing in
+the loop should be a *language model*.
+
+The question this record could not answer is the one an engineer asks first: **how do you reproduce
+this run?** It is listed above under "where it breaks" and answered with "cache aggressively, pin
+the version, log every call" — which makes a run replayable, not reproducible, and leaves the
+artifact under review as a prompt rather than something an engineer can reason about.
+
+[003](003-determinism-and-the-engineer-in-the-loop.md) resolves it by **relocating the
+nondeterminism rather than tolerating it**: the model generates an ASP program once, at authoring
+time, under human review, and *that program* becomes the discipline. Deterministic at run time,
+inspectable, diffable, version-controlled.
+
+Three consequences for this record specifically:
+
+- The `INFEASIBLE` sentinel invented in Phase 1 becomes UNSAT — a proof rather than a convention.
+- The "low-entropy coupling variable" rule is satisfied automatically: a set of atoms has no prose
+  in it to perturb.
+- **MCP `sampling` is no longer needed.** The library never calls a model; the coding agent
+  generates the program and SmartMDAO runs clingo. That dependency disappears from the roadmap.
+
+Read this document for the coupling mechanics. Read 003 for what goes in the loop.

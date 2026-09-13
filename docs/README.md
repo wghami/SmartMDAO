@@ -7,6 +7,10 @@ examples — lives in the [top-level README](../README.md) and the runnable scri
 > **Contributing, or picking this up cold?** Start with **[handoff.md](handoff.md)**. It states
 > what "done" means here — docs updated, 100% coverage, a didactic script, and `run_all.py`
 > green — plus the traps that have already cost time.
+>
+> Then read **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**. It states *why*
+> this project is built the way it is: determinism, traceability, and giving the engineer enough
+> information to decide rather than deciding for them.
 
 ## Start here if you prefer running things
 
@@ -44,7 +48,8 @@ time. Superseding one means writing a new record, not editing the old.
 | # | Record | Status |
 |---|---|---|
 | 001 | [MCP connector](design/001-mcp-connector.md) — why the server verifies rather than authors | accepted, not implemented |
-| 002 | [An agent as an MDA discipline](design/002-agent-as-discipline.md) — a model inside an MDA feedback loop | mechanics proven, no live model yet |
+| 002 | [An agent as an MDA discipline](design/002-agent-as-discipline.md) — a model inside an MDA feedback loop | mechanics proven; production path superseded by 003 |
+| 003 | [Determinism, traceability, and the engineer in the loop](design/003-determinism-and-the-engineer-in-the-loop.md) — the governing principle, and ASP-backed disciplines | accepted as direction |
 
 ## Conventions
 

@@ -18,5 +18,8 @@ results/
 .coverage
 htmlcov/
 
-# Sync-tool conflict copies (e.g. "file [conflicted].ext")
-*[conflicted]*
+# Sync-tool conflict copies (e.g. "file [conflicted].ext").
+# The brackets MUST be escaped: unescaped, `[conflicted]` is a glob character
+# class matching any one of c,o,n,f,l,i,c,t,e,d - which silently ignores almost
+# every file in the repository.
+*\[conflicted\]*
