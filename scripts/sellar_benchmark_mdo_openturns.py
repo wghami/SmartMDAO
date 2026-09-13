@@ -1,3 +1,4 @@
+import importlib.util
 import math
 import logging
 import numpy as np
@@ -6,6 +7,15 @@ from smartmdao.core import Pipeline
 from smartmdao.solvers import HybridSolver
 from smartmdao.logging_config import configure_logging
 from smartmdao.optimization import PipelineEvaluator
+
+# This whole script is about OpenTURNS, which is an optional extra. Exit
+# cleanly rather than failing, so `run_all.py` stays meaningful for anyone
+# who has not installed it.
+if importlib.util.find_spec("openturns") is None:
+    print("Skipping: OpenTURNS is an optional extra.")
+    print("  Install it with:  pip install smartmdao[openturns]")
+    raise SystemExit(0)
+
 import openturns as ot
 
 # --- Setup Logging ---

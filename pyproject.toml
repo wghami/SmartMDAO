@@ -1,6 +1,6 @@
 [project]
 name = "SmartMDAO"
-version = "1.6.0"
+version = "1.7.0"
 description = "Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,11 +16,17 @@ dependencies = [
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
-    "openturns>=1.27",
     "scipy>=1.17.1",
 ]
 
 [project.optional-dependencies]
+# SciPy stays a hard dependency: it is the default optimizer backend and the
+# one most users will reach for. OpenTURNS is a large install that only the
+# `openturns` backend needs, and `OpenTURNSBackend.solve` already imports it
+# lazily - so it is opt-in.
+openturns = [
+    "openturns>=1.27",
+]
 # The MCP server is opt-in: the SDK pulls in ~27 transitive packages
 # (starlette, uvicorn, cryptography, pydantic) that a library user running
 # an MDAO study has no use for. `smartmdao.mcp` lazily imports it.
@@ -36,9 +42,10 @@ dev = [
     "h5py>=3.15.1",
     "pytest>=9.0.1",
     "pytest-cov>=7.1.0",
-    # Present in dev so the MCP layer is covered by the test suite; it stays
-    # out of the base install.
+    # Both extras are present in dev so the full suite runs and 100% coverage
+    # is reachable. Neither is in the base install.
     "mcp>=2.2.0",
+    "openturns>=1.27",
 ]
 
 [build-system]

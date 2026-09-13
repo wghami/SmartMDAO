@@ -222,6 +222,20 @@ pip install smartmdao
 
 *(Visualization is built in via matplotlib — no extra system packages required.)*
 
+### Optional extras
+
+The base install ships SciPy, the default optimizer backend. Two things are opt-in because they
+are large and most users do not need them:
+
+``` bash
+pip install smartmdao[openturns]   # the 'openturns' optimizer backend
+pip install smartmdao[mcp]         # the MCP server, for use from a coding agent
+pip install smartmdao[openturns,mcp]
+```
+
+`optimize(problem, backend="openturns")` without the extra raises an `ImportError` telling you
+exactly this — the backend stays registered either way, so nothing fails at import time.
+
 ## 🔍 Check a Pipeline Without Running It
 
 Every structural fact about a pipeline — execution order, feedback loops, type-edge mismatches —
@@ -272,4 +286,8 @@ Design records and internals reference live in
 
 # 🤝 Contributing & License
 
-Contributions are welcome! Please feel free to submit a Pull Request.This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+Before you start, read **[`docs/handoff.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/handoff.md)** — it sets out what "done" means in this project: `docs/` updated, 100% test coverage, a didactic script demonstrating the change, and `run_all.py` green.
+
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.

@@ -104,16 +104,15 @@ Breaking change to a public `Protocol`; deferred.
 ## 🟡 `ipykernel` is a hard runtime dependency
 
 [pyproject.toml](../pyproject.toml) lists `ipykernel` in `dependencies`. A library has no business
-pulling a Jupyter kernel into every install. `openturns` is also heavy and is only needed by one
-optional backend.
+pulling a Jupyter kernel into every install, and **nothing in `smartmdao/` imports it** — so it is
+pure install weight.
 
-Together they make `uvx`-style installation of anything built on SmartMDAO slow.
+*Half fixed in 1.7.0:* `openturns` moved behind an `[openturns]` extra, which was the larger of
+the two. `ipykernel` was deliberately left alone: removing a dependency is a breaking change for
+anyone relying on the transitive install, and that is the maintainer's call, not a tidy-up.
 
-*Not fixed:* removing a dependency is a breaking change for anyone relying on the transitive
-install, and warrants its own version decision rather than being folded into a docs pass.
-*Fix direction:* move `ipykernel` to the dev group, move `openturns` behind an `[openturns]`
-extra, and lazily import it in `OpenTURNSBackend` the way `HDF5Backend` already treats `h5py`
-([cache.py:68](../smartmdao/cache.py:68)).
+*Fix direction:* move it to the `dev` group. Nothing imports it, so the only risk is to someone
+who was getting Jupyter for free.
 
 ---
 

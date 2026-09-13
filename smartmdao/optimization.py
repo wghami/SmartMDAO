@@ -208,6 +208,10 @@ class OpenTURNSBackend:
     without requiring gradients. `method` is looked up as a class name on the
     `openturns` module (e.g. "Cobyla", "SLSQP", "AbdoRackwitz", ...), so any
     algorithm OpenTURNS ships is selectable without adding a branch here.
+
+    OpenTURNS is an optional dependency (`pip install smartmdao[openturns]`).
+    The backend still registers itself without it - so `optimize(..., backend=
+    "openturns")` fails here, with an actionable message, rather than at import.
     """
     def solve(
         self,
@@ -216,7 +220,15 @@ class OpenTURNSBackend:
         max_iterations: int = 1000,
         **options: Any,
     ) -> OptimizationResult:
-        import openturns as ot
+        try:
+            import openturns as ot
+        except ImportError as error:
+            raise ImportError(
+                "The 'openturns' backend requires the optional OpenTURNS "
+                "dependency, which is not installed. Either install it with "
+                "`pip install smartmdao[openturns]`, or use another backend "
+                f"(registered: {sorted(_BACKENDS)})."
+            ) from error
 
         dim = len(problem.initial_guess)
         objective_fn = ot.PythonFunction(

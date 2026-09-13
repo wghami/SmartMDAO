@@ -1,3 +1,6 @@
+import builtins
+import importlib.util
+
 import pytest
 
 from smartmdao import Pipeline, PipelineEvaluator
@@ -8,6 +11,14 @@ from smartmdao.optimization import (
     optimize,
     register_backend,
     _BACKENDS,
+)
+
+# OpenTURNS is an optional extra. It is in the dev dependency group, so the
+# full suite (and 100% coverage) needs `uv sync`; these markers only stop the
+# suite hard-failing in an environment that installed the base package alone.
+needs_openturns = pytest.mark.skipif(
+    importlib.util.find_spec("openturns") is None,
+    reason="optional extra: pip install smartmdao[openturns]",
 )
 
 
@@ -114,6 +125,7 @@ def test_scipy_backend_forwards_extra_options():
 
 # --- OpenTURNSBackend ---
 
+@needs_openturns
 def test_openturns_backend_unconstrained():
     evaluator = PipelineEvaluator(_quadratic_pipeline(), design_vars=["x"])
     problem = OptimizationProblem(
@@ -124,6 +136,7 @@ def test_openturns_backend_unconstrained():
     assert result.x[0] == pytest.approx(3.0, abs=1e-2)
     assert result.raw is not None
 
+@needs_openturns
 def test_openturns_backend_constrained():
     evaluator = PipelineEvaluator(_constrained_pipeline(), design_vars=["x"])
     problem = OptimizationProblem(
@@ -135,6 +148,7 @@ def test_openturns_backend_constrained():
     result = optimize(problem, backend="openturns", max_iterations=500)
     assert result.x[0] == pytest.approx(2.0, abs=1e-2)
 
+@needs_openturns
 def test_openturns_backend_equality_constraint():
     pipeline = Pipeline()
 
@@ -156,6 +170,7 @@ def test_openturns_backend_equality_constraint():
     result = optimize(problem, backend="openturns", max_iterations=500)
     assert result.x[0] == pytest.approx(4.0, abs=1e-2)
 
+@needs_openturns
 def test_openturns_backend_forwards_extra_options_via_setters():
     evaluator = PipelineEvaluator(_quadratic_pipeline(), design_vars=["x"])
     problem = OptimizationProblem(evaluator=evaluator, initial_guess=[0.0], bounds=[(-10.0, 10.0)])
@@ -163,8 +178,32 @@ def test_openturns_backend_forwards_extra_options_via_setters():
     result = optimize(problem, backend="openturns", MaximumAbsoluteError=1e-8)
     assert result.x[0] == pytest.approx(3.0, abs=1e-2)
 
+@needs_openturns
 def test_openturns_backend_unknown_option_raises_attribute_error():
     evaluator = PipelineEvaluator(_quadratic_pipeline(), design_vars=["x"])
     problem = OptimizationProblem(evaluator=evaluator, initial_guess=[0.0], bounds=[(-10.0, 10.0)])
     with pytest.raises(AttributeError):
         optimize(problem, backend="openturns", NotARealOption=1)
+
+
+def test_openturns_backend_without_the_extra_explains_how_to_install(monkeypatch):
+    """The backend registers without OpenTURNS, so the failure lands here."""
+    real_import = builtins.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name == "openturns":
+            raise ImportError("No module named 'openturns'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+
+    evaluator = PipelineEvaluator(_quadratic_pipeline(), design_vars=["x"])
+    problem = OptimizationProblem(evaluator=evaluator, initial_guess=[0.0])
+
+    with pytest.raises(ImportError, match=r"pip install smartmdao\[openturns\]"):
+        optimize(problem, backend="openturns")
+
+
+def test_openturns_backend_is_registered_even_without_the_extra():
+    """Registration must not depend on the optional import."""
+    assert "openturns" in _BACKENDS
