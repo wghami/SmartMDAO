@@ -181,7 +181,7 @@ value, not the absence of one. The demo uses a module-level `INFEASIBLE` instanc
 
 ## Three findings we did not expect
 
-### The `ConvergenceChecker` protocol cannot say "give up"
+### The `ConvergenceChecker` protocol cannot say "give up" — *fixed in 1.9.0*
 
 `distance()` returns a float, and `IterativeSolver` has exactly two exits: distance below
 tolerance, or `max_iterations` exhausted. There is no way to report *"this will never converge,
@@ -195,6 +195,20 @@ state out through the exception system.
 
 Cost of the workaround: the run raises instead of returning, so `memory['residual_history']` is
 lost. The error carries the cycle, which is the more useful artifact, but the trace is gone.
+
+**Resolved in 1.9.0, and more cheaply than expected.** The prediction above — "a cleaner protocol
+would let a checker return a verdict rather than a float" — implied a breaking change to
+`ConvergenceChecker`. It turned out not to be necessary. A *companion* protocol,
+`AbandonmentAware`, adds `abandon_reason()` alongside the untouched `distance()`; structural
+typing means implementing one method is enough, and existing checkers are unaffected.
+
+The lesson worth keeping: the instinct to widen an existing interface was wrong. Adding a second,
+optional one did the same job with nobody's code broken.
+
+Every block now returns a `ConvergenceReport` — `CONVERGED`, `MAX_ITERATIONS` or `ABANDONED`, with
+the reason and the full residuals. An abandoned run keeps its own record of what it tried, which
+matters most precisely here: when a model is a discipline, *how* it failed to settle is the
+interesting result. See `scripts/convergence_report_demo.py`.
 
 ### Oscillation detection is incompatible with `HybridSolver` — *fixed in 1.8.0*
 

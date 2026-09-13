@@ -48,6 +48,7 @@ pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
 - **Type-Safe** — static validation catches mismatched disciplines before a single step runs; opt-in runtime checks catch the rest.
 - **Built Also for Researchers** — solvers are plain `Protocol` classes, so custom MDA convergence algorithms drop in without touching the core framework.
 - **Inspectable Before You Run It** — `analyze()` and `validate()` report execution order, feedback loops, which variables need an initial guess, and every structural error, without executing a single discipline. Available to coding agents over MCP.
+- **Solves That Explain Themselves** — every feedback loop returns a `ConvergenceReport`: converged, out of iterations, or abandoned as hopeless, with the reason and the full residual trace.
 
 ## 🔄 Convergence Beyond Numbers
 
@@ -201,6 +202,7 @@ The Quick Start above just scratches the surface! Notably:
 - **[`non_numeric_convergence_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/non_numeric_convergence_demo.py)** — two full non-numeric convergence cases: a single-discipline dependency closure over a `frozenset`, and a two-discipline negotiation over a shared `Plan` dataclass with an auto-detected `HybridSolver` cycle.
 - **[`pipeline_analysis_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/pipeline_analysis_demo.py)** — `analyze`, `validate` and `explain` on a clean pipeline and a deliberately broken one, plus why identical steps need *different* initial guesses depending on the solver.
 - **[`mcp_connector_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/mcp_connector_demo.py)** — the MCP connector driven end to end without an MCP client: an agent-written wing model that accidentally closes a mass-growth loop, caught before it ever runs.
+- **[`convergence_report_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/convergence_report_demo.py)** — the three ways a solve can end, and how to write a convergence checker that gives up on a hopeless system instead of burning every iteration.
 
 For deeper nesting, custom convergence solvers, or more complex multidisciplinary systems, check out the **[scripts folder in our GitHub repository](https://github.com/wghami/SmartMDAO/tree/main/scripts)**.
 

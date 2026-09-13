@@ -89,18 +89,35 @@ without executing anything.
 
 ---
 
-## 🟡 `ConvergenceChecker` has no way to signal "this will never converge"
+## ✅ RESOLVED in 1.9.0 — `ConvergenceChecker` could not signal "this will never converge"
 
-`distance()` returns a float, and `IterativeSolver` exits only on tolerance or exhausted
-iterations. There is no third verdict. `OscillationAwareConvergenceChecker` therefore *raises*
-from inside `distance()` to abort a hopeless run — effective, but a poor fit for a function whose
-contract is to return a magnitude.
+`distance()` returns a float, and `IterativeSolver` exited only on tolerance or exhausted
+iterations. There was no third verdict, so `OscillationAwareConvergenceChecker` *raised* from
+inside `distance()` to abort a hopeless run — effective, but a poor fit for a function whose
+contract is to return a magnitude, and it destroyed `memory['residual_history']` on the way out.
 
-Side effect: an aborted run raises rather than returning, so `memory['residual_history']` is lost.
-The exception carries the detected cycle, which is more useful, but the trace does not survive.
+**Fixed without breaking `distance()`.** Rather than widening the existing protocol (which would
+have broken every checker in existence), 1.9.0 adds a *companion* protocol:
 
-*Fix direction:* a richer verdict type (moving / at rest / hopeless) rather than a bare float.
-Breaking change to a public `Protocol`; deferred.
+```python
+@runtime_checkable
+class AbandonmentAware(Protocol):
+    def abandon_reason(self) -> Optional[str]: ...   # None = keep iterating
+```
+
+Structural typing, so implementing one method is enough — no inheritance, and checkers that do not
+implement it are asked nothing and behave exactly as before.
+
+Every iterative block now also records a `ConvergenceReport` in
+`memory['convergence_reports']`, with `status` of `CONVERGED`, `MAX_ITERATIONS` or `ABANDONED`,
+the iteration count, the full residuals, a reason, and the block's step names. Previously a caller
+got only `residual_history` and had to re-apply the tolerance by hand to tell convergence from
+exhaustion.
+
+**Behaviour change:** `OscillationAwareConvergenceChecker.raise_on_detection` now defaults to
+`False`. A detected oscillation stops the solve and returns a report with the trace intact, rather
+than raising. Pass `raise_on_detection=True` for the old behaviour — at the cost of losing the
+residual history, which is what prompted the change.
 
 ---
 

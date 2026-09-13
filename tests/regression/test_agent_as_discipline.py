@@ -12,7 +12,7 @@ import pathlib
 
 import pytest
 
-from smartmdao.solvers import OscillationDetectedError
+from smartmdao.solvers import ABANDONED, OscillationDetectedError
 
 DEMO_PATH = (
     pathlib.Path(__file__).resolve().parents[2] / "scripts" / "agent_as_discipline_demo.py"
@@ -67,17 +67,18 @@ def test_naive_model_oscillates_and_is_caught_early(demo):
     requirements = demo.Requirements(min_range_km=600.0, max_mass_kg=950.0)
     pipeline = demo.build_pipeline(demo.naive_ask_model, max_iterations=100)
 
-    with pytest.raises(OscillationDetectedError) as excinfo:
-        pipeline.run(
-            architecture=demo.Architecture(n_motors=2, battery="li-s"),
-            requirements=requirements,
-        )
+    result = pipeline.run(
+        architecture=demo.Architecture(n_motors=2, battery="li-s"),
+        requirements=requirements,
+    )
 
-    error = excinfo.value
-    assert error.period == 2
+    report = result["convergence_reports"][-1]
+    assert report.status == ABANDONED
     # Caught after two full repetitions, not after all 100 sweeps.
-    assert error.iteration == 4
-    assert {architecture.n_motors for architecture in error.cycle} == {2, 4}
+    assert report.iterations == 4
+    assert "period 2" in report.reason
+    # The run returned normally, so its own record of itself survives.
+    assert len(result["residual_history"][-1]) == 4
 
 
 # --- Topology B: model on the linear part of a HybridSolver -----------------

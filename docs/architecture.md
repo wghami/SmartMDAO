@@ -126,6 +126,30 @@ Two consequences worth internalising:
 The residual list for each run is appended to `memory['residual_history']`, so a converged result
 carries its own convergence trace.
 
+Alongside it, each block appends a **`ConvergenceReport`** to `memory['convergence_reports']`,
+recording `status` (`CONVERGED` / `MAX_ITERATIONS` / `ABANDONED`), the iteration count, the
+residuals, a reason, and the block's step names. Without it a caller had to re-apply the tolerance
+by hand to tell a converged run from an exhausted one.
+
+### `AbandonmentAware`
+
+`distance()` returns a magnitude, and a magnitude cannot express *"stop, this will never
+converge"*. A checker that knows a system is hopeless — because the coupling variable is cycling,
+say — therefore had only one option: raise from inside `distance()`, killing the run and taking
+the residual history with it.
+
+The optional companion protocol solves that without touching `ConvergenceChecker`:
+
+```python
+@runtime_checkable
+class AbandonmentAware(Protocol):
+    def abandon_reason(self) -> Optional[str]: ...   # None = keep iterating
+```
+
+`IterativeSolver` asks after each sweep, via `isinstance` — structural typing, so implementing the
+one method is enough and checkers that do not are never asked. On a non-`None` answer the solve
+stops cleanly with status `ABANDONED` and the reason recorded.
+
 ### `StandardConvergenceChecker`
 
 The piece that makes non-numeric MDA possible ([solvers.py:37](../smartmdao/solvers.py:37)):
