@@ -26,29 +26,25 @@ users, so it needs its own decision rather than being folded in here.
 
 ---
 
-## 🔴 The MCP loader only sees module-level pipelines — 7 of our own 23 scripts
+## ✅ MOSTLY RESOLVED in Phase 2.5 — the MCP loader could only see module-level pipelines
 
-`load_pipeline` requires exactly one `Pipeline` assigned to a **module-level variable**
-([loader.py](../smartmdao/mcp/loader.py)). Anything built inside a function is invisible:
+`load_pipeline` used to require a `Pipeline` assigned to a module-level variable, which read **7 of
+this repository's own 23 scripts**. Every failure was a factory function — normal, good Python.
 
-```python
-def build_pipeline(solver) -> Pipeline:      # ← no MCP tool can see this
-    ...
-```
+**Fixed:** the loader now calls factories, either a module-level callable declaring `-> Pipeline`
+or one the caller names explicitly. Ambiguity lists every candidate; a factory needing arguments is
+reported with the argument names.
 
-Measured against this repository's own `scripts/` directory: **7 loadable, 16 not.** Every failure
-is the same cause, and it includes every demo written for Phases 1–2. A factory function is normal,
-good Python — and real user code is worse, with pipelines behind `if __name__ == "__main__"`, in
-classes, or parameterised by config.
+**Remaining, and unfixable:** a pipeline built inside a function body and never returned. There is
+nothing to call and nothing to read; reaching it would mean running the function, which is the one
+thing this layer promises not to do. Measured after the change: **9 auto-discovered, 1 more by
+name, 14 unreachable** — where the 14 are demo scripts building pipelines inside `run_*_demo()`.
+That shape is normal for a *script* and unusual for a *model*, so the figure understates the
+picture for real engineering code.
 
-This is currently the **largest single constraint on the connector being useful**. If the tools
-cannot see the engineer's pipeline, none of the analysis matters — the value of Phases 0–2 is
-gated behind it.
-
-*Fix direction:* accept a callable. If `variable` names a zero-argument function returning a
-`Pipeline`, call it; if it needs arguments, say so rather than failing generically. No new security
-surface — calling a factory is no more dangerous than the module import that already happened, and
-it still invokes no discipline.
+*Guidance for anyone wanting their model readable:* expose it as a module-level instance, or as a
+factory annotated `-> Pipeline` and callable with no arguments. See
+[`scripts/pipeline_discovery_demo.py`](../scripts/pipeline_discovery_demo.py).
 
 ---
 

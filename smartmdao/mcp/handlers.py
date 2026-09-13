@@ -52,6 +52,7 @@ def analyze_pipeline(
     return {
         "ok": True,
         "pipeline": loaded.variable,
+        "source": loaded.source,
         "path": str(loaded.path),
         "steps": _truncate(analysis.steps),
         "execution_order": _truncate(analysis.execution_order),
@@ -90,6 +91,7 @@ def validate_pipeline(
     return {
         "ok": True,
         "pipeline": loaded.variable,
+        "source": loaded.source,
         "path": str(loaded.path),
         "valid": not any(finding.severity == "error" for finding in findings),
         "counts": counts,
@@ -110,6 +112,7 @@ def explain_pipeline(
     return {
         "ok": True,
         "pipeline": loaded.variable,
+        "source": loaded.source,
         "path": str(loaded.path),
         "explanation": explain(loaded.pipeline, inputs or ()),
     }
@@ -142,5 +145,6 @@ def render_pipeline_diagram(
     return {
         "ok": True,
         "pipeline": loaded.variable,
+        "source": loaded.source,
         "output_path": str(destination),
     }

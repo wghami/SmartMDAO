@@ -3,9 +3,8 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.9.0:** `main` is clean. 250 tests, 100% coverage, 23/23 scripts passing.
-Roadmap Phases 0–2 are merged. **Phase 2.5 is next** — the connector can only see 7 of this
-repository's own 23 scripts, which gates the value of everything already built.
+**State as of v1.10.0:** `main` is clean. 269 tests, 100% coverage, 24/24 scripts passing.
+Roadmap Phases 0–2.5 are merged. **Phase 3 is next, and blocked on a decision** (below).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -76,7 +75,7 @@ not the same as checking it.
 uv run python run_all.py
 ```
 
-It runs every script in `scripts/` and fails on any non-zero exit. **23/23 currently.** A script
+It runs every script in `scripts/` and fails on any non-zero exit. **24/24 currently.** A script
 that depends on an optional extra must *skip cleanly* (exit 0 with an explanatory message), not
 fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_mdo_openturns.py).
 
@@ -86,8 +85,8 @@ fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_m
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 250 tests, 100% coverage
-uv run python run_all.py             # 23 scripts
+uv run pytest                        # 269 tests, 100% coverage
+uv run python run_all.py             # 24 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -142,9 +141,9 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 - **`@cached` functions are keyword-only.** Invisible inside a pipeline, surprising outside one.
 - **A step returning `None` stores nothing**, leaving the previous value in place — which a
   convergence checker reads as *converged*. A discipline must be total.
-- **The MCP loader only sees module-level pipelines.** A factory function is invisible to it —
-  which is 16 of this repository's own 23 scripts. Verify against real files before assuming the
-  connector works.
+- **The MCP loader reads module-level instances and factories, nothing else.** A pipeline built
+  inside a function body and never returned is unreachable by design. Verify against real files
+  before assuming the connector can see a model.
 
 ---
 

@@ -117,6 +117,190 @@ def test_sibling_imports_resolve(tmp_path):
     assert len(load_pipeline(path).pipeline.steps) == 1
 
 
+# --- loader: factories -------------------------------------------------------
+
+FACTORY = '''
+from smartmdao import Pipeline, HybridSolver
+
+def build() -> Pipeline:
+    pipeline = Pipeline(solver=HybridSolver())
+    pipeline.add(lambda b: b + 1, outputs=["a"])
+    pipeline.add(lambda a: a * 2, outputs=["b"])
+    return pipeline
+'''
+
+
+def write(tmp_path, name, source):
+    path = tmp_path / name
+    path.write_text(source)
+    return path
+
+
+def test_discovers_an_annotated_factory(tmp_path):
+    loaded = load_pipeline(write(tmp_path, "factory.py", FACTORY))
+    assert loaded.variable == "build"
+    assert loaded.source == "factory"
+    assert len(loaded.pipeline.steps) == 2
+
+
+def test_a_module_level_instance_still_wins_and_is_labelled(sellar_file):
+    loaded = load_pipeline(sellar_file)
+    assert loaded.source == "variable"
+
+
+def test_string_annotations_are_resolved(tmp_path):
+    """`from __future__ import annotations` leaves the annotation a string."""
+    source = "from __future__ import annotations\n" + FACTORY
+    assert load_pipeline(write(tmp_path, "future.py", source)).variable == "build"
+
+
+def test_annotations_that_do_not_resolve_at_runtime_still_work(tmp_path):
+    """A TYPE_CHECKING-only import leaves an annotation get_type_hints cannot
+    resolve. Falling back to the raw string keeps the factory discoverable."""
+    source = '''
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+import smartmdao
+
+if TYPE_CHECKING:                      # not imported at runtime
+    from smartmdao import Pipeline
+
+def build() -> Pipeline:
+    pipeline = smartmdao.Pipeline()
+    pipeline.add(lambda a: a * 2, outputs=["b"])
+    return pipeline
+'''
+    loaded = load_pipeline(write(tmp_path, "type_checking.py", source))
+    assert loaded.variable == "build"
+    assert loaded.source == "factory"
+
+
+def test_a_factory_needing_arguments_names_them(tmp_path):
+    source = FACTORY.replace("def build() -> Pipeline:", "def build(solver, tol) -> Pipeline:")
+    with pytest.raises(PipelineLoadError, match=r"none can be called without arguments"):
+        load_pipeline(write(tmp_path, "needs_args.py", source))
+
+    # ...and the names are in the message, which is the whole point.
+    try:
+        load_pipeline(write(tmp_path, "needs_args.py", source))
+    except PipelineLoadError as error:
+        assert "solver" in str(error) and "tol" in str(error)
+
+
+def test_naming_a_factory_that_needs_arguments_explains_why_not(tmp_path):
+    source = FACTORY.replace("def build() -> Pipeline:", "def build(solver) -> Pipeline:")
+    with pytest.raises(PipelineLoadError, match=r"needs argument\(s\) \['solver'\]"):
+        load_pipeline(write(tmp_path, "named_args.py", source), variable="build")
+
+
+def test_defaulted_arguments_do_not_block_a_factory(tmp_path):
+    source = FACTORY.replace("def build() -> Pipeline:", "def build(tol: float = 1e-6) -> Pipeline:")
+    assert load_pipeline(write(tmp_path, "defaulted.py", source)).source == "factory"
+
+
+def test_varargs_do_not_count_as_required(tmp_path):
+    source = FACTORY.replace("def build() -> Pipeline:", "def build(*args, **kwargs) -> Pipeline:")
+    assert load_pipeline(write(tmp_path, "varargs.py", source)).source == "factory"
+
+
+def test_several_factories_are_reported_not_guessed(tmp_path):
+    source = FACTORY + FACTORY.replace("def build()", "def build_other()")
+    with pytest.raises(PipelineLoadError, match="several pipelines"):
+        load_pipeline(write(tmp_path, "two.py", source))
+
+
+def test_choosing_among_several_factories_by_name(tmp_path):
+    source = FACTORY + FACTORY.replace("def build()", "def build_other()")
+    loaded = load_pipeline(write(tmp_path, "two.py", source), variable="build_other")
+    assert loaded.variable == "build_other"
+    assert loaded.source == "factory"
+
+
+def test_an_instance_and_a_factory_together_are_ambiguous(tmp_path):
+    source = FACTORY + "\npipeline = build()\n"
+    with pytest.raises(PipelineLoadError, match="several pipelines"):
+        load_pipeline(write(tmp_path, "both.py", source))
+
+
+def test_an_unannotated_function_is_never_called(tmp_path):
+    """The promise this layer rests on: we do not call things speculatively."""
+    source = '''
+from smartmdao import Pipeline
+
+CALLED = []
+
+def run_the_whole_study():          # no -> Pipeline annotation
+    CALLED.append(True)
+    pipeline = Pipeline()
+    pipeline.add(lambda a: a, outputs=["b"])
+    return pipeline
+'''
+    path = write(tmp_path, "unannotated.py", source)
+    with pytest.raises(PipelineLoadError, match="No Pipeline found"):
+        load_pipeline(path)
+
+
+def test_an_unannotated_function_can_still_be_named_explicitly(tmp_path):
+    source = FACTORY.replace(" -> Pipeline:", ":")
+    loaded = load_pipeline(write(tmp_path, "explicit.py", source), variable="build")
+    assert loaded.source == "factory"
+
+
+def test_a_factory_that_raises_is_reported_with_its_cause(tmp_path):
+    source = '''
+from smartmdao import Pipeline
+
+def build() -> Pipeline:
+    raise ValueError("bad config")
+'''
+    with pytest.raises(PipelineLoadError, match=r"Calling build\(\) .* failed.*bad config"):
+        load_pipeline(write(tmp_path, "raises.py", source))
+
+
+def test_a_factory_returning_the_wrong_type_is_reported(tmp_path):
+    source = '''
+from smartmdao import Pipeline
+
+def build() -> Pipeline:
+    return "not a pipeline"
+'''
+    with pytest.raises(PipelineLoadError, match="returned str"):
+        load_pipeline(write(tmp_path, "wrong.py", source))
+
+
+def test_imported_pipeline_factories_are_ignored(tmp_path):
+    """A factory imported from elsewhere is not this file's API."""
+    write(tmp_path, "library.py", FACTORY)
+    source = "from library import build\n"
+    with pytest.raises(PipelineLoadError, match="No Pipeline found"):
+        load_pipeline(write(tmp_path, "importer.py", source))
+
+
+def test_naming_something_that_is_neither_lists_what_is_available(tmp_path):
+    source = FACTORY + "\nNOT_A_PIPELINE = 42\n"
+    with pytest.raises(PipelineLoadError, match="not a Pipeline or a Pipeline factory"):
+        load_pipeline(write(tmp_path, "neither.py", source), variable="NOT_A_PIPELINE")
+
+
+def test_a_pipeline_trapped_in_a_function_body_says_so(tmp_path):
+    source = '''
+from smartmdao import Pipeline
+
+def run_demo():
+    pipeline = Pipeline()       # local, never returned - unreachable
+    pipeline.add(lambda a: a, outputs=["b"])
+    print(pipeline.run(a=1))
+'''
+    with pytest.raises(PipelineLoadError, match="cannot be reached without running"):
+        load_pipeline(write(tmp_path, "trapped.py", source))
+
+
+def test_handlers_report_how_the_pipeline_was_obtained(tmp_path):
+    path = write(tmp_path, "factory.py", FACTORY)
+    assert analyze_pipeline(str(path), inputs=["b"])["source"] == "factory"
+
+
 def test_reloading_the_same_path_gets_a_fresh_object(sellar_file):
     first = load_pipeline(sellar_file)
     second = load_pipeline(sellar_file)

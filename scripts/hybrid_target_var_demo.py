@@ -33,11 +33,15 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 
 
-def build_naive_agent_loop(solver) -> Pipeline:
+def build_naive_agent_loop(solver=None) -> Pipeline:
     """
     A model that flip-flops between two architectures forever - the realistic
     failure mode of putting a language model in a feedback loop.
+
+    `solver` defaults so this is callable with no arguments, which is what lets
+    the MCP loader reach it - see docs/known-issues.md.
     """
+    solver = solver or HybridSolver(max_iterations=30)
     pipeline = Pipeline(solver=solver)
 
     @pipeline.step(outputs=["architecture"])
