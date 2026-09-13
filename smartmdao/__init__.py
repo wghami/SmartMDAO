@@ -22,6 +22,15 @@ from .optimization import (
     optimize,
 )
 from .validation import TypeChecker, StandardTypeChecker, TypeMismatchError
+from .analysis import (
+    analyze,
+    validate,
+    explain,
+    Finding,
+    CycleAnalysis,
+    InitialGuess,
+    PipelineAnalysis,
+)
 
 # Expose the configuration helper so users can easily do:
 # import pipeline; pipeline.configure_logging()
@@ -53,4 +62,11 @@ __all__ = [
     "TypeChecker",
     "StandardTypeChecker",
     "TypeMismatchError",
+    "analyze",
+    "validate",
+    "explain",
+    "Finding",
+    "CycleAnalysis",
+    "InitialGuess",
+    "PipelineAnalysis",
 ]
