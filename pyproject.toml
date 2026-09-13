@@ -20,11 +20,25 @@ dependencies = [
     "scipy>=1.17.1",
 ]
 
+[project.optional-dependencies]
+# The MCP server is opt-in: the SDK pulls in ~27 transitive packages
+# (starlette, uvicorn, cryptography, pydantic) that a library user running
+# an MDAO study has no use for. `smartmdao.mcp` lazily imports it.
+mcp = [
+    "mcp>=2.2.0",
+]
+
+[project.scripts]
+smartmdao-mcp = "smartmdao.mcp.server:main"
+
 [dependency-groups]
 dev = [
     "h5py>=3.15.1",
     "pytest>=9.0.1",
     "pytest-cov>=7.1.0",
+    # Present in dev so the MCP layer is covered by the test suite; it stays
+    # out of the base install.
+    "mcp>=2.2.0",
 ]
 
 [build-system]

@@ -3,8 +3,8 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0 and 1 complete. Phase 2 not started.
-**Baseline:** `v1.6.0` — 143 tests, 100% coverage.
+**Current position:** Phases 0, 1 and 2 complete. Phase 3 not started.
+**Baseline:** `v1.6.0` — 225 tests, 100% coverage.
 
 ---
 
@@ -62,27 +62,38 @@ written to. Deferred to Phase 3.
 
 ---
 
-## Phase 2 — Analysis-only MCP server ⬜
+## Phase 2 — Analysis-only MCP server ✅
 
 The verification loop from [001-mcp-connector.md](design/001-mcp-connector.md). Nothing executes
 a discipline function.
 
-- [ ] `smartmdao/mcp/` package + `[mcp]` extra in `pyproject.toml`, lazy-imported
-- [ ] `analyze_pipeline` — execution order, SCCs, feedback variables, recommended solver and why,
-      and **which variables each cycle needs an initial guess for** (promoted from a Phase 1
-      finding — it depends on alphabetical step order, which nobody guesses correctly)
-- [ ] `validate_pipeline` — type-edge mismatches, unsatisfiable inputs, duplicate output names,
-      orphaned outputs, and **step misordering that causes silent premature convergence**
-      (promoted from a Phase 1 finding — see [known-issues.md](known-issues.md))
-- [ ] `render_xdsm` — Agg backend forced, `view=False`, returns a path or encoded image
-- [ ] `explain_pipeline` — prose description of an existing pipeline
-- [ ] Resources: architecture doc, `scripts/` examples, capability schema
-- [ ] Prompts: authoring template, prose→pipeline template
-- [ ] Response truncation so large state never floods the client's context
-- [ ] Tests against handler functions directly, protocol layer kept thin, 100% coverage
+- [x] `smartmdao/mcp/` package + `[mcp]` extra, lazily imported — verified that a base install
+      with no SDK present still imports the handlers and fails helpfully only at `create_server()`
+- [x] `analyze_pipeline` — execution order, SCCs, feedback variables, recommended solver, and
+      which variables need an initial guess
+- [x] `validate_pipeline` — seven finding types, worst first
+- [x] `render_pipeline_diagram` — Agg forced, `view=False`
+- [x] `explain_pipeline` — prose description
+- [x] Resources: architecture doc, known-issues doc, two worked examples
+- [x] Prompts: `pipeline_from_prose`, `review_pipeline` — both routing through the verify loop
+- [x] Response truncation (`MAX_ITEMS`)
+- [x] 79 new tests, 100% coverage held
+- [x] `smartmdao-mcp` console entry point
 
-**Exit criterion:** a coding agent can draft a Sellar pipeline, be told by `analyze_pipeline` that
-it needs `HybridSolver`, fix it, and get a diagram — without the server ever calling a discipline.
+**Exit criterion met.** Verified against Sellar: the tools identify the `y1↔y2` loop, recommend
+`HybridSolver`, name `y2` as the variable needing a seed, and render a diagram — with no
+discipline ever called.
+
+**What changed from the plan:** the analysis is not MCP-specific, so it ships as a first-class
+`smartmdao.analysis` module (`analyze` / `validate` / `explain`, exported from the package root)
+with the MCP server as a thin adapter. The SCC decomposition was extracted out of `HybridSolver`
+into `graph.build_execution_plan` so analysis and execution share one code path instead of
+drifting.
+
+**Finding:** the analysis has to be **solver-aware**. `IterativeSolver` runs steps in registration
+order and ignores the dependency graph entirely, so the variable needing a seed differs from what
+`HybridSolver` would need. The first implementation reported HybridSolver's answer for every
+pipeline and was wrong — caught by running it against the Phase 1 demo.
 
 ---
 

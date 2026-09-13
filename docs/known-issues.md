@@ -7,7 +7,7 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
-## 🔴 `visualize()` hangs in a headless process
+## 🟡 `visualize()` hangs in a headless process
 
 `PipelineVisualizer.render()` defaults to `view=True`, which calls `plt.show()`
 ([visualization.py:151](../smartmdao/visualization.py:151)). With an interactive matplotlib
@@ -17,10 +17,12 @@ CI works around it by setting `MPLBACKEND: Agg` in the workflow environment. **T
 does not.** Any server-side or headless consumer must force the Agg backend and pass
 `view=False`.
 
-*Blocks:* `render_xdsm` in [001-mcp-connector.md](design/001-mcp-connector.md).
-*Fix direction:* have the MCP layer set the backend and never pass `view=True`. Changing the
-library default is a behaviour change for existing interactive users and should be considered
-separately.
+*Severity downgraded:* `smartmdao.mcp.rendering` now forces Agg (with `force=True`, since
+`pyplot` is already imported by the time it runs) and never passes `view=True`, so the server path
+is safe. The trap remains for anyone calling `visualize()` directly in a headless process.
+
+*Fix direction:* changing the library default is a behaviour change for existing interactive
+users, so it needs its own decision rather than being folded in here.
 
 ---
 

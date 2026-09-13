@@ -1,7 +1,7 @@
 # 001 — MCP connector
 
-**Status:** accepted, not yet implemented
-**Date:** 2026-09-13
+**Status:** implemented (Phase 2); execution tools still pending (Phase 3)
+**Date:** 2026-09-13 · implementation notes added after Phase 2
 **Supersedes:** nothing
 
 ---
@@ -142,6 +142,65 @@ than whatever version it memorised.
 prompts and verification rather than a single generate tool. The `[mcp]` extra means MCP work is
 coupled to this repo's release cadence. And the analysis/execution split means two rounds of tool
 design rather than one.
+
+---
+
+# Phase 2 implementation notes
+
+## The analysis is not MCP-specific
+
+Building this made it obvious that "what will run, in what order, and what is wrong with it" is
+useful to anyone, not only to a coding agent. So it ships as **`smartmdao.analysis`** — `analyze`,
+`validate`, `explain`, exported from the package root — and `smartmdao/mcp/` is a thin adapter
+over it. A user with no interest in MCP gets the same checks from Python.
+
+This also shrinks the MCP surface to something testable: `handlers.py` holds the behaviour and
+imports nothing from the SDK; `server.py` only registers.
+
+## One planner, not two
+
+`HybridSolver.solve` used to do its own SCC decomposition, condensation and topological sort
+inline. That logic is now `graph.build_execution_plan`, shared by the solver and the analysis.
+
+The alternative — reimplementing the planner for analysis — would have produced a second source of
+truth that drifts, and an analysis that quietly starts describing a pipeline the solver would not
+actually run. Worth the refactor.
+
+## Analysis must be solver-aware
+
+The most surprising finding. `IterativeSolver` sweeps **every** step in registration order and
+consults the dependency graph not at all; `HybridSolver` follows the graph and runs cyclic blocks
+alphabetically. So the same steps, under different solvers, need *different* variables seeded.
+
+The first implementation reported `HybridSolver`'s answer regardless, and was therefore wrong for
+every `IterativeSolver` pipeline — it was caught by running the analysis against the Phase 1 demo,
+which it incorrectly flagged. Analysis now asks the configured solver for its own ordering.
+
+## What shipped
+
+| Tool | Does |
+|---|---|
+| `analyze_pipeline` | Execution order, cycles, feedback variables, required seeds, recommended solver |
+| `validate_pipeline` | Seven finding types, errors before warnings before info |
+| `explain_pipeline` | Prose description |
+| `render_pipeline_diagram` | XDSM to a file, Agg forced, never displays |
+
+Four resources (architecture doc, known-issues doc, two worked examples) and two prompts
+(`pipeline_from_prose`, `review_pipeline`), both of which route the client through the verify
+loop rather than letting it present unchecked code.
+
+Handler errors come back as `{"ok": false, "error": ...}` rather than protocol errors: a missing
+file is something the agent should read and act on, not an exception that aborts its turn.
+
+## Note on the SDK
+
+`mcp` 2.x renamed `FastMCP` to `MCPServer` (`from mcp.server.mcpserver import MCPServer`). Code or
+documentation written against 1.x will not import. Pinned to `mcp>=2.2.0`.
+
+The extra costs **27 transitive packages** — starlette, uvicorn, cryptography, pydantic — which is
+the whole reason it is an extra. Verified that a base install with the SDK absent still imports
+`smartmdao` and `smartmdao.mcp.handlers`, failing only at `create_server()` with an actionable
+message.
 
 ## Related
 

@@ -47,6 +47,7 @@ pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
 - **Agnostic MDO** — define your `OptimizationProblem` once, then run it through any backend with a single string: `optimize(problem, backend="scipy")` or `backend="openturns"`. Bring your own via `@register_backend`, or drop straight to `PipelineEvaluator` for full control.
 - **Type-Safe** — static validation catches mismatched disciplines before a single step runs; opt-in runtime checks catch the rest.
 - **Built Also for Researchers** — solvers are plain `Protocol` classes, so custom MDA convergence algorithms drop in without touching the core framework.
+- **Inspectable Before You Run It** — `analyze()` and `validate()` report execution order, feedback loops, which variables need an initial guess, and every structural error, without executing a single discipline. Available to coding agents over MCP.
 
 ## 🔄 Convergence Beyond Numbers
 
@@ -218,6 +219,44 @@ pip install smartmdao
 ```
 
 *(Visualization is built in via matplotlib — no extra system packages required.)*
+
+## 🔍 Check a Pipeline Without Running It
+
+Every structural fact about a pipeline — execution order, feedback loops, type-edge mismatches —
+is derivable from signatures and annotations alone. So you can ask, before you run anything:
+
+```python
+from smartmdao import analyze, validate, explain
+
+analysis = analyze(pipeline, inputs=["z1", "z2", "x1"])
+analysis.recommended_solver        # 'HybridSolver'
+analysis.cycles[0].feedback_variables          # ('y1', 'y2')
+analysis.initial_guesses_required              # y2, needed by discipline_1
+
+for finding in validate(pipeline, inputs=["z1", "z2", "x1"]):
+    print(finding)     # ERROR: 'discipline_1' consumes 'y2' before anything produces it...
+
+print(explain(pipeline))   # the whole thing, in prose
+```
+
+`validate()` catches duplicate output names, type mismatches on every edge, missing inputs,
+unseeded feedback variables, and solver misconfiguration — all without executing a single
+discipline.
+
+### As an MCP server
+
+The same analysis is available to a coding agent over MCP, so it can check pipeline code it writes
+instead of guessing:
+
+``` bash
+pip install smartmdao[mcp]
+```
+
+Then point your client at the `smartmdao-mcp` command. It exposes `analyze_pipeline`,
+`validate_pipeline`, `explain_pipeline` and `render_pipeline_diagram`, plus the docs as resources.
+Nothing it does executes a discipline. See
+[the design record](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md)
+for why it verifies rather than writes code for you.
 
 # 📚 Documentation
 
