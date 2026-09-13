@@ -213,6 +213,10 @@ This undercuts one of the four advantages claimed above. "Only the cycle iterate
 of `HybridSolver` in general, but a pipeline that needs oscillation detection cannot currently
 have both.
 
+**Resolved in practice, not in code.** See [Topologies](#topologies-where-the-model-sits) below:
+moving the model out of the cycle avoids the conflict entirely and is the better default anyway.
+The incompatibility remains real for topology A.
+
 ### Step registration order is load-bearing, and failing it is silent
 
 `IterativeSolver` runs steps in registration order. Register the model discipline *before* the
@@ -226,6 +230,63 @@ No error, no warning — a confidently wrong answer. Pinned by
 This is the single strongest argument for [001](001-mcp-connector.md)'s framing: it is exactly
 the class of mistake an agent assembling a pipeline would make, and exactly the class of mistake
 static analysis can catch. It belongs in `validate_pipeline`.
+
+---
+
+# Topologies: where the model sits
+
+The Phase 1 implementation puts the model *inside* the cycle. That is one option of several, and
+it turns out not to be the best default. Naming them makes the tradeoff visible.
+
+| | Model position | Calls per run | Feedback? | Solver |
+|---|---|---|---|---|
+| **A** | Inside the cyclic block | one **per sweep** | yes, per sweep | `IterativeSolver` + `target_var` |
+| **B** | Linear part, upstream of the cycle | **one** | no | `HybridSolver`, fully automatic |
+| **C** | Linear part, downstream of the cycle | **one** | n/a — interprets results | `HybridSolver`, fully automatic |
+| **B+D** | Linear part, plus an outer Python loop | one **per outer iteration** | yes, per full MDA | `HybridSolver` + a `for` loop |
+
+## B+D is the better default
+
+Case 4 of the demo runs it: the model picks a battery chemistry, `HybridSolver` discovers the
+battery↔mass snowball cycle on its own and converges it numerically under that fixed architecture,
+and an outer Python loop feeds violations back. It converges in **two outer iterations — two model
+calls — against 14 numeric sweeps.**
+
+Crucially, B+D sidesteps **all three** of the limitations Phase 1 surfaced:
+
+- **No "give up" problem.** Termination lives in an ordinary `for` loop, so the
+  `ConvergenceChecker` protocol's missing third verdict never arises. Repeat detection is three
+  lines of Python instead of a stateful checker.
+- **No `HybridSolver` conflict.** Nothing needs `target_var`, so automatic SCC detection works
+  fully — the thing that makes SmartMDAO pleasant to use.
+- **No step-order trap.** Execution order inside the pipeline is derived from the graph, not from
+  registration order.
+
+It is also the topology that matches how the use cases in this document actually work. Discrete
+architecture selection, requirements negotiation and optimization self-repair are all
+*decide → evaluate completely → revise* — which is B+D, not A.
+
+## The naming mechanic that makes it work
+
+The model step must consume a parameter named **differently** from the variable the numeric block
+produces — `prior_violations`, not `violations`. Match the names and `build_dependency_graph`
+grows an edge, `HybridSolver` pulls the model into the SCC, and it silently becomes topology A,
+called once per sweep. The cost argument evaporates with no error to warn you.
+
+Pinned by `test_naming_the_input_after_the_output_collapses_it_into_the_cycle`.
+
+## So when is A right?
+
+When the model's contribution is **genuinely coupled** — it must react to intermediate MDA state
+rather than to a converged result. That is a narrower case than this document originally implied,
+and every use case listed above is better served by B+D.
+
+Topology A is not wasted: `OscillationAwareConvergenceChecker` is what makes it survivable at all,
+and the same oscillation failure mode reappears in B+D's outer loop (where it is trivially handled).
+But **A should be the exception, not the starting point.** This document previously implied
+otherwise; that was wrong.
+
+---
 
 ## What remains unproven
 

@@ -89,8 +89,10 @@ Bring your own equatable type — a `dict`, a `set`, a frozen `@dataclass` — a
 > [`docs/design/002-agent-as-discipline.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/design/002-agent-as-discipline.md),
 > and [`scripts/agent_as_discipline_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/agent_as_discipline_demo.py)
 > runs it end to end: a discrete architecture converges in two sweeps, infeasible requirements
-> converge on an explicit "no", and a naive model that oscillates is caught at sweep 4 of 100 by
-> `OscillationAwareConvergenceChecker`.
+> converge on an explicit "no", a naive model that oscillates is caught at sweep 4 of 100 by
+> `OscillationAwareConvergenceChecker`, and — the topology we'd actually recommend — the model sits
+> on the *linear* part of a `HybridSolver` while the numeric cycle converges underneath it, costing
+> one call per outer iteration instead of one per sweep.
 > *The model call in that demo is a deterministic stub* — the convergence machinery is real and
 > tested; wiring it to a live model is future work.
 

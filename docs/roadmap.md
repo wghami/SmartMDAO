@@ -36,18 +36,26 @@ call swaps in later.
       `OscillationDetectedError` with the cycle itself
 - [x] Decided: a discipline must be **total**. "No feasible answer" is an explicit sentinel value;
       returning `None` freezes the previous value and reads as converged
-- [x] `scripts/agent_as_discipline_demo.py` — three scenarios: converges feasible, converges
-      infeasible, oscillates and is caught
-- [x] 25 new tests, 100% coverage held
+- [x] `scripts/agent_as_discipline_demo.py` — four scenarios: converges feasible, converges
+      infeasible, oscillates and is caught, plus the model on the linear part with an outer loop
+- [x] 28 new tests, 100% coverage held
 - [x] Findings recorded in [002](design/002-agent-as-discipline.md)
+- [x] **Topologies compared** — where the model sits turns out to matter more than anything else
+      in this phase
 
 **Exit criterion met.** Case 1 converges in 2 sweeps, Case 2 in 3, Case 3 is caught at sweep 4 of
 100. All three of 002's open questions answered from evidence.
 
-**What it cost us:** three limitations surfaced that were not in the hypothesis — the
+**What it cost us:** four limitations surfaced that were not in the hypothesis — the
 `ConvergenceChecker` protocol has no "give up" verdict, oscillation detection is incompatible with
-`HybridSolver`, and silent premature convergence from step misordering. All three are in
-[known-issues.md](known-issues.md); the third became a Phase 2 requirement.
+`HybridSolver`, silent premature convergence from step misordering, and initial guesses being tied
+to alphabetical step names. All four are in [known-issues.md](known-issues.md); two became Phase 2
+requirements.
+
+**What it changed:** the recommended topology. Putting the model *inside* the cycle — what this
+phase built — is the exception, not the default. Putting it on the **linear part** with an outer
+Python loop costs one model call per outer iteration instead of one per sweep, and avoids three of
+the four limitations above outright. 002 was revised accordingly.
 
 **Still unproven:** everything about *real* model behaviour. The stub converges because it was
 written to. Deferred to Phase 3.
@@ -60,7 +68,9 @@ The verification loop from [001-mcp-connector.md](design/001-mcp-connector.md). 
 a discipline function.
 
 - [ ] `smartmdao/mcp/` package + `[mcp]` extra in `pyproject.toml`, lazy-imported
-- [ ] `analyze_pipeline` — execution order, SCCs, feedback variables, recommended solver and why
+- [ ] `analyze_pipeline` — execution order, SCCs, feedback variables, recommended solver and why,
+      and **which variables each cycle needs an initial guess for** (promoted from a Phase 1
+      finding — it depends on alphabetical step order, which nobody guesses correctly)
 - [ ] `validate_pipeline` — type-edge mismatches, unsatisfiable inputs, duplicate output names,
       orphaned outputs, and **step misordering that causes silent premature convergence**
       (promoted from a Phase 1 finding — see [known-issues.md](known-issues.md))

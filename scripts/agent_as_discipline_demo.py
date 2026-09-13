@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 
 from smartmdao import (
     Pipeline,
+    HybridSolver,
     IterativeSolver,
     OscillationAwareConvergenceChecker,
     OscillationDetectedError,
@@ -172,6 +173,109 @@ def build_pipeline(model_fn, max_iterations: int = 100) -> Pipeline:
     return pipeline
 
 
+# ==============================================================================
+# TOPOLOGY B: the model on the LINEAR part of a HybridSolver
+# ==============================================================================
+# Everything above puts the model INSIDE the cycle, which costs one model call
+# per sweep and forces IterativeSolver + target_var (so HybridSolver's automatic
+# cycle detection is unavailable).
+#
+# Put the model upstream of the cycle instead and HybridSolver runs it exactly
+# ONCE, then converges the numeric block underneath it. Feedback comes from an
+# outer Python loop, where we control termination directly.
+#
+# The numeric block below is a real coupled system: heavier aircraft need more
+# battery, and more battery makes them heavier. That mass-growth loop is the
+# cycle HybridSolver finds on its own.
+# ==============================================================================
+def propose_once(
+    prior_violations: frozenset, architecture_seed: Architecture
+) -> Architecture:
+    """
+    The model discipline, run once per outer iteration.
+
+    NOTE the parameter name: `prior_violations`, NOT `violations`. If it matched
+    the name that `check_mass` produces, the dependency graph would grow an edge,
+    HybridSolver would pull both steps into one SCC, and this would collapse back
+    into Topology A. The rename is what keeps the model on the linear part.
+    """
+    if "mass" in prior_violations and architecture_seed.battery == "li-ion":
+        return replace(architecture_seed, battery="li-s")
+    return architecture_seed
+
+
+def size_battery(
+    total_mass_kg: float, architecture: Architecture, requirements: Requirements
+) -> float:
+    """Battery needed to fly the required range at this mass."""
+    energy_wh = requirements.min_range_km * total_mass_kg * DRAG_FACTOR
+    return energy_wh / SPECIFIC_ENERGY_WH_PER_KG[architecture.battery]
+
+
+def size_airframe(battery_mass_kg: float, architecture: Architecture) -> float:
+    """Total mass, which feeds straight back into `size_battery`. Snowball."""
+    return (
+        STRUCTURE_MASS_KG
+        + battery_mass_kg
+        + MOTOR_MASS_KG * architecture.n_motors
+    )
+
+
+def check_mass(total_mass_kg: float, requirements: Requirements) -> frozenset:
+    return (
+        frozenset({"mass"})
+        if total_mass_kg > requirements.max_mass_kg
+        else frozenset()
+    )
+
+
+def build_layered_pipeline() -> Pipeline:
+    """Model on the linear part; HybridSolver finds the numeric cycle itself."""
+    pipeline = Pipeline(solver=HybridSolver(max_iterations=100, tolerance=1e-6))
+    pipeline.add(propose_once, outputs=["architecture"])
+    pipeline.add(size_battery, outputs=["battery_mass_kg"])
+    pipeline.add(size_airframe, outputs=["total_mass_kg"])
+    pipeline.add(check_mass, outputs=["violations"])
+    return pipeline
+
+
+def run_outer_loop(requirements: Requirements, seed: Architecture, budget: int = 5):
+    """
+    The feedback the model lost by moving out of the cycle - restored as plain
+    Python. Termination is ours to define, so the ConvergenceChecker protocol's
+    missing "give up" verdict simply does not arise, and repeat detection is
+    three lines instead of a stateful checker.
+    """
+    pipeline = build_layered_pipeline()
+    prior, seen, trace = frozenset(), [], []
+
+    for _ in range(budget):
+        result = pipeline.run(
+            prior_violations=prior,
+            architecture_seed=seed,
+            # Initial guess to kick off the mass-growth loop. It has to be
+            # `battery_mass_kg` and not `total_mass_kg`: HybridSolver sorts the
+            # steps in a cyclic block ALPHABETICALLY, so `size_airframe` runs
+            # before `size_battery` and needs its input seeded. Rename the
+            # steps and the variable you must seed changes with them.
+            battery_mass_kg=200.0,
+            requirements=requirements,
+        )
+        architecture = result["architecture"]
+        violations = result["violations"]
+        trace.append((architecture, result["total_mass_kg"], violations))
+
+        if not violations:
+            return trace, "converged"
+        if architecture in seen:
+            return trace, "repeat detected"
+
+        seen.append(architecture)
+        prior, seed = violations, architecture
+
+    return trace, "budget exhausted"
+
+
 def describe(architecture: Architecture) -> str:
     if architecture.infeasible:
         return "INFEASIBLE (no architecture satisfies these requirements)"
@@ -237,6 +341,26 @@ def run_agent_as_discipline_demo():
             print(f"    - {describe(architecture)}")
         print("  -> Without detection this burns all 100 sweeps. Each sweep is a")
         print("     model call, so this is the difference between 4 calls and 100.")
+
+    # ==========================================================================
+    # CASE 4: the model on the LINEAR part, with an outer feedback loop
+    # ==========================================================================
+    print("\n=== CASE 4: model on the linear part of a HybridSolver ===")
+    requirements = Requirements(min_range_km=400.0, max_mass_kg=1000.0)
+    trace, outcome = run_outer_loop(
+        requirements, seed=Architecture(n_motors=2, battery="li-ion")
+    )
+
+    for attempt, (architecture, mass, violations) in enumerate(trace, start=1):
+        print(
+            f"  outer {attempt}: {describe(architecture):24s} "
+            f"mass {mass:6.0f} kg  violations={set(violations) or '{}'}"
+        )
+    print(f"  outcome    : {outcome}")
+    print(f"  model calls: {len(trace)}  (one per outer iteration, not per sweep)")
+    print("  -> HybridSolver found the battery/mass snowball cycle by itself and")
+    print("     converged it numerically under a fixed architecture. No target_var,")
+    print("     no oscillation checker, no hand-ordered steps.")
 
 
 if __name__ == "__main__":

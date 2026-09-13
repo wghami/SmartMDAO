@@ -41,7 +41,7 @@ graph — it is specific to hand-ordered `IterativeSolver` use.
 
 ---
 
-## 🔴 Oscillation detection cannot be combined with `HybridSolver`
+## 🟡 Oscillation detection cannot be combined with `HybridSolver`
 
 `OscillationAwareConvergenceChecker` is stateful and needs `distance()` called exactly once per
 iteration. That only holds when `IterativeSolver(target_var=...)` is set; otherwise the residual is
@@ -53,9 +53,34 @@ a `set` in arbitrary order, and one history cannot separate those interleaved ca
 automatic cycle detection and oscillation detection. See
 [002-agent-as-discipline.md](design/002-agent-as-discipline.md).
 
+*Severity downgraded* from blocking: there is a clean way around it. Keeping the model on the
+*linear* part of the pipeline and driving feedback from an outer Python loop avoids `target_var`
+altogether, works with `HybridSolver`'s automatic cycle detection, and costs one model call per
+outer iteration instead of one per sweep. See the Topologies section of
+[002-agent-as-discipline.md](design/002-agent-as-discipline.md); Case 4 of the demo runs it.
+
 *Fix direction:* let `HybridSolver` accept and forward `target_var`, or give the checker the
 variable name. The latter means widening the `ConvergenceChecker` protocol, which is a bigger
 change than it first appears.
+
+---
+
+## 🟡 Which variable needs an initial guess depends on step *names*
+
+`HybridSolver` sorts the steps inside a cyclic block alphabetically for deterministic execution
+([solvers.py:241](../smartmdao/solvers.py:241)). The alphabetically-first step therefore runs
+first, and whichever of its inputs the cycle has not produced yet must be supplied to `run()` as
+an initial guess.
+
+The consequence is surprising: **renaming a step can change which variable you have to seed**, and
+getting it wrong is a `KeyError` from deep inside the solve rather than an up-front complaint. In
+the demo's mass-growth loop, `size_airframe` sorts before `size_battery`, so the guess must be
+`battery_mass_kg` — not the `total_mass_kg` you would reach for by intuition. Widening a cycle
+widens the set of variables needing seeds, for the same reason.
+
+*Fix direction:* a natural target for `analyze_pipeline` in Phase 2 — "this cycle needs an initial
+guess for X" is exactly the sort of thing static analysis can state up front, and it is derivable
+without executing anything.
 
 ---
 
