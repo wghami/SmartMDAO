@@ -20,7 +20,12 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from .graph import ExecutionBlock, build_execution_plan, map_producers
+from .graph import (
+    ExecutionBlock,
+    build_execution_plan,
+    map_producers,
+    weakly_connected_components,
+)
 from .models import Step
 from .solvers import (
     DAGSolver,
@@ -303,6 +308,57 @@ def _check_type_edges(steps: List[Step], checker: TypeChecker) -> List[Finding]:
     return findings
 
 
+def _check_connectivity(steps: List[Step]) -> List[Finding]:
+    """
+    Whether every discipline is wired to the rest of the pipeline.
+
+    A model whose dependency graph falls into separate pieces has a discipline
+    connected to nothing - which means part of it cannot influence the answer,
+    however well the rest converges. That failure is invisible at run time: the
+    pipeline is valid, it converges, the arithmetic is right, and the result
+    quietly ignores whole inputs.
+
+    Deliberately *not* a general "orphaned output" check. Every healthy pipeline
+    has terminal outputs - objective, constraints - so flagging unused variables
+    on their own would fire on almost everything. It is the *disconnection* that
+    is diagnostic; the dangling outputs are reported as supporting detail.
+    """
+    groups = weakly_connected_components(steps)
+    if len(groups) < 2:
+        return []
+
+    consumed = {name for step in steps for name in _step_inputs(step)}
+
+    # Every piece is described, and none is designated "the real pipeline".
+    # Picking one - by size, say - is arbitrary the moment the pieces are
+    # comparable, and the engineer is better placed to say which was intended.
+    described = []
+    for group in groups:
+        names = [step.name for step in group]
+        dangling = sorted(
+            name
+            for step in group
+            for name in step.resolve_output_names()
+            if name not in consumed
+        )
+        detail = f" -> {dangling} consumed by nothing" if dangling else ""
+        described.append(f"{names}{detail}")
+
+    return [
+        Finding(
+            code="disconnected-graph",
+            severity=WARNING,
+            message=(
+                f"The pipeline falls into {len(groups)} disconnected pieces, so "
+                f"nothing computed in one can affect another: "
+                f"{'; '.join(described)}. This usually means a discipline was "
+                f"never wired in - its inputs will have no influence on the "
+                f"result, however well the rest converges."
+            ),
+        )
+    ]
+
+
 def _check_missing_inputs(
     steps: List[Step], input_keys: Set[str]
 ) -> List[Finding]:
@@ -541,6 +597,7 @@ def validate(
 
     findings: List[Finding] = []
     findings.extend(_check_duplicate_outputs(steps))
+    findings.extend(_check_connectivity(steps))
     findings.extend(_check_type_edges(steps, checker))
     findings.extend(_check_missing_inputs(steps, input_keys))
     findings.extend(

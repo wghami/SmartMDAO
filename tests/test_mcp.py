@@ -481,6 +481,7 @@ def test_server_registers_every_tool_resource_and_prompt():
     tools, resources, prompts = asyncio.run(collect())
 
     assert set(tools) == {
+        "smartmdao_cookbook",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",
@@ -530,6 +531,7 @@ def test_server_surfaces_handler_errors_as_normal_results(tmp_path):
 @pytest.mark.parametrize(
     "tool,extra",
     [
+        ("smartmdao_cookbook", {"_no_path": True}),
         ("analyze_pipeline", {}),
         ("validate_pipeline", {}),
         ("explain_pipeline", {}),
@@ -544,7 +546,10 @@ def test_every_tool_is_callable_through_the_protocol(sellar_file, tmp_path, tool
     if "output_path" in extra:
         extra["output_path"] = str(tmp_path / extra["output_path"])
 
-    arguments = {"path": str(sellar_file), "inputs": ["z1", "x1", "y2"], **extra}
+    if extra.pop("_no_path", False):
+        arguments = {}          # the cookbook takes no pipeline
+    else:
+        arguments = {"path": str(sellar_file), "inputs": ["z1", "x1", "y2"], **extra}
     result = asyncio.run(create_server().call_tool(tool, arguments))
 
     assert result.is_error is False
@@ -612,3 +617,69 @@ def test_unknown_attribute_still_raises():
 
     with pytest.raises(AttributeError, match="no attribute 'nonsense'"):
         mcp_package.nonsense
+
+
+# --- declared inputs, recovered from the source ------------------------------
+
+def test_declared_inputs_from_direct_keywords(tmp_path):
+    from smartmdao.mcp.loader import declared_inputs
+
+    path = write(tmp_path, "direct.py", SELLAR + "\npipeline.run(z1=1.0, y2=2.0)\n")
+    assert declared_inputs(path) == ("y2", "z1")
+
+
+def test_declared_inputs_from_a_splatted_dict_literal(tmp_path):
+    """The shape the repository's own benchmarks use."""
+    from smartmdao.mcp.loader import declared_inputs
+
+    source = SELLAR + '\ninputs = {"z1": 1.0, "x1": 0.0, "y2": 1.0}\npipeline.run(**inputs)\n'
+    assert declared_inputs(write(tmp_path, "splat.py", source)) == ("x1", "y2", "z1")
+
+
+def test_declared_inputs_ignores_what_it_cannot_see(tmp_path):
+    """Dynamic construction narrows the guessing; it does not eliminate it."""
+    from smartmdao.mcp.loader import declared_inputs
+
+    source = SELLAR + "\ninputs = dict(z1=1.0)\npipeline.run(**inputs)\n"
+    assert declared_inputs(write(tmp_path, "dynamic.py", source)) == ()
+
+
+def test_a_loaded_pipeline_carries_its_declared_inputs(sellar_file):
+    loaded = load_pipeline(sellar_file)
+    assert loaded.declared_inputs == ()          # this fixture never calls run()
+
+
+def test_the_seed_a_file_already_passes_is_not_reported_as_missing(tmp_path):
+    """The false positive that prompted this.
+
+    An agent called validate with the design variables and forgot the cycle's
+    seed. The tool then flagged as missing precisely what the agent forgot to
+    mention - and reported a working file as broken.
+    """
+    source = SELLAR + '\ninputs = {"z1": 1.0, "x1": 0.0, "y2": 1.0}\npipeline.run(**inputs)\n'
+    path = write(tmp_path, "seeded.py", source)
+
+    report = validate_pipeline(str(path), inputs=["z1", "x1"])
+
+    assert report["valid"] is True
+    assert report["findings"] == []
+    assert report["inputs_used"] == {
+        "requested": ["z1", "x1"],
+        "found_in_source": ["y2"],
+    }
+
+
+def test_inputs_found_in_source_are_reported_separately(tmp_path):
+    """Provenance, so the agent can say where a value came from."""
+    source = SELLAR + '\npipeline.run(z1=1.0, x1=0.0, y2=1.0)\n'
+    path = write(tmp_path, "provenance.py", source)
+
+    result = analyze_pipeline(str(path))
+    assert result["inputs_used"]["requested"] == []
+    assert set(result["inputs_used"]["found_in_source"]) == {"z1", "x1", "y2"}
+
+
+def test_explain_reports_provenance_too(tmp_path):
+    source = SELLAR + '\npipeline.run(z1=1.0, x1=0.0, y2=1.0)\n'
+    result = explain_pipeline(str(write(tmp_path, "explained.py", source)))
+    assert "y2" in result["inputs_used"]["found_in_source"]

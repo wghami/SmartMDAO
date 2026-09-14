@@ -1,6 +1,6 @@
 [project]
 name = "SmartMDAO"
-version = "1.10.0"
+version = "1.12.0"
 description = "Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -50,6 +50,12 @@ dev = [
     # dragged in 14 packages (a debugger, a Jupyter kernel, ZeroMQ, Tornado).
     "ipykernel>=7.1.0",
 ]
+
+# The cookbook is served by the MCP `smartmdao_cookbook` tool, so it has to
+# travel in the wheel - not just live in the repo. Without this, an installed
+# user gets the tool and none of the content.
+[tool.hatch.build.targets.wheel.force-include]
+"docs/cookbook.md" = "smartmdao/mcp/cookbook.md"
 
 [build-system]
 requires = ["hatchling"]

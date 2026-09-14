@@ -4,7 +4,7 @@ A step-by-step walkthrough for checking that everything works — and, more usef
 *what* it does. Each step says what to run, what you should see, and **what it proves**. Nothing
 here assumes you have read the rest of the documentation.
 
-Roughly 20 minutes end to end. Steps 1–4 need nothing but the repository. Steps 5–7 connect the
+Roughly 25 minutes end to end. Steps 1–4 need nothing but the repository. Steps 5–7 connect the
 MCP server to a coding agent.
 
 > Every command is written to be copy-pasted from the repository root.
@@ -20,7 +20,7 @@ uv sync
 This creates `.venv/` and installs the project plus its development dependencies, including both
 optional extras (`openturns`, `mcp`) so the full suite can run.
 
-**You should see** a list of installed packages ending with `smartmdao==1.10.0`.
+**You should see** a list of installed packages ending with `smartmdao==1.12.0`.
 
 **What it proves:** nothing yet — but note what is *not* there. A base install pulls only h5py,
 matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
@@ -33,7 +33,7 @@ matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
 uv run pytest
 ```
 
-**You should see** `273 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `318 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -161,7 +161,7 @@ p.terminate()
 "
 ```
 
-**You should see** exactly `{'name': 'smartmdao', 'version': '1.10.0'}`.
+**You should see** exactly `{'name': 'smartmdao', 'version': '1.12.0'}`.
 
 **What it proves:** the console entry point works. This exact handshake runs in the test suite
 (`tests/test_mcp_stdio.py`), so it cannot silently rot.
@@ -176,7 +176,7 @@ p.terminate()
 claude mcp add smartmdao -- uv run --directory /absolute/path/to/SmartMDAO smartmdao-mcp
 ```
 
-Then in a session, `/mcp` should list `smartmdao` as connected with 4 tools.
+Then in a session, `/mcp` should list `smartmdao` as connected with 5 tools.
 
 ### Any client that takes a JSON config
 
@@ -194,8 +194,64 @@ Then in a session, `/mcp` should list `smartmdao` as connected with 4 tools.
 If SmartMDAO is installed into an environment already on your `PATH`, the command is simply
 `smartmdao-mcp` with no arguments.
 
-**What it proves:** the agent can now read pipeline structure. It could always *write* SmartMDAO
-code; what it could not do is see that the code it wrote closed a feedback loop.
+**What it proves:** the agent can now read pipeline structure, *and* it can look up the API before
+writing code. It could always write plausible SmartMDAO code; what it could not do is check that
+the code it wrote uses functions that exist and forms the graph it intended.
+
+---
+
+## Step 6b — Updating a server you have already added
+
+Worth knowing, because "I changed the code and the agent still sees the old behaviour" is a
+confusing five minutes.
+
+**In most cases you do not need to re-add anything.** The server is a subprocess that your client
+spawns fresh, so how you added it decides what "update" means:
+
+| How you added it | To pick up changes |
+|---|---|
+| `uv run --directory /path/to/SmartMDAO smartmdao-mcp` | **Nothing.** `uv run` re-resolves the checkout each launch — just start a new session |
+| `pip install smartmdao[mcp]` into a fixed environment | `pip install -U smartmdao[mcp]`, then start a new session |
+| Anything | **Start a new session.** A running client keeps the old subprocess alive |
+
+Documentation content — what `smartmdao_cookbook` returns — is read from disk *per call*, so in a
+checkout even that needs no restart.
+
+**To inspect, change or remove the registration itself:**
+
+``` bash
+claude mcp list              # what is configured, and whether it is connecting
+claude mcp get smartmdao     # the exact command, args and scope
+claude mcp remove smartmdao  # drop it
+```
+
+To change the command — a different checkout, or moving from a checkout to an installed package —
+remove and re-add; there is no in-place edit:
+
+``` bash
+claude mcp remove smartmdao
+claude mcp add smartmdao -- uv run --directory /new/path smartmdao-mcp
+```
+
+`claude mcp add` also takes `-s/--scope` (`local`, `user` or `project`). If you added it once at
+`local` scope and again at `user` scope, you will have two entries — `claude mcp list` is how you
+find out.
+
+**Verify the update landed** by asking the server its version, which is read from the installed
+package:
+
+``` bash
+uv run python -c "
+import json, subprocess
+p = subprocess.Popen(['smartmdao-mcp'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+p.stdin.write(json.dumps({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2026-07-28','capabilities':{},'clientInfo':{'name':'manual','version':'0'}}})+'\n'); p.stdin.flush()
+print(json.loads(p.stdout.readline())['result']['serverInfo'])
+p.terminate()
+"
+```
+
+If the version printed is not the one you expect, the client is talking to a different install than
+the one you just changed — check `claude mcp get smartmdao` for the actual command.
 
 ---
 
@@ -237,6 +293,46 @@ edge to every consumer of that variable.
 
 **What it proves:** the loop that matters. The agent writes, the tools verify, the agent fixes —
 and the verification is arithmetic on a graph, not the model's opinion.
+
+### 7d. The mistake this catches that nothing else would
+
+Run this directly — it is the most instructive single command in the guide:
+
+``` bash
+uv run python -c "
+from smartmdao.mcp import validate_pipeline
+r = validate_pipeline('tests/fixtures/wing_mda_disconnected.py')
+for f in r['findings']: print(f\"[{f['severity']}] {f['code']}\n  {f['message']}\")
+"
+```
+
+That fixture is **verbatim output from a coding agent** asked for exactly the wing model in step 7b.
+It is structurally valid, it converges, its arithmetic is right — and its answer is the same for a
+48 m wing at walking pace as for the original, because `compute_lift` consumes span, chord and speed
+and produces a value *nothing reads*. The mass loop underneath is closed on itself.
+
+```
+[warning] disconnected-graph
+  The pipeline falls into 2 disconnected pieces, so nothing computed in one can
+  affect another: ['compute_lift'] -> ['lift'] consumed by nothing; [...]
+```
+
+**What it proves, and its limit.** Static analysis cannot tell you whether your physics is right.
+It *can* tell you a discipline is wired to nothing — which is the difference between "the tools
+can't check engineering" as an excuse and as an accurate, narrow statement.
+
+### A note on `inputs`
+
+You will see `inputs_used` in every response:
+
+```
+"inputs_used": {"requested": ["z1", "z2", "x1"], "found_in_source": ["y2"]}
+```
+
+The tools read the `run(...)` call in your file and merge what they find with whatever you asked
+for. This exists because an agent once declared the design variables, forgot the cycle's seed, and
+was told the seed was missing — so it reported a *working* file as broken and offered to patch it.
+`found_in_source` is how you tell "the file already supplies this" from "you told me about this".
 
 ---
 
@@ -287,16 +383,19 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 273 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
+| `pytest` reports fewer than 318 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
+| You changed the code but the agent behaves as before | Step 6b — start a new session; the old subprocess is still running |
+| A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read |
 | A diagram command hangs | You called `visualize()` directly in a headless shell; pass `view=False`. The MCP path forces this already |
 
 ---
 
 ## Where to go next
 
+- [cookbook.md](cookbook.md) — how to actually write pipelines; every snippet is executed by the suite
 - [handoff.md](handoff.md) — what "done" means here, and the traps that have already cost time
 - [003](design/003-determinism-and-the-engineer-in-the-loop.md) — *why* the project is built this
   way: determinism, traceability, and giving the engineer enough information to decide
