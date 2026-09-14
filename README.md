@@ -274,6 +274,10 @@ Then point your client at the `smartmdao-mcp` command. It exposes `analyze_pipel
 `validate_pipeline`, `explain_pipeline` and `render_pipeline_diagram`, plus the docs as resources.
 It finds your pipeline either as a module-level `Pipeline`, or by calling a factory annotated
 `-> Pipeline` — it never calls a function speculatively to see what comes back.
+
+It also exposes `smartmdao_cookbook`, which the server's instructions tell the agent to call
+*before* writing any SmartMDAO code — so generated pipelines use the real API rather than a
+plausible-looking one.
 Nothing it does executes a discipline. See
 [the design record](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md)
 for why it verifies rather than writes code for you.
@@ -287,6 +291,7 @@ Design records and internals reference live in
 
 - **[Architecture](https://github.com/wghami/SmartMDAO/blob/main/docs/architecture.md)** — how the library works internally: the execution path, `Step` introspection, the graph layer, `HybridSolver`'s SCC decomposition, and the optimizer bridge.
 - **[Roadmap](https://github.com/wghami/SmartMDAO/blob/main/docs/roadmap.md)** — what's planned, phase by phase, with exit criteria.
+- **[Cookbook](https://github.com/wghami/SmartMDAO/blob/main/docs/cookbook.md)** — task-indexed guidance: solvers, feedback loops, caching, optimization, and the mistakes that fail silently. Every snippet is executed by the test suite.
 - **[Testing guide](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md)** — try everything yourself, step by step, including what the tools deliberately will not do.
 - **[Known issues](https://github.com/wghami/SmartMDAO/blob/main/docs/known-issues.md)** — sharp edges, each with a severity and a fix direction. Worth a look before filing a bug; several are deliberate.
 - **[Design records](https://github.com/wghami/SmartMDAO/tree/main/docs/design)** — why things are the way they are, including the in-progress design for an [MCP connector](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md) that lets a coding agent analyze and verify SmartMDAO pipelines.

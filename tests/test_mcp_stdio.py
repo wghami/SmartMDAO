@@ -97,6 +97,7 @@ def test_server_starts_and_identifies_itself(client):
 def test_tools_are_listed_over_the_protocol(client):
     tools = client.request(2, "tools/list")["result"]["tools"]
     assert {tool["name"] for tool in tools} == {
+        "smartmdao_cookbook",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",

@@ -14,6 +14,7 @@ anyone's way until they actually run a server.
 See docs/design/001-mcp-connector.md for why this server verifies rather than
 authors.
 """
+from .authoring import cookbook, topics
 from .handlers import (
     analyze_pipeline,
     explain_pipeline,
@@ -24,6 +25,8 @@ from .loader import LoadedPipeline, PipelineLoadError, load_pipeline
 from .rendering import render_xdsm
 
 __all__ = [
+    "cookbook",
+    "topics",
     "analyze_pipeline",
     "validate_pipeline",
     "explain_pipeline",

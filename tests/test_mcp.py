@@ -481,6 +481,7 @@ def test_server_registers_every_tool_resource_and_prompt():
     tools, resources, prompts = asyncio.run(collect())
 
     assert set(tools) == {
+        "smartmdao_cookbook",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",
@@ -530,6 +531,7 @@ def test_server_surfaces_handler_errors_as_normal_results(tmp_path):
 @pytest.mark.parametrize(
     "tool,extra",
     [
+        ("smartmdao_cookbook", {"_no_path": True}),
         ("analyze_pipeline", {}),
         ("validate_pipeline", {}),
         ("explain_pipeline", {}),
@@ -544,7 +546,10 @@ def test_every_tool_is_callable_through_the_protocol(sellar_file, tmp_path, tool
     if "output_path" in extra:
         extra["output_path"] = str(tmp_path / extra["output_path"])
 
-    arguments = {"path": str(sellar_file), "inputs": ["z1", "x1", "y2"], **extra}
+    if extra.pop("_no_path", False):
+        arguments = {}          # the cookbook takes no pipeline
+    else:
+        arguments = {"path": str(sellar_file), "inputs": ["z1", "x1", "y2"], **extra}
     result = asyncio.run(create_server().call_tool(tool, arguments))
 
     assert result.is_error is False

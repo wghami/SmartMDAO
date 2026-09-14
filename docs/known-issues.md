@@ -48,6 +48,27 @@ factory annotated `-> Pipeline` and callable with no arguments. See
 
 ---
 
+## ✅ RESOLVED in 1.11.0 — an agent had no reliable way to learn the API
+
+The MCP server exposed two example scripts as *resources* and the `pipeline_from_prose` prompt
+mentioned none of them. Since MCP resources must be explicitly fetched and many clients never
+surface them, the practical grounding available to a coding agent was the README — which covers a
+fraction of the API. Generated code was plausible against functions that do not exist.
+
+**Fixed** by serving guidance as a **tool** rather than a resource (`smartmdao_cookbook`), because
+tools get called and resources get ignored; by naming it in the server `instructions`, which are
+always in context and are what actually drives the call; and by writing
+[cookbook.md](cookbook.md), whose every snippet is executed by `tests/test_cookbook.py`.
+
+Three tests keep it honest: every snippet runs, every referenced script exists, and every name in
+`smartmdao.__all__` is covered. The last one immediately found 11 exported names with no guidance
+at all.
+
+`AGENTS.md` (symlinked as `CLAUDE.md`) covers agents working in the repository rather than through
+MCP.
+
+---
+
 ## 🟡 No way to run a pipeline cheaply, or to know what running it will cost
 
 An engineer will ask the agent to run the model. Refusing is not available to us: the agent has a

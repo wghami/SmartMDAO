@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.10.0:** `main` is clean. 273 tests, 100% coverage, 24/24 scripts passing.
+**State as of v1.11.0:** `main` is clean. 298 tests, 100% coverage, 24/24 scripts passing.
 Roadmap Phases 0–2.5 are merged. **Phase 3 is next, and blocked on a decision** (below).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
@@ -88,7 +88,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 273 tests, 100% coverage
+uv run pytest                        # 298 tests, 100% coverage
 uv run python run_all.py             # 24 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg

@@ -12,6 +12,13 @@ examples — lives in the [top-level README](../README.md) and the runnable scri
 > this project is built the way it is: determinism, traceability, and giving the engineer enough
 > information to decide rather than deciding for them.
 
+## Writing SmartMDAO code?
+
+**[cookbook.md](cookbook.md)** is the task-indexed guide — solvers, feedback loops, caching,
+optimization, and the mistakes that fail silently. Every snippet in it is executed by the test
+suite, so it cannot quietly become wrong. Coding agents get the same content from the
+`smartmdao_cookbook` MCP tool; agents working in-tree should read [AGENTS.md](../AGENTS.md).
+
 ## Want to try it rather than read about it?
 
 **[testing.md](testing.md)** is a step-by-step walkthrough: set up, run the suite, watch the
