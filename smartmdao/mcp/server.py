@@ -39,6 +39,16 @@ HybridSolver's for the same steps.
 """
 
 
+def _version() -> str:
+    """The installed package version, reported to the client in `serverInfo`."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("smartmdao")
+    except PackageNotFoundError:        # pragma: no cover - running from a checkout
+        return "0.0.0+unknown"
+
+
 def _read(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -61,7 +71,7 @@ def create_server(name: str = "smartmdao"):
             "Install it with: pip install smartmdao[mcp]"
         ) from error
 
-    server = MCPServer(name=name, instructions=INSTRUCTIONS)
+    server = MCPServer(name=name, version=_version(), instructions=INSTRUCTIONS)
 
     # ----- Tools -------------------------------------------------------------
 

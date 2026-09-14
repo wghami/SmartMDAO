@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–2.5 complete and merged to `main`. **Phase 3 is next**, and blocked
 on a decision about the execution model.
-**Baseline:** `v1.10.0` — 269 tests, 100% coverage, 24/24 scripts.
+**Baseline:** `v1.10.0` — 273 tests, 100% coverage, 24/24 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
