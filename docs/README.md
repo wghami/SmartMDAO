@@ -12,6 +12,13 @@ examples — lives in the [top-level README](../README.md) and the runnable scri
 > this project is built the way it is: determinism, traceability, and giving the engineer enough
 > information to decide rather than deciding for them.
 
+## Want to try it rather than read about it?
+
+**[testing.md](testing.md)** is a step-by-step walkthrough: set up, run the suite, watch the
+analysis catch a feedback loop nobody declared, connect the server to a coding agent, and — just
+as important — see what it deliberately cannot do. Each step says what to run, what you should
+see, and what it proves. About 20 minutes.
+
 ## Start here if you prefer running things
 
 Each design record has a runnable counterpart in [`scripts/`](../scripts). They print what they
