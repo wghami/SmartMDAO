@@ -416,6 +416,13 @@ never evaluated. `HybridSolver` derives order from the graph and avoids this ent
 
 **6. `@cached` functions are keyword-only.** `f(1.0)` raises; `f(x=1.0)` works.
 
+**7. A discipline wired to nothing is invisible at run time.** If your graph falls into separate
+pieces, part of the pipeline cannot influence the result — and it will still converge, with correct
+arithmetic, quietly ignoring whole inputs. This is the single most expensive mistake in this list
+because everything *looks* fine. `validate()` reports it as `disconnected-graph`. It is a real
+mistake made by a real agent asked for a wing model: it computed lift from span, chord and speed,
+never compared it to the required lift, and returned a mass that was the same for any wing.
+
 **Deeper:** [known-issues.md](known-issues.md),
 [`adapt_external_functions_with_same_name.py`](../scripts/adapt_external_functions_with_same_name.py),
 [`basic_ml_orchestrator.py`](../scripts/basic_ml_orchestrator.py)

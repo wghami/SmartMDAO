@@ -39,7 +39,11 @@ validate(pipeline, inputs=["span", "speed"])    # every structural problem at on
 
 Neither executes a discipline. Both are cheap. Run them.
 
-### Four traps that produce a wrong answer rather than an error
+**Write generated models in the user's own working directory, not `scripts/`.** That folder holds
+curated examples and `run_all.py` executes every file in it, so a model dropped there joins the
+project's test surface.
+
+### Five traps that produce a wrong answer rather than an error
 
 1. **Duplicate output names overwrite silently.** Last registered wins; the earlier step still runs
    and its result is discarded.
@@ -49,6 +53,9 @@ Neither executes a discipline. Both are cheap. Run them.
    that as *converged*. A discipline must be total: return an explicit sentinel for "no answer".
 4. **`IterativeSolver` ignores the dependency graph**, sweeping in registration order. Prefer
    `HybridSolver` unless you specifically want manual control.
+5. **A discipline wired to nothing still converges.** If the graph falls into separate pieces, part
+   of the pipeline cannot affect the answer and nothing fails. `validate()` reports it as
+   `disconnected-graph` — the most expensive mistake here, because everything looks fine.
 
 Full list with detail: [`docs/known-issues.md`](docs/known-issues.md).
 

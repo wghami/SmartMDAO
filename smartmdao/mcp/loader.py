@@ -16,6 +16,7 @@ moves execution into a subprocess with a timeout; until then this is a local,
 stdio-only tool operating on files the user already has on disk, which the
 coding agent driving it could equally well have run itself.
 """
+import ast
 import importlib.util
 import inspect
 import sys
@@ -23,7 +24,7 @@ import typing
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from ..core import Pipeline
 
@@ -57,6 +58,61 @@ class LoadedPipeline:
     #: invoked to produce it. Recorded because how a pipeline was obtained is
     #: part of what the engineer needs to know - see docs/design/003.
     source: str = "variable"
+    #: Variable names the file itself passes to `run()`, recovered from the
+    #: source without executing it. See `declared_inputs`.
+    declared_inputs: Tuple[str, ...] = ()
+
+
+def declared_inputs(path) -> Tuple[str, ...]:
+    """
+    The variable names a script passes to `pipeline.run(...)`, read statically.
+
+    Without this, a caller has to *guess* what the file supplies - and an agent
+    that guesses the design variables but forgets the cycle's initial guess gets
+    told the seed is missing, which is exactly the thing it forgot to mention.
+    The tool then reports a working file as broken. Reading what the file
+    already says removes the guess.
+
+    Two shapes are recognised, covering how people actually write it:
+
+        pipeline.run(z1=1.0, y2=1.0)
+        inputs = {"z1": 1.0, "y2": 1.0}; pipeline.run(**inputs)
+
+    Anything dynamic is simply not found; this narrows the guessing, it does not
+    eliminate it. Pure AST work - nothing is imported or executed.
+    """
+    try:
+        tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):          # pragma: no cover - load_pipeline catches first
+        return ()
+
+    literals: Dict[str, Set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            keys = {
+                key.value
+                for key in node.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    literals[target.id] = keys
+
+    found: Set[str] = set()
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+        ):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg is not None:
+                found.add(keyword.arg)
+            elif isinstance(keyword.value, ast.Name):
+                found |= literals.get(keyword.value.id, set())
+
+    return tuple(sorted(found))
 
 
 def _pipeline_variables(module) -> List[str]:
@@ -199,6 +255,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
 
     instances = _pipeline_variables(module)
     factories = _pipeline_factories(module)
+    declared = declared_inputs(resolved)
 
     # --- Explicitly named -----------------------------------------------------
     if variable is not None:
@@ -206,7 +263,11 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
 
         if isinstance(found, Pipeline):
             return LoadedPipeline(
-                pipeline=found, variable=variable, path=resolved, source="variable"
+                pipeline=found,
+                variable=variable,
+                path=resolved,
+                source="variable",
+                declared_inputs=declared,
             )
 
         if callable(found) and not inspect.isclass(found):
@@ -225,6 +286,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                     variable=variable,
                     path=resolved,
                     source="factory",
+                    declared_inputs=declared,
                 )
 
             # Not annotated as a factory. Honour the caller's choice only if it
@@ -237,6 +299,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                     variable=variable,
                     path=resolved,
                     source="factory",
+                    declared_inputs=declared,
                 )
 
         raise PipelineLoadError(
@@ -253,6 +316,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
             variable=instances[0],
             path=resolved,
             source="variable",
+            declared_inputs=declared,
         )
 
     if not instances and len(ready) == 1:
@@ -261,6 +325,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
             variable=ready[0].name,
             path=resolved,
             source="factory",
+            declared_inputs=declared,
         )
 
     if not instances and not factories:
