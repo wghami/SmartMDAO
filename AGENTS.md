@@ -39,6 +39,10 @@ validate(pipeline, inputs=["span", "speed"])    # every structural problem at on
 
 Neither executes a discipline. Both are cheap. Run them.
 
+**If you translate or refactor a pipeline, prove it with `compare_runs`.** Two convergence criteria
+that look equivalent can settle in different places and both report success — a translation that
+quietly changes the answer is worse than none, because it looks cleaner and gets trusted.
+
 **To run it, prefer `run_pipeline` over a shell.** It enforces a wall clock, returns typed results,
 and survives a discipline that crashes. It defaults to one sweep, which proves the code executes
 and measures the unit cost — quote that to the engineer before asking for a full run.

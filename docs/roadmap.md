@@ -3,8 +3,8 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–2.5 complete and merged to `main`. **Phase 3 is next**, and blocked
-on a decision about the execution model.
+**Current position:** Phases 0–3 complete and merged to `main`. **Phase 4 (ASP) is next**, with
+three of its four design questions now settled in [003](design/003-determinism-and-the-engineer-in-the-loop.md).
 **Baseline:** `v1.12.0` — 318 tests, 100% coverage, 24/24 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -154,7 +154,7 @@ every shape that is not says exactly why.
 
 ---
 
-## Phase 3 — Execution as a cost ladder 🟡
+## Phase 3 — Execution as a cost ladder ✅
 
 Reframed. The original plan was a flat `run_pipeline` / `optimize` / `sweep`, justified by
 sandboxing. Two things changed that — see [001](design/001-mcp-connector.md):
@@ -175,13 +175,18 @@ thing to ask someone to consent to blindly.
 - [x] Literal input values recovered from the file, so `run_pipeline(path)` behaves the way
       running the script does
 - [x] [`scripts/cost_ladder_demo.py`](../scripts/cost_ladder_demo.py)
-- [ ] **`compare_runs`** — same inputs, two pipelines, diff the state. The thing that makes a
-      translation from hand-written code trustworthy. **Deferred to Phase 4**
+- [x] **`compare_runs`** — same inputs, two pipelines, diff the state. The thing that makes a
+      translation from hand-written code trustworthy
 - [ ] `optimize` / `sweep` — deferred until someone asks for them
 
-**Exit criterion partly met.** An engineer is told what a run will cost before it starts, and a
-non-converging pipeline is killed by timeout and reported as such. Checking a translation against
-its original (`compare_runs`) is deferred.
+**Exit criterion met.** An engineer is told what a run will cost before it starts, a non-converging
+pipeline is killed by timeout and reported as such, and a translation can be checked against its
+original.
+
+`compare_runs` earns its place on one demonstration: two translations of the same model, differing
+only in which variable the solver watches, **both reporting `converged: True`** — and one answer
+95% out. Nothing that reads structure can catch that, because both files are perfectly well-formed.
+See [`scripts/translation_drift_demo.py`](../scripts/translation_drift_demo.py).
 
 **The safety claim, restated once more because it keeps wanting to creep back.** The subprocess
 buys a hard kill, typed results and crash isolation. It does **not** buy safety: the agent has a
@@ -202,9 +207,14 @@ That program — not the model — becomes the discipline: deterministic at run 
 diffable, version-controlled. It targets the gap gradient-based MDO cannot reach (discrete
 architectural choice) while satisfying the reproducibility and traceability this audience requires.
 
-Open before anything is built: where the program lives, how far the symbolic/numeric discretisation
-is declared, how answer-set multiplicity is pinned, and whether this belongs in this repository at
-all. `clingo` is one package with zero transitive dependencies.
+**Settled** in [003](design/003-determinism-and-the-engineer-in-the-loop.md): it ships as an
+optional `[asp]` extra in this repository; the generated program lives in a **separate, reviewable
+`.lp` file** (the program is the artifact an engineer reviews, so it has to be diffable); and the
+symbolic/numeric discretisation is a **declared, validated object** rather than glue code, because
+that is where the hypotheses hide.
+
+**Still open:** a settled name for the concept, and how answer-set multiplicity is pinned in
+practice.
 
 **This supersedes MCP sampling.** The library never calls a model.
 

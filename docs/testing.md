@@ -20,7 +20,7 @@ uv sync
 This creates `.venv/` and installs the project plus its development dependencies, including both
 optional extras (`openturns`, `mcp`) so the full suite can run.
 
-**You should see** a list of installed packages ending with `smartmdao==1.13.0`.
+**You should see** a list of installed packages ending with `smartmdao==1.14.0`.
 
 **What it proves:** nothing yet — but note what is *not* there. A base install pulls only h5py,
 matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
@@ -33,7 +33,7 @@ matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
 uv run pytest
 ```
 
-**You should see** `361 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `386 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -57,7 +57,7 @@ a label.
 uv run python run_all.py
 ```
 
-**You should see** `25 scripts`, all `✅ Pass`, and a final status report.
+**You should see** `26 scripts`, all `✅ Pass`, and a final status report.
 
 **What it proves:** the examples are not decoration. They run in CI, and a change that breaks one
 fails the build. It also means any of them can be read *and executed* to check a claim.
@@ -161,7 +161,7 @@ p.terminate()
 "
 ```
 
-**You should see** exactly `{'name': 'smartmdao', 'version': '1.13.0'}`.
+**You should see** exactly `{'name': 'smartmdao', 'version': '1.14.0'}`.
 
 **What it proves:** the console entry point works. This exact handshake runs in the test suite
 (`tests/test_mcp_stdio.py`), so it cannot silently rot.
@@ -218,7 +218,7 @@ So typing `/` and seeing only:
 /smartmdao:pipeline_from_prose (MCP)
 ```
 
-is **correct and complete** — those are the only two prompts. The six tools are deliberately absent
+is **correct and complete** — those are the only two prompts. The seven tools are deliberately absent
 from that list, because you do not invoke them; the model does.
 
 **Three ways to see the tools:**
@@ -427,6 +427,34 @@ Expect a smoke run first, a quoted estimate, and only then a full run.
 
 ---
 
+## Step 7f — The one check nothing else can do
+
+``` bash
+uv run python scripts/translation_drift_demo.py
+```
+
+Two translations of one model. Identical disciplines, identical physics, identical inputs — the
+only difference is which variable the solver watches to decide it has finished.
+
+```
+faithful : converged=True  after  1 sweeps
+idiomatic: converged=True  after 78 sweeps
+
+y1   faithful = 0.500000
+     idiomatic = 9.817911
+     relative  = 94.9%
+```
+
+**Both report success.** Neither raises. Neither is structurally invalid — `validate()` is clean on
+both. A reviewer reading either file finds nothing wrong.
+
+**What it proves:** every other tool in this connector reads structure, and structure is identical
+here. Only running both and diffing the answers reveals that a translation changed the result. That
+is why `compare_runs` exists, and why it is a better argument for execution tooling than "run my
+pipeline".
+
+---
+
 ## Step 8 — Understand what it cannot do
 
 Being clear about limits is the point, not an apology. Run:
@@ -467,8 +495,9 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 - **`run_pipeline` does execute your code** — that one is not analysis. It runs in a child process
   under a wall clock, which buys a hard kill and crash isolation, **not** safety. Your agent has a
   shell either way; what this changes is that the run is bounded and the result is typed.
-- **Nothing here compares two pipelines.** Checking that a translation of hand-written code still
-  gives the same answer (`compare_runs`) is designed but not built.
+- **`compare_runs` compares answers, not intent.** It tells you two pipelines disagree; it cannot
+  tell you which one is right. That is still the engineer's call — the point is that the choice is
+  now made with the difference in front of you.
 
 ---
 
@@ -476,7 +505,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 361 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
+| `pytest` reports fewer than 386 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

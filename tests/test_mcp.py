@@ -483,6 +483,7 @@ def test_server_registers_every_tool_resource_and_prompt():
     assert set(tools) == {
         "smartmdao_cookbook",
         "run_pipeline",
+        "compare_runs",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",
@@ -534,6 +535,7 @@ def test_server_surfaces_handler_errors_as_normal_results(tmp_path):
     [
         ("smartmdao_cookbook", {"_no_path": True}),
         ("run_pipeline", {"_no_inputs": True}),
+        ("compare_runs", {"_two_paths": True}),
         ("analyze_pipeline", {}),
         ("validate_pipeline", {}),
         ("explain_pipeline", {}),
@@ -550,6 +552,13 @@ def test_every_tool_is_callable_through_the_protocol(sellar_file, tmp_path, tool
 
     if extra.pop("_no_path", False):
         arguments = {}          # the cookbook takes no pipeline
+    elif extra.pop("_two_paths", False):
+        # compare_runs takes two pipelines; the same file twice must match.
+        arguments = {
+            "path_a": str(sellar_file),
+            "path_b": str(sellar_file),
+            "inputs": {"z1": 1.0, "x1": 0.0, "y2": 1.0},
+        }
     elif extra.pop("_no_inputs", False):
         # run_pipeline takes a dict of VALUES, not a list of names - and this
         # fixture never calls run(), so nothing is recoverable from its source.

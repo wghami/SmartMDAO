@@ -100,7 +100,7 @@ accident.
 
 ---
 
-## 🟡 A translated pipeline can silently change the answer
+## ✅ RESOLVED in 1.14.0 — a translated pipeline could silently change the answer
 
 Converting hand-written code to SmartMDAO is a stated use case, and the risk is semantic drift that
 nothing detects. The README's own "without SmartMDAO" example is the illustration:
@@ -118,12 +118,19 @@ relaxation, and may diverge where the original converged.
 A translation that quietly changes the answer is worse than no translation: it looks cleaner, so it
 gets trusted.
 
-*Fix direction:* an equivalence check — run original and translation on the same inputs, diff the
-state. This is a better justification for execution tooling than a generic `run_pipeline`, because
-it is the one thing neither the agent nor static analysis can do alone. Whether a translation
-should be *faithful* (preserve the original's exact convergence semantics) or *idiomatic* (use
-`HybridSolver`, accept small numerical differences) is the engineer's explicit choice, per
-[003](design/003-determinism-and-the-engineer-in-the-loop.md).
+**Fixed** by `compare_runs`: both pipelines, the same inputs, a diff of the resulting state.
+Numbers compare within a tolerance so a different iteration count is absorbed; anything non-numeric
+compares exactly, because there is no "nearly" for a frozenset of decisions. A different
+*destination* counts too — close numbers are not a match when one side never converged.
+
+Demonstrated on exactly the drift described above: two translations differing only in which
+variable the solver watches, **both reporting `converged: True`**, with one answer 95% out. Nothing
+that reads structure could catch it, because both files are perfectly well-formed.
+
+Whether a translation should be *faithful* (preserve the original's convergence semantics) or
+*idiomatic* (use the default and accept small numerical differences) remains the engineer's
+explicit choice, per [003](design/003-determinism-and-the-engineer-in-the-loop.md) — but now it is
+a choice made with the difference in front of them.
 
 ---
 

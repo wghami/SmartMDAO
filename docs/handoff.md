@@ -3,8 +3,8 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.13.0:** `main` is clean. 361 tests, 100% coverage, 25/25 scripts passing.
-Roadmap Phases 0–3 are merged, bar the deferred `compare_runs`.
+**State as of v1.14.0:** `main` is clean. 386 tests, 100% coverage, 26/26 scripts passing.
+Roadmap Phases 0–3 are complete and merged. Phase 4 (ASP) is next.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -75,7 +75,7 @@ not the same as checking it.
 uv run python run_all.py
 ```
 
-It runs every script in `scripts/` and fails on any non-zero exit. **25/25 currently.** A script
+It runs every script in `scripts/` and fails on any non-zero exit. **26/26 currently.** A script
 that depends on an optional extra must *skip cleanly* (exit 0 with an explanatory message), not
 fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_mdo_openturns.py).
 
@@ -88,8 +88,8 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 361 tests, 100% coverage
-uv run python run_all.py             # 25 scripts
+uv run pytest                        # 386 tests, 100% coverage
+uv run python run_all.py             # 26 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -157,15 +157,21 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 
 Not bugs — judgement calls left deliberately to the maintainer.
 
-1. **Whether to build `compare_runs`** — run two pipelines on the same inputs and diff the state.
-   It is what makes a hand-written-to-SmartMDAO translation trustworthy, and the one thing neither
-   the agent nor static analysis can do alone. Deferred from Phase 3, not rejected.
+1. **A settled name for an "ASP-backed discipline"** — provisional throughout
+   [003](design/003-determinism-and-the-engineer-in-the-loop.md).
 
-2. **Where the ASP layer lives** ([003](design/003-determinism-and-the-engineer-in-the-loop.md)) —
-   this repository or a companion package. The dependency is trivial (`clingo` is one package with
-   no transitive deps); the concern is what is distinct.
+2. **How answer-set multiplicity gets pinned** in practice. An optimisation statement plus a
+   total tie-break is the shape; what enforces it, and what `validate()` says when more than one
+   optimal model exists, is undesigned.
 
 ### Settled
+
+- ~~Whether to build `compare_runs`~~ — built in **1.14.0**. Two translations differing only in
+  their convergence criterion both reported success while one answer was 95% out; nothing that
+  reads structure could have caught it.
+- ~~Where the ASP layer lives, what form the program takes, how far the discretisation is
+  declared~~ — all three settled in **003**: an `[asp]` extra here, a separate reviewable `.lp`
+  file, and a declared validated discretisation layer.
 
 - ~~Phase 3's execution model~~ — settled and built in **1.13.0**: subprocess, mandatory wall
   clock, `smoke` rung by default. **Do not repeat the original safety framing**: the subprocess

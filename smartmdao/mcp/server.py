@@ -40,6 +40,11 @@ Those four read signatures, annotations and the dependency graph. No discipline
 is called and no pipeline is run, so they are free and fast - and cannot tell
 you whether the physics is right.
 
+IF YOU TRANSLATE OR REFACTOR a pipeline, prove it still behaves the same with
+`compare_runs`. Two convergence criteria that look equivalent can settle in
+different places and both report success - only running both and diffing shows
+it.
+
 TO RUN ONE, use `run_pipeline` rather than a shell. It enforces a wall clock,
 returns typed results instead of scraped stdout, and survives a discipline that
 crashes. It defaults to rung='smoke': one sweep, which proves the code executes
@@ -184,6 +189,31 @@ def create_server(name: str = "smartmdao"):
     ) -> dict:
         return handlers.run_pipeline(
             path, inputs, variable, rung, budget_sweeps, timeout_seconds
+        )
+
+    @server.tool(
+        description=(
+            "Run TWO SmartMDAO pipelines on the SAME inputs and report where "
+            "their answers disagree. Use this whenever you have translated or "
+            "refactored a pipeline and need to show the behaviour is unchanged "
+            "- a conversion that quietly returns a different number is worse "
+            "than none, because it looks cleaner and gets trusted. Defaults to "
+            "rung='full', since comparing two single sweeps says little."
+        )
+    )
+    def compare_runs(
+        path_a: str,
+        path_b: str,
+        inputs: Optional[Dict[str, Any]] = None,
+        variable_a: Optional[str] = None,
+        variable_b: Optional[str] = None,
+        rung: str = "full",
+        budget_sweeps: int = 25,
+        timeout_seconds: float = 60.0,
+    ) -> dict:
+        return handlers.compare_runs(
+            path_a, path_b, inputs, variable_a, variable_b,
+            rung, budget_sweeps, timeout_seconds,
         )
 
     # ----- Resources ---------------------------------------------------------
