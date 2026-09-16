@@ -152,17 +152,50 @@ Concrete rules this record imposes on anything built here:
 4. **Report what actually happened, including failure.** An abandoned solve returns its trace. A
    non-converged run says so. A finding that was suppressed says it was suppressed.
 
-## Open questions
+## Decisions
+
+Settled before any code, so the first file written does not decide them by default.
+
+### The layer ships as an optional `[asp]` extra in this repository
+
+Mirroring `[mcp]` and `[openturns]`, which are working. `clingo` is one package with **zero
+transitive dependencies** — cheaper than anything removed in 1.7.0 and 1.8.0 — so the install cost
+of keeping it here is negligible, and one repository means one CI and one version.
+
+A companion package was the alternative, and its argument is real: ASP-backed disciplines are a
+different concern from MDAO orchestration. It was rejected on cost — two repositories to keep
+version-compatible for a library this size, which is the same reasoning that kept the MCP connector
+here in [001](001-mcp-connector.md).
+
+### The program lives in a separate, reviewable `.lp` file
+
+**The program is the artifact an engineer reviews.** That is the entire mechanism by which this
+direction earns determinism, so it has to be a first-class file: diffable, version-controlled,
+legible to someone who does not read Python.
+
+Inline would keep a discipline in one place, and it was rejected precisely because it is easier —
+rules buried in a string literal are rules nobody reviews, which is exactly how a hypothesis hides.
+Risk 3 below says the authoring step is still untrusted; this decision is what makes review
+practical rather than nominal.
+
+### The discretisation layer is declared and validated
+
+Risk 1 below is the sharpest in this document, so the bridge is not glue code. Thresholds like
+`mass_kg = 880 → mass(heavy)` become a **declared, inspectable object** that `validate()` reports
+on, alongside every other structural finding.
+
+Plain Python with documentation was the cheaper option and was rejected: it leaves the thresholds
+in helper functions, which is the status quo we identified as the risk. A perfectly reviewed ASP
+program sitting on an unreviewed mapping is not traceable, and the mapping is where the answer is
+actually decided.
+
+## Still open
 
 - **Naming.** "ASP-backed discipline" is provisional and used throughout this document for want of
   a settled term.
-- **Where the program lives.** Inline in the Python file, or a separate `.lp` reviewed and
-  version-controlled on its own? The second is better for review and diffing; the first keeps a
-  discipline in one place.
-- **How far the discretisation is declared.** A thin declarative mapping covers thresholds, but not
-  every bridge is a threshold.
-- **Whether the ASP layer belongs in this repository at all**, or in a companion package that
-  depends on it. The dependency is cheap, but the concern is distinct.
+- **How answer-set multiplicity is pinned** in practice — an optimisation statement plus a total
+  tie-break is the shape, but what enforces it, and what `validate()` says when more than one
+  optimal model exists, is undesigned.
 
 ## Related
 

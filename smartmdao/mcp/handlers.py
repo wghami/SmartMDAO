@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from ..analysis import analyze, explain, validate
 from ._runner import DEFAULT_BUDGET_SWEEPS, SMOKE
 from .loader import _UNRESOLVED
+from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, compare_runs as _compare_runs
 from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
 from .loader import PipelineLoadError, declared_input_map, load_pipeline
 from .rendering import render_xdsm
@@ -242,3 +243,33 @@ def run_pipeline(
             "if the run failed for want of them."
         )
     return result
+
+
+def compare_runs(
+    path_a: str,
+    path_b: str,
+    inputs: Optional[Dict[str, Any]] = None,
+    variable_a: Optional[str] = None,
+    variable_b: Optional[str] = None,
+    rung: str = "full",
+    budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
+    """
+    Runs two pipelines on the same inputs and reports where they disagree.
+
+    Built for translation. A converted pipeline that quietly returns a different
+    number is worse than no conversion, because it looks cleaner and gets
+    trusted. Neither the agent nor static analysis can catch that; only running
+    both and comparing can.
+    """
+    return _compare_runs(
+        path_a=path_a,
+        path_b=path_b,
+        inputs=inputs,
+        variable_a=variable_a,
+        variable_b=variable_b,
+        rung=rung,
+        budget_sweeps=budget_sweeps,
+        timeout_seconds=timeout_seconds,
+    )

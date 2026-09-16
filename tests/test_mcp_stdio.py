@@ -99,6 +99,7 @@ def test_tools_are_listed_over_the_protocol(client):
     assert {tool["name"] for tool in tools} == {
         "smartmdao_cookbook",
         "run_pipeline",
+        "compare_runs",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",
