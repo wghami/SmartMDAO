@@ -240,3 +240,84 @@ def test_the_handler_delegates(faithful):
     from smartmdao.mcp.handlers import compare_runs as handler
 
     assert handler(str(faithful), str(faithful))["match"] is True
+
+
+# --- the real README loop, which is what the equivalence demo rests on --------
+
+README_LOOP = '''
+import math
+from smartmdao import Pipeline
+pipeline = Pipeline()
+
+@pipeline.step(outputs=["y1", "y2"])
+def original_loop(z1: float, z2: float, x1: float, y2_guess: float) -> tuple:
+    y2 = y2_guess
+    for _ in range(100):
+        y1 = z1 ** 2 + z2 + x1 - 0.2 * y2
+        y2_next = math.sqrt(abs(y1)) + z1 + z2
+        if abs(y2_next - y2) < 1e-6:
+            break
+        y2 = y2_next
+    return y1, y2
+'''
+
+README_TRANSLATION = '''
+import math
+from smartmdao import Pipeline, HybridSolver
+pipeline = Pipeline(solver=HybridSolver(max_iterations=100, tolerance=1e-6))
+
+@pipeline.step(outputs=["y1"])
+def discipline_1(z1: float, z2: float, x1: float, y2: float) -> float:
+    return z1 ** 2 + z2 + x1 - 0.2 * y2
+
+@pipeline.step(outputs=["y2"])
+def discipline_2(z1: float, z2: float, y1: float) -> float:
+    return math.sqrt(abs(y1)) + z1 + z2
+'''
+
+SELLAR_INPUTS = {"z1": 1.9776, "z2": 0.0, "x1": 0.0, "y2": 1.0, "y2_guess": 1.0}
+
+
+@pytest.fixture
+def readme_pair(tmp_path):
+    original = tmp_path / "original.py"
+    original.write_text(README_LOOP)
+    translated = tmp_path / "translated.py"
+    translated.write_text(README_TRANSLATION)
+    return original, translated
+
+
+def test_the_readme_translation_matches_at_a_sensible_tolerance(readme_pair):
+    """Pins the headline claim of scripts/translation_equivalence_demo.py."""
+    original, translated = readme_pair
+    result = compare_runs(str(original), str(translated), inputs=SELLAR_INPUTS)
+
+    assert result["match"] is True
+    assert result["identical"] == 6
+
+
+def test_a_tighter_tolerance_exposes_a_real_semantic_difference(readme_pair):
+    """The hand-written loop `break`s BEFORE `y2 = y2_next`.
+
+    So it returns the *previous* y2, never the one that satisfied its own test.
+    That is not rounding - it is a behavioural difference of about 2e-8, which
+    sits below any sensible tolerance and is therefore a judgement call rather
+    than a bug. The tolerance is where that judgement lives.
+    """
+    from smartmdao.mcp.execution import run_in_subprocess
+
+    original, translated = readme_pair
+    states = [
+        run_in_subprocess(str(path), inputs=SELLAR_INPUTS, rung="full")["state"]
+        for path in (original, translated)
+    ]
+
+    strict = diff_states(states[0], states[1], rtol=1e-12, atol=1e-15)
+
+    assert strict["match"] is False
+    difference = next(d for d in strict["differences"] if d["variable"] == "y2")
+    assert difference["a"] < difference["b"]          # the stale value is smaller
+    assert 1e-9 < difference["relative"] < 1e-6       # real, and tiny
+
+    # y1 is untouched by the quirk.
+    assert "y1" not in [d["variable"] for d in strict["differences"]]

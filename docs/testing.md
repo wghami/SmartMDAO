@@ -33,7 +33,7 @@ matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
 uv run pytest
 ```
 
-**You should see** `386 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `388 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -57,7 +57,7 @@ a label.
 uv run python run_all.py
 ```
 
-**You should see** `26 scripts`, all `✅ Pass`, and a final status report.
+**You should see** `27 scripts`, all `✅ Pass`, and a final status report.
 
 **What it proves:** the examples are not decoration. They run in CI, and a change that breaks one
 fails the build. It also means any of them can be read *and executed* to check a claim.
@@ -453,6 +453,19 @@ here. Only running both and diffing the answers reveals that a translation chang
 is why `compare_runs` exists, and why it is a better argument for execution tooling than "run my
 pipeline".
 
+For the **workflow** rather than the failure mode — including how to compare against code that is
+not a pipeline at all — run:
+
+``` bash
+uv run python scripts/translation_equivalence_demo.py
+```
+
+It takes this project's own README loop, wraps it as a one-step pipeline, and compares it to the
+translated version. They agree at a sensible tolerance; tighten it and a genuine difference appears,
+because the hand-written loop `break`s *before* assigning `y2 = y2_next` and so returns the previous
+value. About 2e-8 — real, tiny, and a judgement call rather than a bug. **Your tolerance is where
+that judgement lives.**
+
 ---
 
 ## Step 8 — Understand what it cannot do
@@ -505,7 +518,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 386 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
+| `pytest` reports fewer than 389 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

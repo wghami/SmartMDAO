@@ -416,7 +416,12 @@ never evaluated. `HybridSolver` derives order from the graph and avoids this ent
 
 **6. `@cached` functions are keyword-only.** `f(1.0)` raises; `f(x=1.0)` works.
 
-**7. A discipline wired to nothing is invisible at run time.** If your graph falls into separate
+**7. A translation can converge on a different rule than the original.** A hand-written loop that
+tests one variable is not the same as a solver testing all of them, even though both "converge".
+Set `target_var` to be faithful, or accept the difference knowingly — and prove which you got with
+`compare_runs`. See [`scripts/translation_equivalence_demo.py`](../scripts/translation_equivalence_demo.py).
+
+**8. A discipline wired to nothing is invisible at run time.** If your graph falls into separate
 pieces, part of the pipeline cannot influence the result — and it will still converge, with correct
 arithmetic, quietly ignoring whole inputs. This is the single most expensive mistake in this list
 because everything *looks* fine. `validate()` reports it as `disconnected-graph`. It is a real

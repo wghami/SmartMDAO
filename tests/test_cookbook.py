@@ -193,3 +193,32 @@ def test_the_cookbook_resolves_wherever_it_is_installed():
         f"cookbook not found at {authoring.COOKBOOK_PATH}; check the "
         "force-include in pyproject.toml"
     )
+
+
+# --- documentation counts, which go stale silently ---------------------------
+
+def test_the_documented_counts_match_reality():
+    """Three PRs in a row left `roadmap.md`'s baseline saying v1.12.0.
+
+    Prose goes stale without anything failing, so the numbers people read are
+    asserted here: a stale count now breaks the build instead of misleading a
+    reader.
+    """
+    import re
+    from importlib.metadata import version
+
+    installed = version("smartmdao")
+    script_count = len(list((REPO / "scripts").glob("*.py")))
+
+    for name in ("roadmap.md", "handoff.md"):
+        text = (REPO / "docs" / name).read_text()
+        claimed = re.findall(r"v(\d+\.\d+\.\d+)", text)
+        stale = {v for v in claimed if v != installed}
+        # Historical references ("moved in 1.7.0") are prose, not claims about
+        # now; only the `v`-prefixed baseline/state lines are checked.
+        assert not stale, f"{name} claims version(s) {sorted(stale)}, installed is {installed}"
+
+        for count in re.findall(r"(\d+)/(\d+) scripts", text):
+            assert int(count[0]) == script_count, (
+                f"{name} says {count[0]}/{count[1]} scripts; there are {script_count}"
+            )
