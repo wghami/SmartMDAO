@@ -176,7 +176,8 @@ p.terminate()
 claude mcp add smartmdao -- uv run --directory /absolute/path/to/SmartMDAO smartmdao-mcp
 ```
 
-Then in a session, `/mcp` should list `smartmdao` as connected with 6 tools.
+Then in a session, `/mcp` should show `smartmdao` connected. To see what it offers — and
+why the tools do *not* appear as slash commands — see Step 6a.
 
 ### Any client that takes a JSON config
 
@@ -197,6 +198,55 @@ If SmartMDAO is installed into an environment already on your `PATH`, the comman
 **What it proves:** the agent can now read pipeline structure, *and* it can look up the API before
 writing code. It could always write plausible SmartMDAO code; what it could not do is check that
 the code it wrote uses functions that exist and forms the graph it intended.
+
+---
+
+## Step 6a — Seeing what the server offers (tools are not slash commands)
+
+A server exposes three different things, and only one of them shows up when you type `/`:
+
+| | What it is | How you reach it |
+|---|---|---|
+| **Tools** | Functions the **model** decides to call | Never a slash command |
+| **Prompts** | Templates **you** trigger | `/smartmdao:pipeline_from_prose` |
+| **Resources** | Documents the model can read | Fetched by the client |
+
+So typing `/` and seeing only:
+
+```
+/smartmdao:review_pipeline (MCP)
+/smartmdao:pipeline_from_prose (MCP)
+```
+
+is **correct and complete** — those are the only two prompts. The six tools are deliberately absent
+from that list, because you do not invoke them; the model does.
+
+**Three ways to see the tools:**
+
+1. **Press Enter on `/mcp` itself.** That opens the MCP panel, where you select `smartmdao` and
+   view its tools, resources and prompts. Typing `/mcp` only filters the slash-command menu, which
+   is what shows prompts.
+2. **Ask the agent** — simplest and most reliable:
+   > What smartmdao tools do you have available?
+3. **Interrogate the server directly**, which also tells you the version it is running:
+
+``` bash
+uv run python -c "
+import json, subprocess
+p = subprocess.Popen(['smartmdao-mcp'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+def rpc(i, m, params=None):
+    p.stdin.write(json.dumps({'jsonrpc':'2.0','id':i,'method':m,'params':params or {}})+'\n'); p.stdin.flush()
+    return json.loads(p.stdout.readline())
+print(rpc(1,'initialize',{'protocolVersion':'2026-07-28','capabilities':{},'clientInfo':{'name':'c','version':'0'}})['result']['serverInfo'])
+p.stdin.write(json.dumps({'jsonrpc':'2.0','method':'notifications/initialized','params':{}})+'\n'); p.stdin.flush()
+print('tools  :', [t['name'] for t in rpc(2,'tools/list')['result']['tools']])
+print('prompts:', [x['name'] for x in rpc(3,'prompts/list')['result']['prompts']])
+p.terminate()
+"
+```
+
+**A quick way to tell whether your session is stale:** ask the agent if it has `smartmdao_cookbook`.
+If it does not, it connected before that tool existed — see Step 6b.
 
 ---
 
@@ -430,6 +480,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
+| Typing `/` shows only two smartmdao entries | Correct — those are prompts. Tools are never slash commands; see Step 6a |
 | You changed the code but the agent behaves as before | Step 6b — start a new session; the old subprocess is still running |
 | A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read |
 | A run is killed at 60s | That is the wall clock. Try `rung="smoke"` to see the unit cost, then raise `timeout_seconds` deliberately |
