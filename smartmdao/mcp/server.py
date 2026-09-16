@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from . import handlers
+from . import authoring, handlers
 
 logger = logging.getLogger(__name__)
 
@@ -20,22 +20,31 @@ _DOCS = Path(__file__).resolve().parents[2] / "docs"
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 
 INSTRUCTIONS = """\
-Static analysis for SmartMDAO pipelines.
+Authoring help and static analysis for SmartMDAO pipelines.
 
-Use these tools to check pipeline code you have written or been given. They
-read signatures, type annotations and the dependency graph - no discipline
-function is ever called, and no pipeline is ever run.
+BEFORE WRITING ANY SmartMDAO CODE, call `smartmdao_cookbook`. The library's
+README covers a fraction of the API, so writing from recollection produces
+plausible code against functions that do not exist. The cookbook is generated
+from the installed version and every snippet in it is executed by the test
+suite. Pass a topic (solvers, feedback-loops, convergence, non-numeric, types,
+caching, optimization, analysis, visualization, pitfalls) for detail.
 
-Recommended loop when authoring a pipeline:
-  1. analyze_pipeline  - see the execution order, feedback loops, and which
-                         variables need an initial guess
-  2. validate_pipeline - get every structural problem at once
+AFTER WRITING IT, verify before presenting it:
+  1. analyze_pipeline  - execution order, feedback loops, and which variables
+                         need an initial guess
+  2. validate_pipeline - every structural problem at once
   3. fix, repeat
-  4. render_pipeline_diagram - produce an XDSM for a human to look at
+  4. render_pipeline_diagram - an XDSM for a human to look at
 
-Note that analysis is solver-aware: IterativeSolver runs steps in registration
-order and ignores the dependency graph, so its answers differ from
-HybridSolver's for the same steps.
+These read signatures, annotations and the dependency graph. No discipline
+function is ever called and no pipeline is ever run, so they are safe and fast
+- and cannot tell you whether the physics is right.
+
+Two things that catch people out, both covered in the cookbook's `pitfalls`:
+analysis is solver-aware (IterativeSolver ignores the dependency graph and
+sweeps in registration order, so its answers differ from HybridSolver's for the
+same steps), and which variable needs an initial guess depends on the
+alphabetical order of step names. Ask rather than guess.
 """
 
 
@@ -74,6 +83,19 @@ def create_server(name: str = "smartmdao"):
     server = MCPServer(name=name, version=_version(), instructions=INSTRUCTIONS)
 
     # ----- Tools -------------------------------------------------------------
+
+    @server.tool(
+        description=(
+            "Authoring guidance for SmartMDAO: how to define pipelines, choose "
+            "a solver, seed feedback loops, cache expensive disciplines, run an "
+            "optimizer, and which mistakes fail silently. CALL THIS BEFORE "
+            "WRITING SmartMDAO CODE - it reflects the installed version, and "
+            "every snippet in it is executed by the test suite. Omit `topic` "
+            "for the essentials plus the full list of public names."
+        )
+    )
+    def smartmdao_cookbook(topic: Optional[str] = None) -> dict:
+        return authoring.cookbook(topic)
 
     @server.tool(
         description=(

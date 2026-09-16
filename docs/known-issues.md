@@ -48,6 +48,27 @@ factory annotated `-> Pipeline` and callable with no arguments. See
 
 ---
 
+## ✅ RESOLVED in 1.11.0 — an agent had no reliable way to learn the API
+
+The MCP server exposed two example scripts as *resources* and the `pipeline_from_prose` prompt
+mentioned none of them. Since MCP resources must be explicitly fetched and many clients never
+surface them, the practical grounding available to a coding agent was the README — which covers a
+fraction of the API. Generated code was plausible against functions that do not exist.
+
+**Fixed** by serving guidance as a **tool** rather than a resource (`smartmdao_cookbook`), because
+tools get called and resources get ignored; by naming it in the server `instructions`, which are
+always in context and are what actually drives the call; and by writing
+[cookbook.md](cookbook.md), whose every snippet is executed by `tests/test_cookbook.py`.
+
+Three tests keep it honest: every snippet runs, every referenced script exists, and every name in
+`smartmdao.__all__` is covered. The last one immediately found 11 exported names with no guidance
+at all.
+
+`AGENTS.md` (symlinked as `CLAUDE.md`) covers agents working in the repository rather than through
+MCP.
+
+---
+
 ## 🟡 No way to run a pipeline cheaply, or to know what running it will cost
 
 An engineer will ask the agent to run the model. Refusing is not available to us: the agent has a
@@ -98,6 +119,49 @@ it is the one thing neither the agent nor static analysis can do alone. Whether 
 should be *faithful* (preserve the original's exact convergence semantics) or *idiomatic* (use
 `HybridSolver`, accept small numerical differences) is the engineer's explicit choice, per
 [003](design/003-determinism-and-the-engineer-in-the-loop.md).
+
+---
+
+## ✅ RESOLVED in 1.12.0 — a disconnected discipline was invisible
+
+Found in real use. A coding agent asked for a wing sized from span, chord and speed produced a
+pipeline that **validated clean, converged, and whose arithmetic was correct** — and whose answer
+did not depend on span, chord or speed at all. `compute_lift` consumed them and produced `lift`,
+which nothing read; the mass loop underneath was closed on itself.
+
+The graph was in two disconnected pieces. Nothing reported it.
+
+**Fixed** by `disconnected-graph` (warning): if the dependency graph falls into more than one
+weakly-connected piece, every piece is named along with the outputs nothing consumes. Measured
+against all nine loadable pipelines in `scripts/`: **nine clean, and it isolates the bad one.**
+
+Deliberately *not* a general "orphaned output" check — every healthy pipeline has terminal outputs
+(`objective`, `constraint_1`), so flagging unused variables alone would fire on almost everything.
+The *disconnection* is what is diagnostic. The original Phase 2 plan had it the other way round;
+see the correction in [roadmap.md](roadmap.md).
+
+The file is kept verbatim as `tests/fixtures/wing_mda_disconnected.py`.
+
+---
+
+## ✅ RESOLVED in 1.12.0 — a seed the file already passed was reported as missing
+
+Also found in real use, and worse: the tool reported a **working file as broken**.
+
+An agent called `analyze_pipeline` on `scripts/sellar_benchmark_mda.py` with
+`inputs=["z1","z2","x1"]`. The script already passes `y2=1.0`, but the agent had to *guess* what
+the file supplies, guessed the design variables, and omitted the seed — so the tool flagged as
+missing precisely the thing the agent forgot to mention. The agent then reported the pipeline as
+invalid and offered to patch a file that was fine.
+
+Circular: you had to know the answer to ask the question correctly.
+
+**Fixed** by reading the file's own `run()` call statically (AST, nothing executed) and merging
+those names with the caller's. Handles `run(z1=..., y2=...)` and the
+`inputs = {...}; run(**inputs)` shape the benchmarks use. The response reports `inputs_used` split
+into `requested` and `found_in_source`, so the agent can say *where* a value came from rather than
+asserting. Dynamic construction is still invisible — this narrows the guessing, it does not
+eliminate it.
 
 ---
 

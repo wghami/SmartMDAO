@@ -81,6 +81,55 @@ def build_dependency_graph(steps: List[Step], input_keys: Set[str], producers_ma
     return adj_list, indegree
 
 
+def weakly_connected_components(steps: List[Step]) -> List[Tuple[Step, ...]]:
+    """
+    Groups steps that share a variable, directly or transitively.
+
+    Direction is ignored - two steps are in the same group if a value flows
+    between them either way. A well-formed pipeline is a single group: every
+    discipline is wired, however indirectly, to every other.
+
+    More than one group means a discipline is connected to nothing else, which
+    in a model almost always means it was never wired in. The symptom is a
+    pipeline that converges, whose arithmetic is right, and whose answer does
+    not depend on half its inputs.
+
+    Groups are returned largest first, each ordered by registration.
+    """
+    parent: Dict[object, object] = {}
+
+    def find(item):
+        parent.setdefault(item, item)
+        while parent[item] is not item:
+            parent[item] = parent[parent[item]]
+            item = parent[item]
+        return item
+
+    def union(left, right):
+        left_root, right_root = find(left), find(right)
+        if left_root is not right_root:
+            parent[left_root] = right_root
+
+    for step in steps:
+        find(step)
+        touched = list(step.get_signature().parameters) + list(
+            step.resolve_output_names()
+        )
+        for name in touched:
+            # Variables are keyed separately from steps so a shared name joins
+            # its producer and every consumer into one group.
+            union(step, ("variable", name))
+
+    grouped: Dict[object, List[Step]] = {}
+    for step in steps:
+        grouped.setdefault(find(step), []).append(step)
+
+    return sorted(
+        (tuple(group) for group in grouped.values()),
+        key=lambda group: (-len(group), group[0].name),
+    )
+
+
 @dataclass(frozen=True)
 class ExecutionBlock:
     """

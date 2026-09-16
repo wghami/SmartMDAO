@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–2.5 complete and merged to `main`. **Phase 3 is next**, and blocked
 on a decision about the execution model.
-**Baseline:** `v1.10.0` — 273 tests, 100% coverage, 24/24 scripts.
+**Baseline:** `v1.12.0` — 318 tests, 100% coverage, 24/24 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -75,6 +75,7 @@ a discipline function.
 - [x] `analyze_pipeline` — execution order, SCCs, feedback variables, recommended solver, and
       which variables need an initial guess
 - [x] `validate_pipeline` — seven finding types, worst first
+- [ ] ~~orphaned outputs~~ — **planned, then dropped without saying so.** See the correction below
 - [x] `render_pipeline_diagram` — Agg forced, `view=False`
 - [x] `explain_pipeline` — prose description
 - [x] Resources: architecture doc, known-issues doc, two worked examples
@@ -94,6 +95,20 @@ discipline ever called.
 with the MCP server as a thin adapter. The SCC decomposition was extracted out of `HybridSolver`
 into `graph.build_execution_plan` so analysis and execution share one code path instead of
 drifting.
+
+**Correction (1.12.0).** The Phase 2 plan listed *orphaned outputs* as a `validate_pipeline`
+check. It was never implemented, and the line was rewritten as "seven finding types" in the same
+commit that marked the phase complete — so the record showed a finished phase and no trace of the
+dropped item. `git log -S"orphaned outputs"` shows it entering in `ef53747` and leaving in
+`b9cd492`.
+
+It surfaced when a coding agent produced a wing model that validated clean, converged, and whose
+answer ignored three of its five inputs because one discipline was wired to nothing. Addressed in
+1.12.0 by `disconnected-graph` — a stricter and less noisy check than the original idea, since
+every healthy pipeline has terminal outputs and flagging those would fire on almost everything.
+
+This is exactly the failure [handoff.md](handoff.md) warns about, committed by its author. Ticking
+a box is not the same as doing the work, and quietly rewriting the box is worse.
 
 **Finding:** the analysis has to be **solver-aware**. `IterativeSolver` runs steps in registration
 order and ignores the dependency graph entirely, so the variable needing a seed differs from what

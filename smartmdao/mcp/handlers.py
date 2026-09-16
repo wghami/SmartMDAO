@@ -37,6 +37,25 @@ def _load(path: str, variable: Optional[str]):
         return None, {"ok": False, "error": str(error)}
 
 
+def _effective_inputs(loaded, requested: Optional[Sequence[str]]):
+    """
+    What the pipeline will actually receive, and where each name came from.
+
+    The caller's list is intent; the file's own `run()` call is evidence. Both
+    count, so they are unioned. Reporting the split matters: an agent that
+    guessed the design variables and forgot the cycle's seed used to be told the
+    seed was missing - a working file reported as broken.
+    """
+    asked = tuple(requested or ())
+    inferred = tuple(
+        name for name in loaded.declared_inputs if name not in set(asked)
+    )
+    return tuple(sorted(set(asked) | set(inferred))), {
+        "requested": list(asked),
+        "found_in_source": list(inferred),
+    }
+
+
 def analyze_pipeline(
     path: str,
     variable: Optional[str] = None,
@@ -47,7 +66,8 @@ def analyze_pipeline(
     if failure:
         return failure
 
-    analysis = analyze(loaded.pipeline, inputs or ())
+    effective, provenance = _effective_inputs(loaded, inputs)
+    analysis = analyze(loaded.pipeline, effective)
 
     return {
         "ok": True,
@@ -68,6 +88,7 @@ def analyze_pipeline(
         "initial_guesses_required": [
             asdict(guess) for guess in analysis.initial_guesses_required
         ],
+        "inputs_used": provenance,
         "recommended_solver": analysis.recommended_solver,
         "reason": analysis.reason,
     }
@@ -83,7 +104,8 @@ def validate_pipeline(
     if failure:
         return failure
 
-    findings = validate(loaded.pipeline, inputs or ())
+    effective, provenance = _effective_inputs(loaded, inputs)
+    findings = validate(loaded.pipeline, effective)
     counts: Dict[str, int] = {}
     for finding in findings:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
@@ -93,6 +115,7 @@ def validate_pipeline(
         "pipeline": loaded.variable,
         "source": loaded.source,
         "path": str(loaded.path),
+        "inputs_used": provenance,
         "valid": not any(finding.severity == "error" for finding in findings),
         "counts": counts,
         "findings": [asdict(finding) for finding in _truncate(findings)],
@@ -109,12 +132,15 @@ def explain_pipeline(
     if failure:
         return failure
 
+    effective, provenance = _effective_inputs(loaded, inputs)
+
     return {
         "ok": True,
         "pipeline": loaded.variable,
         "source": loaded.source,
         "path": str(loaded.path),
-        "explanation": explain(loaded.pipeline, inputs or ()),
+        "inputs_used": provenance,
+        "explanation": explain(loaded.pipeline, effective),
     }
 
 

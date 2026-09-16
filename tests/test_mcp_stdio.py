@@ -97,6 +97,7 @@ def test_server_starts_and_identifies_itself(client):
 def test_tools_are_listed_over_the_protocol(client):
     tools = client.request(2, "tools/list")["result"]["tools"]
     assert {tool["name"] for tool in tools} == {
+        "smartmdao_cookbook",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",
@@ -121,7 +122,14 @@ def test_a_real_tool_call_analyses_a_real_file(client):
     assert payload["ok"] is True
     assert payload["recommended_solver"] == "HybridSolver"
     assert len(payload["cycles"]) == 1
-    assert [g["variable"] for g in payload["initial_guesses_required"]] == ["y2"]
+
+    # The caller under-declared its inputs, omitting the cycle's seed - exactly
+    # what a coding agent did in practice. The seed is recovered from the file's
+    # own run() call rather than reported as missing, and where it came from is
+    # reported so the agent can say so.
+    assert payload["initial_guesses_required"] == []
+    assert "y2" in payload["inputs_used"]["found_in_source"]
+    assert payload["inputs_used"]["requested"] == ["z1", "z2", "x1"]
 
 
 def test_resources_and_prompts_are_reachable(client):
