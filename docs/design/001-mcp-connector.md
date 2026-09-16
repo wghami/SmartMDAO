@@ -1,6 +1,6 @@
 # 001 — MCP connector
 
-**Status:** implemented (Phase 2); execution tools still pending (Phase 3)
+**Status:** implemented (Phases 2 and 3); `compare_runs` and `optimize` deferred
 **Date:** 2026-09-13 · implementation notes added after Phase 2
 **Supersedes:** nothing
 
@@ -236,6 +236,30 @@ The extra costs **27 transitive packages** — starlette, uvicorn, cryptography,
 the whole reason it is an extra. Verified that a base install with the SDK absent still imports
 `smartmdao` and `smartmdao.mcp.handlers`, failing only at `create_server()` with an actionable
 message.
+
+## Phase 3 implementation notes
+
+Built as designed, with one thing worth recording.
+
+**The safety framing kept wanting to creep back in.** Every time the tool was described it was
+tempting to call the subprocess a sandbox. It is not. The agent has a shell; refusing to execute
+moves the run somewhere with less control rather than preventing it — confirmed in real use, where
+an agent asked for a wing model simply ran `python` when the connector could not run it. What the
+child process actually buys is a hard kill, typed results and crash isolation, and the wording in
+the tool description, the server instructions and the demo all say so.
+
+**Names are not enough to run something.** `declared_inputs` recovered the *names* a file passes to
+`run()`, which is all `analyze` and `validate` need. Running needs values, so the AST walk now
+recovers literal constants too — including lists, tuples, sets and negative numbers, because that
+is how bounds and flags get written. A computed value is reported as `unresolved_in_source` rather
+than guessed at. This is what makes `run_pipeline(path)` with no arguments behave the way running
+the script does.
+
+**The cheapest rung is the measurement.** `smoke` caps the solver to one sweep, which proves the
+code executes *and* times it — so the estimate for every larger rung falls out of one cheap run,
+and the engineer consents with a number. Worst case only: how many sweeps a loop actually needs is
+not knowable in advance, and projecting a likely figure would be exactly the confident guess
+[003](003-determinism-and-the-engineer-in-the-loop.md) forbids.
 
 ## Related
 

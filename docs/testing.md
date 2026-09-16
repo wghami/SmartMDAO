@@ -20,7 +20,7 @@ uv sync
 This creates `.venv/` and installs the project plus its development dependencies, including both
 optional extras (`openturns`, `mcp`) so the full suite can run.
 
-**You should see** a list of installed packages ending with `smartmdao==1.12.0`.
+**You should see** a list of installed packages ending with `smartmdao==1.13.0`.
 
 **What it proves:** nothing yet — but note what is *not* there. A base install pulls only h5py,
 matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
@@ -33,7 +33,7 @@ matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
 uv run pytest
 ```
 
-**You should see** `318 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `361 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -57,7 +57,7 @@ a label.
 uv run python run_all.py
 ```
 
-**You should see** `24 scripts`, all `✅ Pass`, and a final status report.
+**You should see** `25 scripts`, all `✅ Pass`, and a final status report.
 
 **What it proves:** the examples are not decoration. They run in CI, and a change that breaks one
 fails the build. It also means any of them can be read *and executed* to check a claim.
@@ -161,7 +161,7 @@ p.terminate()
 "
 ```
 
-**You should see** exactly `{'name': 'smartmdao', 'version': '1.12.0'}`.
+**You should see** exactly `{'name': 'smartmdao', 'version': '1.13.0'}`.
 
 **What it proves:** the console entry point works. This exact handshake runs in the test suite
 (`tests/test_mcp_stdio.py`), so it cannot silently rot.
@@ -176,7 +176,8 @@ p.terminate()
 claude mcp add smartmdao -- uv run --directory /absolute/path/to/SmartMDAO smartmdao-mcp
 ```
 
-Then in a session, `/mcp` should list `smartmdao` as connected with 5 tools.
+Then in a session, `/mcp` should show `smartmdao` connected. To see what it offers — and
+why the tools do *not* appear as slash commands — see Step 6a.
 
 ### Any client that takes a JSON config
 
@@ -197,6 +198,55 @@ If SmartMDAO is installed into an environment already on your `PATH`, the comman
 **What it proves:** the agent can now read pipeline structure, *and* it can look up the API before
 writing code. It could always write plausible SmartMDAO code; what it could not do is check that
 the code it wrote uses functions that exist and forms the graph it intended.
+
+---
+
+## Step 6a — Seeing what the server offers (tools are not slash commands)
+
+A server exposes three different things, and only one of them shows up when you type `/`:
+
+| | What it is | How you reach it |
+|---|---|---|
+| **Tools** | Functions the **model** decides to call | Never a slash command |
+| **Prompts** | Templates **you** trigger | `/smartmdao:pipeline_from_prose` |
+| **Resources** | Documents the model can read | Fetched by the client |
+
+So typing `/` and seeing only:
+
+```
+/smartmdao:review_pipeline (MCP)
+/smartmdao:pipeline_from_prose (MCP)
+```
+
+is **correct and complete** — those are the only two prompts. The six tools are deliberately absent
+from that list, because you do not invoke them; the model does.
+
+**Three ways to see the tools:**
+
+1. **Press Enter on `/mcp` itself.** That opens the MCP panel, where you select `smartmdao` and
+   view its tools, resources and prompts. Typing `/mcp` only filters the slash-command menu, which
+   is what shows prompts.
+2. **Ask the agent** — simplest and most reliable:
+   > What smartmdao tools do you have available?
+3. **Interrogate the server directly**, which also tells you the version it is running:
+
+``` bash
+uv run python -c "
+import json, subprocess
+p = subprocess.Popen(['smartmdao-mcp'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+def rpc(i, m, params=None):
+    p.stdin.write(json.dumps({'jsonrpc':'2.0','id':i,'method':m,'params':params or {}})+'\n'); p.stdin.flush()
+    return json.loads(p.stdout.readline())
+print(rpc(1,'initialize',{'protocolVersion':'2026-07-28','capabilities':{},'clientInfo':{'name':'c','version':'0'}})['result']['serverInfo'])
+p.stdin.write(json.dumps({'jsonrpc':'2.0','method':'notifications/initialized','params':{}})+'\n'); p.stdin.flush()
+print('tools  :', [t['name'] for t in rpc(2,'tools/list')['result']['tools']])
+print('prompts:', [x['name'] for x in rpc(3,'prompts/list')['result']['prompts']])
+p.terminate()
+"
+```
+
+**A quick way to tell whether your session is stale:** ask the agent if it has `smartmdao_cookbook`.
+If it does not, it connected before that tool existed — see Step 6b.
 
 ---
 
@@ -336,6 +386,47 @@ was told the seed was missing — so it reported a *working* file as broken and 
 
 ---
 
+## Step 7e — Actually running one, without losing an afternoon
+
+The tools so far execute nothing. This one does — in a child process, under a wall clock.
+
+``` bash
+uv run python scripts/cost_ladder_demo.py
+```
+
+**You should see** five cases. The two that matter:
+
+**The cheapest rung is also the measurement.** `rung="smoke"` runs one sweep per discipline. It
+reports `converged: False`, which is *correct* — one sweep is not convergence — and it returns:
+
+```
+one_sweep_seconds            0.0417
+full_worst_case_seconds      2.502
+note   one sweep took 0.0417s; a full run may need up to 60 sweeps, so budget
+       up to 2.5s. Quote this before running it.
+```
+
+That is the difference between "this might take a while" and a figure you can agree to. Worst case
+only — how many sweeps a loop needs is not knowable in advance.
+
+**Failures come back as data.** A solve that will not stop is killed and says so; a discipline that
+dies without raising is reported as a crash — and the demo keeps running afterwards, which is the
+whole argument for the separate process.
+
+**What it does not prove:** safety. Your agent has a shell. If the connector refuses to run
+something, it will run `python model.py` instead — unsandboxed and untimed. The subprocess buys a
+hard kill, typed results and crash isolation, not protection. Saying otherwise would be claiming
+something we do not deliver.
+
+Ask your agent directly:
+
+> Run `scripts/sellar_benchmark_mda.py` with the smartmdao tools. Tell me what it would cost before
+> you run the full thing.
+
+Expect a smoke run first, a quoted estimate, and only then a full run.
+
+---
+
 ## Step 8 — Understand what it cannot do
 
 Being clear about limits is the point, not an apology. Run:
@@ -373,9 +464,11 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 - **They never execute a discipline.** `analyze` and `validate` read signatures, annotations and the
   dependency graph. This is why they are safe and fast — and why they cannot tell you whether your
   physics is right.
-- **They do not run your pipeline.** Not yet; that is Phase 3, and the design is written up in
-  [001](design/001-mcp-connector.md). Your agent will happily run it with a shell instead, which is
-  exactly the gap that phase closes.
+- **`run_pipeline` does execute your code** — that one is not analysis. It runs in a child process
+  under a wall clock, which buys a hard kill and crash isolation, **not** safety. Your agent has a
+  shell either way; what this changes is that the run is bounded and the result is typed.
+- **Nothing here compares two pipelines.** Checking that a translation of hand-written code still
+  gives the same answer (`compare_runs`) is designed but not built.
 
 ---
 
@@ -383,12 +476,14 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 318 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
+| `pytest` reports fewer than 361 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
+| Typing `/` shows only two smartmdao entries | Correct — those are prompts. Tools are never slash commands; see Step 6a |
 | You changed the code but the agent behaves as before | Step 6b — start a new session; the old subprocess is still running |
 | A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read |
+| A run is killed at 60s | That is the wall clock. Try `rung="smoke"` to see the unit cost, then raise `timeout_seconds` deliberately |
 | A diagram command hangs | You called `visualize()` directly in a headless shell; pass `view=False`. The MCP path forces this already |
 
 ---

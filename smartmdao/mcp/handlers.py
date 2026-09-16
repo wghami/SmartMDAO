@@ -10,7 +10,10 @@ from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..analysis import analyze, explain, validate
-from .loader import PipelineLoadError, load_pipeline
+from ._runner import DEFAULT_BUDGET_SWEEPS, SMOKE
+from .loader import _UNRESOLVED
+from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
+from .loader import PipelineLoadError, declared_input_map, load_pipeline
 from .rendering import render_xdsm
 
 logger = logging.getLogger(__name__)
@@ -174,3 +177,68 @@ def render_pipeline_diagram(
         "source": loaded.source,
         "output_path": str(destination),
     }
+
+
+def run_pipeline(
+    path: str,
+    inputs: Optional[Dict[str, Any]] = None,
+    variable: Optional[str] = None,
+    rung: str = SMOKE,
+    budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
+    """
+    Executes a pipeline in a child process, under a wall clock.
+
+    `rung` defaults to `smoke` deliberately. An unbounded run is not a
+    reasonable thing to ask someone to consent to blindly, so the expensive
+    path has to be chosen explicitly - and the cheap one measures the unit cost
+    so the choice can be made with a number rather than a guess.
+
+    Inputs the caller does not supply are filled in from the file's own `run()`
+    call where they can be read statically, so a pipeline that works when you
+    run the script also works here.
+    """
+    loaded, failure = _load(path, variable)
+    if failure:
+        return failure
+
+    supplied = dict(inputs or {})
+
+    # Names alone are not enough to *run* a pipeline, so the literal values in
+    # the file's own run() call are recovered too. The caller always wins.
+    from_source = {
+        name: value
+        for name, value in declared_input_map(loaded.path).items()
+        if name not in supplied and value is not _UNRESOLVED
+    }
+    unresolved = [
+        name
+        for name, value in declared_input_map(loaded.path).items()
+        if name not in supplied and value is _UNRESOLVED
+    ]
+
+    result = run_in_subprocess(
+        path=str(loaded.path),
+        inputs={**from_source, **supplied},
+        variable=variable,
+        rung=rung,
+        budget_sweeps=budget_sweeps,
+        timeout_seconds=timeout_seconds,
+    )
+
+    result.setdefault("pipeline", loaded.variable)
+    result.setdefault("source", loaded.source)
+    result["path"] = str(loaded.path)
+    result["inputs_used"] = {
+        "supplied": sorted(supplied),
+        "found_in_source": sorted(from_source),
+    }
+    if unresolved:
+        result["inputs_used"]["unresolved_in_source"] = sorted(unresolved)
+        result["inputs_used"]["note"] = (
+            "These are passed to run() in the file but computed rather than "
+            "literal, so their values could not be read. Supply them yourself "
+            "if the run failed for want of them."
+        )
+    return result

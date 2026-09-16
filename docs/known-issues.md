@@ -69,7 +69,7 @@ MCP.
 
 ---
 
-## 🟡 No way to run a pipeline cheaply, or to know what running it will cost
+## ✅ RESOLVED in 1.13.0 — no way to run a pipeline cheaply, or to know what it would cost
 
 An engineer will ask the agent to run the model. Refusing is not available to us: the agent has a
 shell and will run `python model.py` instead — unsandboxed, untimed, with results scraped from
@@ -90,8 +90,13 @@ it measures the unit cost, so the estimate for every rung above it falls out of 
 toy model with a 20 ms discipline: one sweep 0.04 s, full run 0.90 s — a 22× ratio the engineer
 could have been told before committing.
 
-*Fix direction:* expose the rungs, and have the agent quote a number rather than a disclaimer.
-See [001](design/001-mcp-connector.md).
+**Fixed** by `run_pipeline`, which takes a `rung`: `smoke` (the default — one sweep per
+discipline), `budgeted` (capped sweeps) or `full`. A smoke run returns a `cost_estimate` derived
+from its own measured sweep, so the agent quotes a number instead of a disclaimer. Every rung runs
+in a child process under a mandatory wall clock.
+
+`smoke` is the default deliberately: an unbounded run should never be the thing that happens by
+accident.
 
 ---
 

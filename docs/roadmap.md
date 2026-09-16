@@ -154,7 +154,7 @@ every shape that is not says exactly why.
 
 ---
 
-## Phase 3 — Execution as a cost ladder ⬜
+## Phase 3 — Execution as a cost ladder 🟡
 
 Reframed. The original plan was a flat `run_pipeline` / `optimize` / `sweep`, justified by
 sandboxing. Two things changed that — see [001](design/001-mcp-connector.md):
@@ -167,19 +167,26 @@ protection. We should stop claiming otherwise.
 **Engineers need to choose a rung and be told the cost.** An unbounded run is not a reasonable
 thing to ask someone to consent to blindly.
 
-- [ ] Subprocess runner with a mandatory timeout and a JSON boundary
-- [ ] **Single sweep** — one call per discipline. Cheapest smoke test, and it measures the unit
-      cost so every estimate above it falls out of it. Already expressible via `max_iterations=1`;
-      just not exposed
-- [ ] **Budgeted run** — capped sweeps plus wall clock, with the estimate quoted first
+- [x] Subprocess runner with a mandatory timeout and a JSON boundary
+- [x] **Single sweep** (`rung="smoke"`, the default) — one call per discipline. Cheapest smoke
+      test, and it measures the unit cost so every estimate above it falls out of it
+- [x] **Budgeted run** — capped sweeps plus wall clock, with the estimate quoted first
+- [x] Result summarisation — arrays become shape, min/max and a short preview
+- [x] Literal input values recovered from the file, so `run_pipeline(path)` behaves the way
+      running the script does
+- [x] [`scripts/cost_ladder_demo.py`](../scripts/cost_ladder_demo.py)
 - [ ] **`compare_runs`** — same inputs, two pipelines, diff the state. The thing that makes a
-      translation from hand-written code trustworthy
-- [ ] Result summarisation; `MAX_ITEMS` was written for names, not numpy arrays
-- [ ] `optimize` / `sweep` deferred until someone asks for them
+      translation from hand-written code trustworthy. **Deferred to Phase 4**
+- [ ] `optimize` / `sweep` — deferred until someone asks for them
 
-**Exit criterion:** an engineer is told what a run will cost before it starts, a non-converging
-pipeline is killed by timeout and reported as such, and a translated pipeline can be checked
-against its original.
+**Exit criterion partly met.** An engineer is told what a run will cost before it starts, and a
+non-converging pipeline is killed by timeout and reported as such. Checking a translation against
+its original (`compare_runs`) is deferred.
+
+**The safety claim, restated once more because it keeps wanting to creep back.** The subprocess
+buys a hard kill, typed results and crash isolation. It does **not** buy safety: the agent has a
+shell and will run the file itself if refused. Verified in real use, where an agent asked to build
+a wing model simply ran `python` when the connector could not.
 
 **Constraint unchanged:** no remote transport without real sandboxing.
 

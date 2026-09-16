@@ -277,7 +277,9 @@ It finds your pipeline either as a module-level `Pipeline`, or by calling a fact
 
 It also exposes `smartmdao_cookbook`, which the server's instructions tell the agent to call
 *before* writing any SmartMDAO code — so generated pipelines use the real API rather than a
-plausible-looking one.
+plausible-looking one — and `run_pipeline`, which executes a pipeline in a child process under a
+wall clock. That last one defaults to a single sweep: enough to prove the code runs, and enough to
+measure what a full run would cost, so the agent can quote you a number before spending it.
 Nothing it does executes a discipline. See
 [the design record](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md)
 for why it verifies rather than writes code for you.

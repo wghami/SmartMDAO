@@ -482,6 +482,7 @@ def test_server_registers_every_tool_resource_and_prompt():
 
     assert set(tools) == {
         "smartmdao_cookbook",
+        "run_pipeline",
         "analyze_pipeline",
         "validate_pipeline",
         "explain_pipeline",
@@ -532,6 +533,7 @@ def test_server_surfaces_handler_errors_as_normal_results(tmp_path):
     "tool,extra",
     [
         ("smartmdao_cookbook", {"_no_path": True}),
+        ("run_pipeline", {"_no_inputs": True}),
         ("analyze_pipeline", {}),
         ("validate_pipeline", {}),
         ("explain_pipeline", {}),
@@ -548,6 +550,13 @@ def test_every_tool_is_callable_through_the_protocol(sellar_file, tmp_path, tool
 
     if extra.pop("_no_path", False):
         arguments = {}          # the cookbook takes no pipeline
+    elif extra.pop("_no_inputs", False):
+        # run_pipeline takes a dict of VALUES, not a list of names - and this
+        # fixture never calls run(), so nothing is recoverable from its source.
+        arguments = {
+            "path": str(sellar_file),
+            "inputs": {"z1": 1.0, "x1": 0.0, "y2": 1.0},
+        }
     else:
         arguments = {"path": str(sellar_file), "inputs": ["z1", "x1", "y2"], **extra}
     result = asyncio.run(create_server().call_tool(tool, arguments))
@@ -683,3 +692,38 @@ def test_explain_reports_provenance_too(tmp_path):
     source = SELLAR + '\npipeline.run(z1=1.0, x1=0.0, y2=1.0)\n'
     result = explain_pipeline(str(write(tmp_path, "explained.py", source)))
     assert "y2" in result["inputs_used"]["found_in_source"]
+
+
+def test_collection_and_negative_literals_are_recovered(tmp_path):
+    """Inputs are not always scalars; bounds and flags are written as literals."""
+    from smartmdao.mcp.loader import declared_input_map
+
+    source = (
+        SELLAR
+        + "\ninputs = {'bounds': [1.0, 2.0], 'pair': (3, 4), 'tags': {'a', 'b'},"
+          " 'offset': -1.5, 'on': True}\npipeline.run(**inputs)\n"
+    )
+    recovered = declared_input_map(write(tmp_path, "literals.py", source))
+
+    assert recovered["bounds"] == [1.0, 2.0]
+    assert recovered["pair"] == (3, 4)
+    assert recovered["tags"] == {"a", "b"}
+    assert recovered["offset"] == -1.5
+    assert recovered["on"] is True
+
+
+def test_a_computed_value_is_marked_unresolved_not_guessed(tmp_path):
+    from smartmdao.mcp.loader import _UNRESOLVED, declared_input_map
+
+    source = SELLAR + "\nimport math\npipeline.run(z1=math.pi, y2=1.0)\n"
+    recovered = declared_input_map(write(tmp_path, "computed.py", source))
+
+    assert recovered["z1"] is _UNRESOLVED
+    assert recovered["y2"] == 1.0
+
+
+def test_a_collection_containing_something_computed_is_unresolved(tmp_path):
+    from smartmdao.mcp.loader import _UNRESOLVED, declared_input_map
+
+    source = SELLAR + "\nimport math\npipeline.run(bounds=[1.0, math.pi])\n"
+    assert declared_input_map(write(tmp_path, "mixed.py", source))["bounds"] is _UNRESOLVED
