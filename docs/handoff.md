@@ -3,8 +3,8 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.12.0:** `main` is clean. 318 tests, 100% coverage, 24/24 scripts passing.
-Roadmap Phases 0–2.5 are merged. **Phase 3 is next, and blocked on a decision** (below).
+**State as of v1.13.0:** `main` is clean. 361 tests, 100% coverage, 25/25 scripts passing.
+Roadmap Phases 0–3 are merged, bar the deferred `compare_runs`.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -75,7 +75,7 @@ not the same as checking it.
 uv run python run_all.py
 ```
 
-It runs every script in `scripts/` and fails on any non-zero exit. **24/24 currently.** A script
+It runs every script in `scripts/` and fails on any non-zero exit. **25/25 currently.** A script
 that depends on an optional extra must *skip cleanly* (exit 0 with an explanatory message), not
 fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_mdo_openturns.py).
 
@@ -88,8 +88,8 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 318 tests, 100% coverage
-uv run python run_all.py             # 24 scripts
+uv run pytest                        # 361 tests, 100% coverage
+uv run python run_all.py             # 25 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -157,20 +157,20 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 
 Not bugs — judgement calls left deliberately to the maintainer.
 
-1. **Phase 3's execution model.** Running a pipeline means executing arbitrary user code.
-   [001](design/001-mcp-connector.md) commits to subprocess + mandatory timeout, and to never
-   shipping a remote transport without real sandboxing. **Needs explicit sign-off before anyone
-   builds it.**
-
-   Note the correction recorded in 001: subprocess isolation buys *reliability, structure and a
-   kill switch*, **not safety**, because the agent driving the connector already has a shell and
-   will run the file itself if refused. Do not repeat the original safety framing.
+1. **Whether to build `compare_runs`** — run two pipelines on the same inputs and diff the state.
+   It is what makes a hand-written-to-SmartMDAO translation trustworthy, and the one thing neither
+   the agent nor static analysis can do alone. Deferred from Phase 3, not rejected.
 
 2. **Where the ASP layer lives** ([003](design/003-determinism-and-the-engineer-in-the-loop.md)) —
    this repository or a companion package. The dependency is trivial (`clingo` is one package with
    no transitive deps); the concern is what is distinct.
 
 ### Settled
+
+- ~~Phase 3's execution model~~ — settled and built in **1.13.0**: subprocess, mandatory wall
+  clock, `smoke` rung by default. **Do not repeat the original safety framing**: the subprocess
+  buys a hard kill, typed results and crash isolation, *not* protection, because the agent has a
+  shell and will run the file itself if refused.
 
 - ~~`ipykernel` in runtime dependencies~~ — moved to `dev` in **1.8.0**. It pulled 14 packages and
   nothing imported it.

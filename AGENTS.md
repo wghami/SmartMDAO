@@ -39,6 +39,10 @@ validate(pipeline, inputs=["span", "speed"])    # every structural problem at on
 
 Neither executes a discipline. Both are cheap. Run them.
 
+**To run it, prefer `run_pipeline` over a shell.** It enforces a wall clock, returns typed results,
+and survives a discipline that crashes. It defaults to one sweep, which proves the code executes
+and measures the unit cost — quote that to the engineer before asking for a full run.
+
 **Write generated models in the user's own working directory, not `scripts/`.** That folder holds
 curated examples and `run_all.py` executes every file in it, so a model dropped there joins the
 project's test surface.

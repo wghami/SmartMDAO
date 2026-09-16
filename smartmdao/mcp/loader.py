@@ -24,9 +24,14 @@ import typing
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..core import Pipeline
+
+
+#: Marks a declared input whose value is computed rather than literal. The
+#: name is known; the value is not, so the caller must supply it to run.
+_UNRESOLVED = object()
 
 
 class PipelineLoadError(RuntimeError):
@@ -81,24 +86,58 @@ def declared_inputs(path) -> Tuple[str, ...]:
     Anything dynamic is simply not found; this narrows the guessing, it does not
     eliminate it. Pure AST work - nothing is imported or executed.
     """
+    return tuple(sorted(declared_input_map(path)))
+
+
+def declared_input_map(path) -> Dict[str, Any]:
+    """
+    The same names, with their **values** where those are literal constants.
+
+    Names alone answer "is this seed already supplied?" - enough for `analyze`
+    and `validate`, which never run anything. Actually *running* the pipeline
+    needs the values too, so that `run_pipeline(path)` behaves the way running
+    the script does.
+
+    Only literal constants are recovered. A value computed at run time is
+    invisible here and simply absent from the map, which is why the caller can
+    always override or supply its own.
+    """
     try:
         tree = ast.parse(Path(path).read_text(encoding="utf-8"))
     except (OSError, SyntaxError):          # pragma: no cover - load_pipeline catches first
-        return ()
+        return {}
 
-    literals: Dict[str, Set[str]] = {}
+    def constant(node):
+        """A literal, including the collection literals people write in inputs."""
+        if isinstance(node, ast.Constant):
+            return node.value, True
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            items = [constant(item) for item in node.elts]
+            if all(ok for _, ok in items):
+                values = [value for value, _ in items]
+                return (
+                    set(values) if isinstance(node, ast.Set) else
+                    tuple(values) if isinstance(node, ast.Tuple) else values
+                ), True
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            inner, ok = constant(node.operand)
+            if ok and isinstance(inner, (int, float)):
+                return -inner, True
+        return None, False
+
+    literals: Dict[str, Dict[str, Any]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
-            keys = {
-                key.value
-                for key in node.value.keys
-                if isinstance(key, ast.Constant) and isinstance(key.value, str)
-            }
+            entries: Dict[str, Any] = {}
+            for key, value in zip(node.value.keys, node.value.values):
+                if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                    resolved, ok = constant(value)
+                    entries[key.value] = resolved if ok else _UNRESOLVED
             for target in node.targets:
                 if isinstance(target, ast.Name):
-                    literals[target.id] = keys
+                    literals[target.id] = entries
 
-    found: Set[str] = set()
+    found: Dict[str, Any] = {}
     for node in ast.walk(tree):
         if not (
             isinstance(node, ast.Call)
@@ -108,11 +147,12 @@ def declared_inputs(path) -> Tuple[str, ...]:
             continue
         for keyword in node.keywords:
             if keyword.arg is not None:
-                found.add(keyword.arg)
+                resolved, ok = constant(keyword.value)
+                found[keyword.arg] = resolved if ok else _UNRESOLVED
             elif isinstance(keyword.value, ast.Name):
-                found |= literals.get(keyword.value.id, set())
+                found.update(literals.get(keyword.value.id, {}))
 
-    return tuple(sorted(found))
+    return found
 
 
 def _pipeline_variables(module) -> List[str]:

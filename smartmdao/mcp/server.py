@@ -10,7 +10,7 @@ Requires the optional extra:  pip install smartmdao[mcp]
 """
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from . import authoring, handlers
 
@@ -36,9 +36,16 @@ AFTER WRITING IT, verify before presenting it:
   3. fix, repeat
   4. render_pipeline_diagram - an XDSM for a human to look at
 
-These read signatures, annotations and the dependency graph. No discipline
-function is ever called and no pipeline is ever run, so they are safe and fast
-- and cannot tell you whether the physics is right.
+Those four read signatures, annotations and the dependency graph. No discipline
+is called and no pipeline is run, so they are free and fast - and cannot tell
+you whether the physics is right.
+
+TO RUN ONE, use `run_pipeline` rather than a shell. It enforces a wall clock,
+returns typed results instead of scraped stdout, and survives a discipline that
+crashes. It defaults to rung='smoke': one sweep, which proves the code executes
+and MEASURES THE UNIT COST. Quote that cost to the user before choosing
+'budgeted' or 'full' on anything non-trivial - an unbounded run is not
+something to commit someone to without a number.
 
 Two things that catch people out, both covered in the cookbook's `pitfalls`:
 analysis is solver-aware (IterativeSolver ignores the dependency graph and
@@ -154,6 +161,29 @@ def create_server(name: str = "smartmdao"):
     ) -> dict:
         return handlers.render_pipeline_diagram(
             path, output_path, variable, inputs, orientation, graph_type
+        )
+
+    @server.tool(
+        description=(
+            "RUN a SmartMDAO pipeline in a sandboxed child process under a wall "
+            "clock. Choose a cost rung: 'smoke' (default - one sweep per "
+            "discipline; proves the code executes AND measures the unit cost so "
+            "you can quote a number before committing to more), 'budgeted' "
+            "(capped sweeps), or 'full'. ALWAYS tell the user the estimated "
+            "cost from a smoke run before choosing 'full' on anything "
+            "non-trivial. Analyse and validate first - they are free."
+        )
+    )
+    def run_pipeline(
+        path: str,
+        inputs: Optional[Dict[str, Any]] = None,
+        variable: Optional[str] = None,
+        rung: str = "smoke",
+        budget_sweeps: int = 25,
+        timeout_seconds: float = 60.0,
+    ) -> dict:
+        return handlers.run_pipeline(
+            path, inputs, variable, rung, budget_sweeps, timeout_seconds
         )
 
     # ----- Resources ---------------------------------------------------------
