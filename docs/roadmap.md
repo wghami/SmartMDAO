@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–3 complete and merged to `main`. **Phase 4 (ASP) is next**, with
 three of its four design questions now settled in [003](design/003-determinism-and-the-engineer-in-the-loop.md).
-**Baseline:** `v1.12.0` — 318 tests, 100% coverage, 24/24 scripts.
+**Baseline:** `v1.14.0` — 389 tests, 100% coverage, 27/27 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 

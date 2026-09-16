@@ -38,7 +38,8 @@ do and why, and `python run_all.py` executes every one of them.
 | [`agent_as_discipline_demo.py`](../scripts/agent_as_discipline_demo.py) | A model discipline inside an MDA loop, and the cheaper topology beside it |
 | [`hybrid_target_var_demo.py`](../scripts/hybrid_target_var_demo.py) | Narrowing convergence to one variable — and why a target on the wrong block would silently fake convergence |
 | [`convergence_report_demo.py`](../scripts/convergence_report_demo.py) | Telling converged from exhausted from abandoned, and writing a checker that can give up |
-| [`translation_drift_demo.py`](../scripts/translation_drift_demo.py) | Two translations of one model that both report success and disagree by 95% |
+| [`translation_equivalence_demo.py`](../scripts/translation_equivalence_demo.py) | Proving a translation of real hand-written code still gives the same answer — and what "the same" means |
+| [`translation_drift_demo.py`](../scripts/translation_drift_demo.py) | The failure mode in isolation: two translations that both report success and disagree by 95% |
 | [`cost_ladder_demo.py`](../scripts/cost_ladder_demo.py) | Running a pipeline under a wall clock, and being quoted the cost before you spend it |
 | [`pipeline_discovery_demo.py`](../scripts/pipeline_discovery_demo.py) | Which ways of defining a pipeline the MCP tools can reach, and which they refuse to guess at |
 | [`non_numeric_convergence_demo.py`](../scripts/non_numeric_convergence_demo.py) | Convergence on frozensets and dataclasses, with no floats involved |

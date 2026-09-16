@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.14.0:** `main` is clean. 386 tests, 100% coverage, 26/26 scripts passing.
+**State as of v1.14.0:** `main` is clean. 389 tests, 100% coverage, 27/27 scripts passing.
 Roadmap Phases 0–3 are complete and merged. Phase 4 (ASP) is next.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
@@ -75,7 +75,7 @@ not the same as checking it.
 uv run python run_all.py
 ```
 
-It runs every script in `scripts/` and fails on any non-zero exit. **26/26 currently.** A script
+It runs every script in `scripts/` and fails on any non-zero exit. **27/27 currently.** A script
 that depends on an optional extra must *skip cleanly* (exit 0 with an explanatory message), not
 fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_mdo_openturns.py).
 
@@ -88,8 +88,8 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes both extras
-uv run pytest                        # 386 tests, 100% coverage
-uv run python run_all.py             # 26 scripts
+uv run pytest                        # 389 tests, 100% coverage
+uv run python run_all.py             # 27 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
