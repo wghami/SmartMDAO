@@ -177,6 +177,41 @@ eliminate it.
 
 ---
 
+## ✅ RESOLVED in 1.19.0 — INFEASIBLE said nothing about why
+
+[003](design/003-determinism-and-the-engineer-in-the-loop.md) promises that UNSAT gives a
+machine-checkable "why not" an engineer can take into a design review. Until 1.19.0 it gave a
+sentinel and nothing else.
+
+**Fixed** by `RuleDiscipline.explain_infeasible`, which returns a `Conflict`: the **minimal** set of
+facts that cannot hold together — remove any one and the rules become satisfiable — or
+`rules_alone=True`, meaning the program contradicts itself and no input could have worked. The
+distinction is the useful part: it says whether to read the requirements or the program.
+
+**Not built on clingo's unsat core**, and the reason is worth keeping.
+[004](design/004-rule-backed-disciplines.md) flagged the core mapping as a risk; measuring it found
+a sharper problem. The core is expressed in solver literals *and is not minimal* — on a three-fact
+conflict where one fact appears in no rule at all, it named **all three**. An explanation that
+implicates an innocent constraint is worse than none, because it gets acted on and the real
+contradiction survives.
+
+Dropping one fact at a time costs one solve per fact and is minimal by construction. That cost is
+why it is a separate method: `solve()` stays cheap, so a convergence loop is not charged for an
+explanation nobody read.
+
+---
+
+## ✅ RESOLVED in 1.19.0 — clingo printed diagnostics straight to stderr
+
+An injected fact never occurs in a rule head — that is what makes it a fact — so clingo emitted
+`atom does not occur in any rule head` for **every fact on every solve**. Inside a convergence loop
+that is once per sweep per fact, and a perfectly correct program looked alarming.
+
+**Fixed** by passing a `logger` callback to `clingo.Control`, routing its diagnostics to
+`smartmdao.rules` at debug level. Pinned by a test asserting stderr stays empty across a solve.
+
+---
+
 ## 🟡 A grounding blow-up cannot be interrupted in-process
 
 **Partly addressed in 1.18.0, and the part that is not is worth stating plainly.**

@@ -8,7 +8,7 @@ every design question is settled (three in
 [003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
 [004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
 findings and the grounding budget.
-**Baseline:** `v1.18.0` — 499 tests, 100% coverage, 29/29 scripts.
+**Baseline:** `v1.19.0` — 511 tests, 100% coverage, 29/29 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -267,8 +267,7 @@ Each sub-phase is its own branch and meets all four clauses of
 
       **Floats are refused as facts**, pointing at `Bands`. ASP has no floating point, so converting
       one inside the library would be precisely the undeclared threshold 4.1 exists to prevent.
-- [ ] **4.3 — Findings and the budget.** *Mostly landed across 1.17.0 and 1.18.0. Unsat cores are
-      the one item still outstanding.*
+- [x] **4.3 — Findings and the budget.** Landed across 1.17.0, 1.18.0 and 1.19.0.
 
       **Landed (1.17.0) — where the decision sits.** `rules-in-cycle` and
       `discretisation-in-cycle`, both decided statically from the SCC decomposition with nothing
@@ -299,11 +298,20 @@ Each sub-phase is its own branch and meets all four clauses of
       raised `TypeError` on an unhashable key instead of the message explaining that facts must be
       symbols. Both found by tests, neither by reading the code.
 
-      **Still open: unsat cores.** [004](design/004-rule-backed-disciplines.md) records the risk —
-      `SolveHandle.core()` returns solver literals whose sign convention does not map naively onto
-      the assumption symbols, and a first-cut mapping named one of two conflicting constraints. A
-      half-explanation points the engineer at the wrong rule, so this needs demonstrating against a
-      known conflict rather than trusting the mechanism.
+      **Landed (1.19.0) — why there is no answer.** `explain_infeasible` returns a `Conflict`: the
+      minimal set of facts that cannot hold together, or a statement that the rules contradict
+      themselves regardless of input. On demand rather than automatic, since it costs one solve per
+      fact.
+
+      **The mechanism 004 warned about was dropped, and the warning understated it.**
+      `SolveHandle.core()` returns solver literals *and is not minimal* — measured on a three-fact
+      conflict it named all three, including one appearing in no rule. Dropping one fact at a time
+      is minimal by construction and depends on nothing internal to clingo. An explanation that
+      implicates an innocent constraint is worse than none, because it gets acted on.
+
+      Also fixed here: clingo's own diagnostics went to stderr, and "atom does not occur in any rule
+      head" fires for **every injected fact** — a correct program looked alarming, once per sweep.
+      Routed to logging.
 
 - [ ] **4.4 — The didactic script.** Per handoff, it must show the *failure*: a program with two
       tied optimal answer sets caught as a finding, and an UNSAT with its core. Run it before writing

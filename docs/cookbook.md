@@ -506,6 +506,45 @@ assert rules.solve(mass_band="heavy") is INFEASIBLE
 assert rules.solve(mass_band="heavy") is not None
 ```
 
+### Why there is no answer
+
+When the rules are unsatisfiable, ask. `explain_infeasible` returns a **`Conflict`** naming the
+smallest set of facts that cannot hold together — minimal in the strong sense that removing any one
+of them makes the rules satisfiable.
+
+```python
+from smartmdao import RuleDiscipline, INFEASIBLE
+import pathlib, tempfile
+
+program = pathlib.Path(tempfile.mkdtemp()) / "spar.lp"
+program.write_text(
+    "material(aluminium; cfrp).\n"
+    "1 { spar(M) : material(M) } 1.\n"
+    ":- spar(aluminium), mass_band(heavy).\n"
+    ":- spar(cfrp), certification(part25).\n"
+    "#show spar/1.\n"
+)
+
+rules = RuleDiscipline(program, facts=["mass_band", "certification", "site"],
+                       produces="decisions")
+
+facts = dict(mass_band="heavy", certification="part25", site="toulouse")
+assert rules.solve(**facts) is INFEASIBLE
+
+conflict = rules.explain_infeasible(**facts)
+assert conflict.facts == {"mass_band": "heavy", "certification": "part25"}
+assert "site" not in conflict.facts          # it has nothing to do with it
+assert conflict.rules_alone is False
+```
+
+If the program contradicts itself regardless of input, `conflict.rules_alone` is `True` and
+`conflict.facts` is empty — meaning no input could have worked, so read the program rather than
+your requirements.
+
+**It is on demand, not automatic.** An explanation costs one solve per fact, so computing it on
+every sweep of a loop would charge for something nobody read. `solve()` stays cheap;
+`conflict.solves` tells you what the explanation cost.
+
 **Three things that will bite you:**
 
 1. **A program with two equally optimal answer sets raises `AmbiguousProgramError`** rather than
