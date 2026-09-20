@@ -1,19 +1,55 @@
 import inspect
 from dataclasses import dataclass, is_dataclass
-from typing import Callable, Dict, Optional, List, get_args, get_origin, get_type_hints
+from typing import Callable, Dict, Optional, List, Union, get_args, get_origin, get_type_hints
+
+#: What `effects` may say. See docs/design/005-side-effecting-steps.md.
+EFFECT_VALUES = (None, False, True, "once", "every-sweep")
+
+PURE = (None, False)
+
 
 @dataclass(eq=False)
 class Step:
     """
     Represents a single node in the computation graph.
     eq=False ensures hashability is based on object identity.
+
+    `effects` declares that this step touches something outside the pipeline -
+    writes a file, launches a subprocess, posts to an API. It matters because a
+    step inside a cyclic block runs **once per sweep**, which is the point for a
+    numeric discipline and something else entirely for one that sends a message.
+
+    | Value | Meaning |
+    |---|---|
+    | absent | Undeclared; assumed pure, and nothing is reported. |
+    | `True` | Touches the world. **What should happen in a loop is not stated.** |
+    | `"once"` | Run on the first sweep of a `run()`; reuse the result after. |
+    | `"every-sweep"` | Run every sweep. You meant it. |
+
+    It is declared rather than inferred: a step returning `None` looks like a
+    free signal and is not, because a step can write a file *and* return a
+    float.
     """
     fn: Callable
     manual_outputs: Optional[List[str]] = None
+    effects: Optional[Union[bool, str]] = None
+
+    def __post_init__(self):
+        if self.effects not in EFFECT_VALUES:
+            raise ValueError(
+                f"effects must be one of {list(EFFECT_VALUES)}, got "
+                f"{self.effects!r}. A typo here would silently declare a "
+                f"destructive step pure, so it is refused rather than reported."
+            )
 
     @property
     def name(self) -> str:
         return self.fn.__name__
+
+    @property
+    def has_effects(self) -> bool:
+        """Whether this step declares that it touches the world."""
+        return self.effects not in PURE
 
     def get_signature(self) -> inspect.Signature:
         """

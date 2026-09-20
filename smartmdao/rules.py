@@ -470,7 +470,7 @@ class RuleDiscipline:
                 result = handle.get()
             finally:
                 if watchdog is not None:
-                    watchdog.set()
+                    watchdog()
 
         solved = time.perf_counter()
         self.cost = replace(
@@ -584,7 +584,7 @@ class RuleDiscipline:
                 result = handle.get()
             finally:
                 if watchdog is not None:
-                    watchdog.set()
+                    watchdog()
 
         finished = time.perf_counter()
         self.cost = replace(
@@ -611,7 +611,8 @@ class RuleDiscipline:
 
     def _start_watchdog(self, handle):
         """
-        Cancel `handle` once the budget expires, or None if there is no budget.
+        Returns a callable that retires the watchdog, or None if there is no
+        budget. Call it when the handle is finished with.
 
         **This bounds solving, not grounding.** Verified against clingo 5.8.2:
         `Control.interrupt()` called during `ground()` is ignored and grounding
@@ -630,17 +631,36 @@ class RuleDiscipline:
             return None
 
         done = threading.Event()
+        # Serialises cancel() against teardown. Without it the watchdog can call
+        # into a handle the main thread is already disposing - a narrow race,
+        # but one that reaches a C extension, and the symptom would be an
+        # occasional hard failure with no Python traceback to read. Suspected
+        # rather than proven: CI failed once on a script that passed eight times
+        # locally, and this is the only concurrency in the path.
+        lock = threading.Lock()
+        live = [True]
 
         def watch():
-            if not done.wait(self.budget_seconds):
-                logger.warning(
-                    f"'{self.path}' passed its {self.budget_seconds}s budget; "
-                    f"cancelling the solve."
-                )
-                handle.cancel()
+            if done.wait(self.budget_seconds):
+                return
+            with lock:
+                # `live` is False once the caller has finished with the handle.
+                # Cancelling then would reach into a handle being disposed.
+                if live[0]:
+                    logger.warning(
+                        f"'{self.path}' passed its {self.budget_seconds}s budget; "
+                        f"cancelling the solve."
+                    )
+                    handle.cancel()
 
         threading.Thread(target=watch, daemon=True).start()
-        return done
+
+        def retire():
+            with lock:
+                live[0] = False
+            done.set()
+
+        return retire
 
     def _all_models(self, clingo, injected: str) -> List[FrozenSet[str]]:
         """
