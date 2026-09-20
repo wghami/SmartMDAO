@@ -290,8 +290,15 @@ for why it verifies rather than writes code for you.
 
 **New here? Start with the [step-by-step testing guide](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md)** — set up, run the suite, watch the analysis catch a feedback loop nobody declared, and connect the server to a coding agent. Each step says what it proves.
 
+**Want to see it work before installing anything?** The
+[notebooks](https://github.com/wghami/SmartMDAO/tree/main/notebooks) are committed **with their
+outputs**, so GitHub renders what every cell actually printed — one concept per notebook, fifteen of
+them, from a first pipeline through to rule-backed disciplines and the mistakes that fail silently.
+
 Design records and internals reference live in
 [`docs/`](https://github.com/wghami/SmartMDAO/tree/main/docs):
+
+- **[Notebooks](https://github.com/wghami/SmartMDAO/tree/main/notebooks)** — one concept per notebook, executed and committed with outputs. The long-form companion to the cookbook; CI re-runs them so they cannot drift.
 
 - **[Architecture](https://github.com/wghami/SmartMDAO/blob/main/docs/architecture.md)** — how the library works internally: the execution path, `Step` introspection, the graph layer, `HybridSolver`'s SCC decomposition, and the optimizer bridge.
 - **[Roadmap](https://github.com/wghami/SmartMDAO/blob/main/docs/roadmap.md)** — what's planned, phase by phase, with exit criteria.

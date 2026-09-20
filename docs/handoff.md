@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.19.0:** `main` is clean. 511 tests, 100% coverage, 29/29 scripts passing.
+**State as of v1.20.0:** `main` is clean. 560 tests, 100% coverage, 29/29 scripts, 15 notebooks.
 Roadmap Phases 0–3 are complete. **Phase 4 (rule-backed disciplines) is under way** — 4.0, 4.1
 and 4.2 are merged; **4.3 is next**. Design questions all settled, see
 [004](design/004-rule-backed-disciplines.md).
@@ -71,6 +71,19 @@ things that were not true — one asserted a feedback loop its model did not con
 claimed four bugs and printed three. Both were caught by running them. Writing the assertion is
 not the same as checking it.
 
+### 3b. A notebook, if the change introduces a *concept*
+
+[`notebooks/`](../notebooks) is one concept per file, committed **with outputs** so GitHub renders
+them. A new public concept needs one; a bug fix does not.
+
+```bash
+uv run python run_notebooks.py          # execute all, rewrite in place
+```
+
+CI re-executes them, so a notebook that drifts from the library fails the build.
+`tests/test_notebooks.py` additionally asserts every name in `smartmdao.__all__` appears in at
+least one — the same guarantee the cookbook has.
+
 ### 4. `run_all.py` is green
 
 ```bash
@@ -90,8 +103,9 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 511 tests, 100% coverage
+uv run pytest                        # 560 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
+uv run python run_notebooks.py       # 15 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -118,6 +132,14 @@ Read [architecture.md](architecture.md) for the internals. The short version:
 | `discretisation.py` | `Bands` / `Discretisation` — declared thresholds; each becomes a `Step` |
 | `rules.py` | `RuleDiscipline` — an `.lp` program as a discipline; lazy `clingo` import |
 | `mcp/` | MCP server; `handlers.py` has the behaviour, `server.py` only registers |
+
+Documentation, and what each part is for:
+
+| Where | For |
+|---|---|
+| [`notebooks/`](../notebooks) | Learning a concept properly, with real output to look at |
+| [`docs/cookbook.md`](cookbook.md) | Task-indexed snippets, executed by the test suite |
+| [`scripts/`](../scripts) | Runnable demonstrations, each teaching one failure mode |
 
 **Three invariants worth protecting:**
 
@@ -215,15 +237,14 @@ deferred list of things recorded so they are not lost.
 4.0 (decisions), 4.1 (the discretisation layer, 1.15.0) and 4.2 (`RuleDiscipline`, 1.16.0) are
 done. **4.3, findings and the grounding budget, is next.**
 
-4.3 is complete too — topology findings in 1.17.0, the budget and `unpinned-program` in 1.18.0,
-conflicts in 1.19.0. **One item remains before the phase closes:**
+**Phase 4 is complete.** 4.3 landed across 1.17.0–1.19.0; 4.4 was **discharged rather than
+written** (its exit criteria are already sections 3 and 8 of the rules demo — recorded as a decision
+in the roadmap, not ticked silently); and 4.5 added the notebooks.
 
-- **4.4, the didactic script.** Per the contract above, it must show the failure, not the success.
-  Note that [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py) has grown
-  to eight sections covering most of what 4.4 was scoped to teach, so the honest question is
-  whether 4.4 is a *new* script or a decision that the existing one already discharges it. Decide
-  that explicitly rather than writing a second demo that repeats the first — and if it does
-  discharge it, say so in the roadmap instead of quietly ticking the box.
+Nothing is scheduled after this. The deferred list in [roadmap.md](roadmap.md) is where the
+remaining ideas live, and [known-issues.md](known-issues.md) has the sharp edges worth fixing —
+the largest being that a **grounding blow-up cannot be interrupted in-process**, which no amount of
+in-process work will solve.
 
 One thing that will **not** be fixed and should stop being attempted: a grounding blow-up cannot be
 interrupted in-process. `budget_seconds` bounds searching only. Measured, and recorded in

@@ -7,6 +7,27 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ⚪ `visualize()` ignores `orientation` and `graph_type`
+
+Both parameters are still in the public signature, typed `Literal['TB', 'LR']` and
+`Literal['flow', 'bipartite']`, and **neither changes the output**. Rendering the same pipeline with
+every combination produces **byte-identical** files.
+
+This is deliberate: the XDSM view already combines what `"flow"` and `"bipartite"` used to show
+separately, and an XDSM always reads top-left to bottom-right, so there is no `"LR"` layout to
+render. They are kept so existing calls do not break, and the constructor logs at debug level when
+a non-default value is passed.
+
+Recorded here because the signature reasonably suggests otherwise — a `Literal` of two options is a
+strong hint that picking between them does something. Demonstrated in
+[`notebooks/10-visualization.ipynb`](../notebooks/10-visualization.ipynb), which hashes the output
+of all three combinations rather than asserting it.
+
+*Fix direction:* removing them is a breaking change for a cosmetic gain, so the honest options are
+to leave them documented as inert, or to deprecate them with a warning louder than a debug log.
+
+---
+
 ## 🟡 `visualize()` hangs in a headless process
 
 `PipelineVisualizer.render()` defaults to `view=True`, which calls `plt.show()`

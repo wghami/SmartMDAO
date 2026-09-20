@@ -8,7 +8,7 @@ every design question is settled (three in
 [003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
 [004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
 findings and the grounding budget.
-**Baseline:** `v1.19.0` — 511 tests, 100% coverage, 29/29 scripts.
+**Baseline:** `v1.20.0` — 560 tests, 100% coverage, 29/29 scripts, 15 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -313,9 +313,30 @@ Each sub-phase is its own branch and meets all four clauses of
       head" fires for **every injected fact** — a correct program looked alarming, once per sweep.
       Routed to logging.
 
-- [ ] **4.4 — The didactic script.** Per handoff, it must show the *failure*: a program with two
-      tied optimal answer sets caught as a finding, and an UNSAT with its core. Run it before writing
-      its narration.
+- [x] **4.4 — The didactic script. Discharged, not written.** Its stated exit criteria — *a
+      program with two tied optimal answer sets caught as a finding, and an UNSAT with its core* —
+      are sections 3 and 8 of [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py),
+      which grew to eight sections across 4.2 and 4.3. A second script repeating them would be
+      box-ticking, which is the failure this roadmap already records against its own author in
+      Phase 2. **Recorded as a decision rather than absorbed silently.**
+
+      What 4.4 was really reaching for — thorough, readable coverage of every concept — is better
+      served by the notebooks below.
+
+- [x] **4.5 — Notebooks, one concept per file.** Fifteen notebooks in [`notebooks/`](../notebooks),
+      committed **with their outputs** so GitHub renders what each cell actually printed. Executed
+      by `run_notebooks.py`, which CI runs, so a notebook that drifts from the library fails the
+      build rather than sitting there looking authoritative.
+
+      Guarded by `tests/test_notebooks.py`: every cell executed, no error output, every name in
+      `smartmdao.__all__` mentioned somewhere, and the index matches what is on disk — the same
+      guarantee `test_cookbook.py` makes for the cookbook.
+
+      **What it cost us.** Writing them found two things nothing else had: `orientation` and
+      `graph_type` on `visualize()` are **inert** (byte-identical output), which is deliberate and
+      was documented only in a docstring; and the optimization API was written from recollection
+      first and was wrong in every particular, which is exactly what the cookbook exists to prevent
+      and what executing the notebooks caught.
 
 **Exit criterion:** an engineer can point at a `.lp` file and a declared discretisation, re-run the
 study and get the same answer, and be told — before committing to a run — what grounding will cost.
