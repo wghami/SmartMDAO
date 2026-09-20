@@ -315,7 +315,14 @@ def test_a_correctly_wired_discretisation_is_clean():
     assert codes(pipeline, inputs=["span"]) == []
 
 
-def test_a_band_nothing_consumes_is_reported():
+def test_a_band_nothing_consumes_is_reported_as_information():
+    """
+    Downgraded from a warning in 1.17.0. A band nothing consumes is either an
+    orphan or a value the caller reads from the result and acts on outside the
+    pipeline - which is the *recommended* topology in docs/design/002. The two
+    are indistinguishable statically, so warning about it would fire on the
+    pattern the project recommends.
+    """
     pipeline = Pipeline(
         discretisation=Discretisation(
             mass_band=Bands("mass_kg", edges=[800], names=["light", "heavy"])
@@ -330,7 +337,7 @@ def test_a_band_nothing_consumes_is_reported():
     unused = [f for f in findings if f.code == "discretisation-unused"]
     assert len(unused) == 1
     assert unused[0].variable == "mass_band"
-    assert "cannot influence the answer" in unused[0].message
+    assert unused[0].severity == "info"
 
 
 def test_a_source_nothing_produces_is_reported_by_the_general_check():

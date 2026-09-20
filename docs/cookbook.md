@@ -517,6 +517,28 @@ assert rules.solve(mass_band="heavy") is not None
 3. **The step name decides seeding inside a loop.** It defaults to `rules_<program stem>`; pass
    `name=` deliberately if the discipline sits in a cycle, and ask `analyze()`.
 
+### Where to put the decision
+
+**Keep the rules off the feedback loop.** Inside a cycle they are applied once per sweep, on values
+that have not settled — so the choice depends on the solver's path rather than on a result, and a
+discrete choice inside a loop can leave it oscillating or give it several stable answers that each
+report success. `validate()` reports this as `rules-in-cycle`.
+
+What decides the topology is **one word**: whether a fact is named after the loop's own variable.
+
+```python
+facts=["mass_band"]          # edge back into the loop -> rules run every sweep
+facts=["prior_mass_band"]    # separate input -> rules sit on the linear part
+```
+
+The recommended shape is *decide → evaluate completely → revise*: run the pipeline with the
+decision fixed, read the new facts off the converged result, and loop in ordinary Python. Because
+the decision set is finite and the rules are deterministic, **a repeated decision set is a cycle** —
+so memoising what you have seen gives you termination, not just a retry cap.
+
+**Deeper:** [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py) section 6,
+and [design/002](design/002-agent-as-discipline.md).
+
 **Deeper:** [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py)
 
 ---

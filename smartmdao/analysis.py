@@ -445,13 +445,16 @@ def _check_discretisation(pipeline, steps: List[Step]) -> List[Finding]:
             findings.append(
                 Finding(
                     code="discretisation-unused",
-                    severity=WARNING,
+                    severity=INFO,
                     message=(
-                        f"'{produced_name}' is discretised from '{source}' but "
-                        f"no step consumes it. The threshold is declared and "
-                        f"cannot influence the answer - the same shape of "
-                        f"mistake as a disconnected discipline, and not caught "
-                        f"by that check because the band is wired to its source."
+                        f"'{produced_name}' is discretised from '{source}' and "
+                        f"no step inside the pipeline consumes it. That is a "
+                        f"mistake if you expected it to be wired in, and "
+                        f"perfectly correct if you read it from the result and "
+                        f"act on it outside - which is what the recommended "
+                        f"topology in docs/design/002 does. Both look identical "
+                        f"from here, which is why this is information rather "
+                        f"than a warning."
                     ),
                     variable=produced_name,
                 )
@@ -479,6 +482,93 @@ def _check_discretisation(pipeline, steps: List[Step]) -> List[Finding]:
                     variable=source,
                 )
             )
+
+    return findings
+
+
+def _decision_marker(step: Step, attribute: str) -> Optional[str]:
+    """Read a marker a synthetic step carries, if it carries one."""
+    return getattr(inspect.unwrap(step.fn), attribute, None)
+
+
+def _check_decisions_in_cycles(
+    analysis: PipelineAnalysis, steps: List[Step]
+) -> List[Finding]:
+    """
+    Steps that make a discrete choice from values the loop has not settled yet.
+
+    Two different mistakes with one shape. A step inside a cyclic block runs
+    once per sweep, on *intermediate* values - and intermediate values are an
+    artifact of the iteration path, not a result. When the step's output is
+    continuous that is simply how fixed-point iteration works. When it is a
+    **discrete choice**, three things follow that do not apply to a smooth
+    discipline:
+
+    * the residual is binary, so there is no notion of getting closer, and
+      oscillation replaces slow convergence as the failure mode;
+    * the loop can have several stable answers, each self-consistent and each
+      reporting success, with the initial guess alone deciding which one - this
+      was measured, not theorised (see docs/known-issues.md);
+    * the choice becomes a function of the solver's trajectory, so it cannot be
+      explained by pointing at the settled numbers.
+
+    Reported as a warning, never an error. docs/design/002 finds the topology
+    defensible when the choice genuinely must react to intermediate state, and
+    docs/design/003 says to inform the engineer rather than decide for them.
+    """
+    if not analysis.cycles:
+        return []
+
+    by_name = {step.name: step for step in steps}
+    findings = []
+
+    for cycle in analysis.cycles:
+        loop = " -> ".join(cycle.steps)
+
+        for name in cycle.steps:
+            step = by_name.get(name)
+            if step is None:  # pragma: no cover - cycles are built from `steps`
+                continue
+
+            program = _decision_marker(step, "decides_from_rules")
+            if program is not None:
+                findings.append(
+                    Finding(
+                        code="rules-in-cycle",
+                        severity=WARNING,
+                        message=(
+                            f"'{name}' applies the rules in '{program}' from "
+                            f"inside the loop {loop}, so it runs once per sweep "
+                            f"and chooses from values that have not settled "
+                            f"yet. A discrete choice inside a loop can leave it "
+                            f"oscillating, or give it several stable answers "
+                            f"that each report success. Putting the decision "
+                            f"outside the cycle and iterating it explicitly "
+                            f"avoids all of that - see docs/design/002."
+                        ),
+                        step=name,
+                    )
+                )
+
+            band = _decision_marker(step, "derives_band")
+            if band is not None:
+                findings.append(
+                    Finding(
+                        code="discretisation-in-cycle",
+                        severity=WARNING,
+                        message=(
+                            f"'{band}' is derived from a threshold inside the "
+                            f"loop {loop}. A value crossing an edge mid-solve "
+                            f"changes the band, which changes the result, which "
+                            f"can move the value back - so this loop may settle "
+                            f"in more than one place, each converged and "
+                            f"self-consistent, chosen by the initial guess "
+                            f"alone. Nothing reports which one you got."
+                        ),
+                        step=name,
+                        variable=band,
+                    )
+                )
 
     return findings
 
@@ -696,6 +786,7 @@ def validate(
     )
     findings.extend(_check_solver_fit(pipeline, analysis, steps, input_keys))
     findings.extend(_check_discretisation(pipeline, steps))
+    findings.extend(_check_decisions_in_cycles(analysis, steps))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])

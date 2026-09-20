@@ -8,7 +8,7 @@ every design question is settled (three in
 [003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
 [004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
 findings and the grounding budget.
-**Baseline:** `v1.16.0` — 461 tests, 100% coverage, 29/29 scripts.
+**Baseline:** `v1.17.0` — 471 tests, 100% coverage, 29/29 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -267,7 +267,20 @@ Each sub-phase is its own branch and meets all four clauses of
 
       **Floats are refused as facts**, pointing at `Bands`. ASP has no floating point, so converting
       one inside the library would be precisely the undeclared threshold 4.1 exists to prevent.
-- [ ] **4.3 — Findings and the budget.** `unpinned-program` in `validate()`; the grounding rung with
+- [ ] **4.3 — Findings and the budget.** *Partly landed in 1.17.0: the topology findings below.
+      `unpinned-program` and the grounding budget are still open.*
+
+      **Landed (1.17.0) — where the decision sits.** `rules-in-cycle` and
+      `discretisation-in-cycle`, both decided statically from the SCC decomposition with nothing
+      executed, plus the `facts` naming trap pinned by test. Prompted by the question of whether
+      4.2's result licensed putting a decision inside a loop: it does not, and
+      [002](design/002-agent-as-discipline.md) now carries the re-examination. **What it cost us:**
+      `discretisation-unused`, shipped as a warning in 1.15.0, turned out to fire on the
+      *recommended* topology — in B+D the caller reads the band from the result, so no step consumes
+      it. Downgraded to info, because a warning that fires on the pattern the project recommends
+      teaches people to ignore the finding list.
+
+      **Still open:** `unpinned-program` in `validate()`; the grounding rung with
       its estimate quoted first; unsat cores surfaced. **Two risks recorded in 004, both found by
       writing a worked `.lp` rather than by reasoning:** the unsat-core mapping named one of two
       conflicting constraints on a first cut, and a half-explanation points the engineer at the wrong

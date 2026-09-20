@@ -212,6 +212,48 @@ the solver runs. Ask it.
 
 ---
 
+## 🟡 Naming a fact after the loop's own variable silently changes the topology
+
+`RuleDiscipline(facts=["mass_band"])` wires an edge from the loop's own variable into the rules, so
+`HybridSolver` pulls the discipline into the SCC and applies it **once per sweep, on unconverged
+values**. `facts=["prior_mass_band"]` leaves it on the linear part, where the engineer drives it
+with an outer loop.
+
+One word of difference. The two `.lp` files can be identical apart from the predicate name, and
+nothing about either looks wrong.
+
+This is the same mechanic [002](design/002-agent-as-discipline.md) pins for a model step
+(`prior_violations`, not `violations`), and it now applies to `facts`. Pinned by
+`test_naming_a_fact_after_the_loops_own_variable_collapses_it_into_the_cycle`.
+
+*Partially addressed in 1.17.0:* `validate()` reports `rules-in-cycle` when it happens, so the
+consequence is visible even though the cause still is not.
+
+---
+
+## ✅ PARTLY ADDRESSED in 1.17.0 — a decision inside a loop is now reported
+
+Not resolved — **reported**. The two entries below describe failures that are real and remain real;
+what changed is that `validate()` now names them up front instead of leaving them to be discovered
+by a solve that quietly picks one answer.
+
+- `rules-in-cycle` — a rule-backed discipline inside a cyclic block.
+- `discretisation-in-cycle` — a band derived inside a cyclic block.
+
+Both are decided statically from the SCC decomposition, with **nothing executed** — pinned by a
+test that makes `_load_clingo` raise and asserts the findings still appear. Both are **warnings**:
+002 finds the topology defensible when the choice must genuinely react to intermediate state, and
+003 forbids deciding for the engineer.
+
+**Also downgraded in 1.17.0:** `discretisation-unused` went from warning to **info**. It fires when
+no *step* consumes a band — which is exactly what the **recommended** B+D topology looks like, since
+there the caller reads the band from the result and acts on it outside the pipeline. An orphan and a
+deliberate terminal output are indistinguishable statically, and a warning that fires on the
+recommended pattern teaches people to ignore the finding list. Found while building the topology
+checks, not by design.
+
+---
+
 ## 🔴 A threshold inside a feedback loop gives the loop more than one answer
 
 Found in 1.15.0 by running [`scripts/discretisation_demo.py`](../scripts/discretisation_demo.py),
