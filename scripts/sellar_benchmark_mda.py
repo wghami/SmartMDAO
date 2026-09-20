@@ -79,8 +79,6 @@ def run_sellar_benchmark():
     # Optional: Generate your XDSM diagram!
     pipeline.visualize(inputs=list(inputs.keys()),
                        output_path="results/sellar_mda",
-                       orientation="LR",
-                       graph_type="bipartite",
                        view=False)
 
 # 4. Run the Benchmark

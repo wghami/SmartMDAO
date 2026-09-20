@@ -21,11 +21,11 @@ def test_pipeline_visualization(tmp_path):
     
     # Test flow visualization output
     out_path = tmp_path / "flow_graph"
-    pipeline.visualize(inputs=["a"], output_path=str(out_path), view=False, graph_type="flow")
+    pipeline.visualize(inputs=["a"], output_path=str(out_path), view=False)
     
     # Test bipartite visualization output
     out_path_bi = tmp_path / "bi_graph"
-    pipeline.visualize(inputs=["a"], output_path=str(out_path_bi), view=False, graph_type="bipartite")
+    pipeline.visualize(inputs=["a"], output_path=str(out_path_bi), view=False)
     
     assert (tmp_path / "flow_graph.pdf").exists()
     assert (tmp_path / "bi_graph.pdf").exists()

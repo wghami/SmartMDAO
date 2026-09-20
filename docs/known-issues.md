@@ -7,24 +7,22 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
-## ⚪ `visualize()` ignores `orientation` and `graph_type`
+## ✅ RESOLVED in 1.21.0 — `visualize()` ignored `orientation` and `graph_type`
 
-Both parameters are still in the public signature, typed `Literal['TB', 'LR']` and
-`Literal['flow', 'bipartite']`, and **neither changes the output**. Rendering the same pipeline with
-every combination produces **byte-identical** files.
+Both parameters sat in the public signature, typed `Literal['TB', 'LR']` and
+`Literal['flow', 'bipartite']`, and **neither changed the output** — every combination produced
+byte-identical files. They were left over from a renderer that predated the XDSM view, which
+combines what `"flow"` and `"bipartite"` used to show separately and always reads top-left to
+bottom-right.
 
-This is deliberate: the XDSM view already combines what `"flow"` and `"bipartite"` used to show
-separately, and an XDSM always reads top-left to bottom-right, so there is no `"LR"` layout to
-render. They are kept so existing calls do not break, and the constructor logs at debug level when
-a non-default value is passed.
+**Removed**, rather than documented as inert. A `Literal` of two options is a strong hint that
+choosing between them does something, and a parameter that lies is worse than one that is absent.
+Breaking for anyone passing them, hence the version bump; `PipelineVisualizer.build()` now takes no
+arguments and `render_pipeline_diagram` no longer accepts them over MCP.
 
-Recorded here because the signature reasonably suggests otherwise — a `Literal` of two options is a
-strong hint that picking between them does something. Demonstrated in
-[`notebooks/10-visualization.ipynb`](../notebooks/10-visualization.ipynb), which hashes the output
-of all three combinations rather than asserting it.
-
-*Fix direction:* removing them is a breaking change for a cosmetic gain, so the honest options are
-to leave them documented as inert, or to deprecate them with a warning louder than a debug log.
+Found while writing [`notebooks/02-visualization.ipynb`](../notebooks/02-visualization.ipynb),
+which hashed the output of all three combinations rather than asserting they differed.
+`test_build_takes_no_layout_options` pins the signature so they are not reintroduced by habit.
 
 ---
 

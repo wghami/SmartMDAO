@@ -93,23 +93,19 @@ class Pipeline:
             logger.error(f"Pipeline execution failed: {e}")
             raise
 
-    def visualize(self, 
-                  inputs: List[str] = None, 
-                  output_path: str = None, 
-                  orientation: Literal["TB", "LR"] = "TB",
-                  graph_type: Literal["flow", "bipartite"] = "flow",
+    def visualize(self,
+                  inputs: List[str] = None,
+                  output_path: str = None,
                   view: bool = True):
         """
         Generates an XDSM diagram of the pipeline.
         """
         input_set = set(inputs or [])
-        logger.debug(f"Generating visualization ({graph_type}) for pipeline.")
+        logger.debug("Generating XDSM diagram for pipeline.")
         
         visualize_pipeline(
-            steps=self.steps,
+            steps=effective_steps(self),
             inputs=input_set,
             output_path=output_path,
-            orientation=orientation,
-            graph_type=graph_type,
             view=view
         )

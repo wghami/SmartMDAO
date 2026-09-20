@@ -165,8 +165,6 @@ def run_ssbj_mdo():
     pipeline.visualize(
         inputs=design_vars, 
         output_path="results/ssbj_topology", 
-        orientation="LR", 
-        graph_type="bipartite",
         view=False
     )
 

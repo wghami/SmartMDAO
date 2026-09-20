@@ -161,11 +161,9 @@ def create_server(name: str = "smartmdao"):
         output_path: str,
         variable: Optional[str] = None,
         inputs: Optional[List[str]] = None,
-        orientation: str = "TB",
-        graph_type: str = "flow",
     ) -> dict:
         return handlers.render_pipeline_diagram(
-            path, output_path, variable, inputs, orientation, graph_type
+            path, output_path, variable, inputs
         )
 
     @server.tool(

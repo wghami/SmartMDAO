@@ -121,8 +121,6 @@ def run_readme_quick_start():
     # Optional - visualizing the workflow
     pipeline.visualize(inputs=["z1", "z2", "x1"],  # <-- if not provided, pipeline tries to infer it
         output_path=str(Path("results") / f"{Path(__file__).stem}.svg"),  # choose your format svg, pdf, png
-        orientation="LR",
-        graph_type="bipartite",
         view=False)
 
     # ==============================================================================

@@ -153,24 +153,17 @@ def render_pipeline_diagram(
     output_path: str,
     variable: Optional[str] = None,
     inputs: Optional[Sequence[str]] = None,
-    orientation: str = "TB",
-    graph_type: str = "flow",
 ) -> Dict[str, Any]:
     """Writes an XDSM diagram to disk and reports where it went."""
     loaded, failure = _load(path, variable)
     if failure:
         return failure
 
-    try:
-        destination = render_xdsm(
-            loaded.pipeline,
-            output_path,
-            inputs=inputs or (),
-            orientation=orientation,
-            graph_type=graph_type,
-        )
-    except ValueError as error:
-        return {"ok": False, "error": str(error)}
+    # No try/except here on purpose: the only ValueErrors render_xdsm raised
+    # were validating `orientation` and `graph_type`, and both were removed in
+    # 1.21.0. The 100% coverage rule caught the handler still guarding against
+    # them - a branch nothing could reach.
+    destination = render_xdsm(loaded.pipeline, output_path, inputs=inputs or ())
 
     return {
         "ok": True,

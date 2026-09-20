@@ -403,31 +403,13 @@ def test_render_creates_missing_parent_directories(sellar_file, tmp_path):
     assert destination.exists()
 
 
-def test_render_rejects_a_bad_orientation(sellar_file, tmp_path):
-    result = render_pipeline_diagram(
-        str(sellar_file), str(tmp_path / "d.png"), orientation="sideways"
-    )
-    assert result["ok"] is False
-    assert "orientation must be one of" in result["error"]
-
-
-def test_render_rejects_a_bad_graph_type(sellar_file, tmp_path):
-    result = render_pipeline_diagram(
-        str(sellar_file), str(tmp_path / "d.png"), graph_type="spaghetti"
-    )
-    assert result["ok"] is False
-    assert "graph_type must be one of" in result["error"]
-
-
 def test_render_reports_load_failures(tmp_path):
     assert render_pipeline_diagram(str(tmp_path / "nope.py"), str(tmp_path / "d.png"))["ok"] is False
 
 
-def test_render_xdsm_accepts_the_bipartite_graph_type(sellar_file, tmp_path):
+def test_render_xdsm_writes_the_requested_file(sellar_file, tmp_path):
     loaded = load_pipeline(sellar_file)
-    written = render_xdsm(
-        loaded.pipeline, tmp_path / "b.png", graph_type="bipartite", orientation="LR"
-    )
+    written = render_xdsm(loaded.pipeline, tmp_path / "b.png")
     assert written.exists()
 
 

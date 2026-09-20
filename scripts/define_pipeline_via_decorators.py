@@ -50,8 +50,6 @@ def run_decorators_usage():
     
     pipe.visualize(inputs=["x"],  # <-- if not provided, pipeline tries to infer it
                    output_path = str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
-                   orientation = "LR",
-                   graph_type = "bipartite",
                    view = False)
     
     # Run the pipeline

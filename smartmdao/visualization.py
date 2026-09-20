@@ -105,32 +105,14 @@ class PipelineVisualizer:
     DATA_FONTSIZE = 9.0
     DATA_BOX_PAD = 0.32
 
-    def __init__(
-        self,
-        steps: List[Step],
-        input_keys: Set[str],
-        orientation: Literal['TB', 'LR'] = 'TB'
-    ):
+    def __init__(self, steps: List[Step], input_keys: Set[str]):
         self.input_keys = input_keys
-        self.orientation = orientation
-        if orientation != 'TB':
-            logger.debug(
-                f"orientation={orientation!r} is accepted for backward compatibility "
-                "but ignored - XDSM diagrams always read top-left to bottom-right."
-            )
-
         self.steps = compute_diagonal_order(steps, input_keys)
         self.fig = None
         self.ax = None
 
-    def build(self, graph_type: Literal["flow", "bipartite"] = "flow") -> "PipelineVisualizer":
-        """
-        Builds the XDSM diagram. `graph_type` is accepted for backward
-        compatibility but no longer changes the layout - the XDSM view
-        already combines what "flow" and "bipartite" used to show separately.
-        """
-        if graph_type not in ("flow", "bipartite"):
-            logger.debug(f"Unrecognized graph_type={graph_type!r}; rendering the standard XDSM view.")
+    def build(self) -> "PipelineVisualizer":
+        """Builds the XDSM diagram."""
         self._build_xdsm()
         return self
 
@@ -472,9 +454,6 @@ def visualize_pipeline(
     steps: List[Step],
     inputs: Set[str],
     output_path: Optional[str] = None,
-    orientation: str = "TD",
-    graph_type: Literal["flow", "bipartite"] = "flow",
     view: bool = True
 ):
-    viz = PipelineVisualizer(steps, inputs, orientation)
-    viz.build(graph_type).render(output_path, view=view)
+    PipelineVisualizer(steps, inputs).build().render(output_path, view=view)

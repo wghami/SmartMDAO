@@ -55,14 +55,21 @@ def test_missing_input_is_styled_distinctly(tmp_path):
     assert missing_patches
 
 
-def test_orientation_and_graph_type_are_accepted_but_non_fatal(tmp_path):
+def test_build_takes_no_layout_options(tmp_path):
+    """
+    `orientation` and `graph_type` were removed in 1.21.0. They had been inert
+    for some time - every combination produced byte-identical output - and a
+    Literal in the signature is a strong hint that choosing between them does
+    something. Pinned so they are not reintroduced by habit.
+    """
+    import inspect
+
+    assert list(inspect.signature(PipelineVisualizer.build).parameters) == ["self"]
+    assert "orientation" not in inspect.signature(PipelineVisualizer.__init__).parameters
+
     step = Step(fn=lambda x: x)
-    for orientation in ("TB", "LR"):
-        for graph_type in ("flow", "bipartite", "unrecognized"):
-            viz = PipelineVisualizer([step], input_keys={"x"}, orientation=orientation)
-            viz.build(graph_type=graph_type).render(
-                output_path=str(tmp_path / f"{orientation}_{graph_type}.pdf"), view=False
-            )
+    viz = PipelineVisualizer([step], input_keys={"x"})
+    viz.build().render(output_path=str(tmp_path / "xdsm.pdf"), view=False)
 
 
 def test_render_closes_figure_to_avoid_leaks(tmp_path):
