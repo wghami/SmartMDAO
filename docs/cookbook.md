@@ -19,6 +19,7 @@ Each section names the scripts in [`scripts/`](../scripts) that go deeper. Those
 | [`optimization`](#optimization) | Driving a pipeline with an optimizer |
 | [`analysis`](#analysis) | Inspecting a pipeline without running it |
 | [`discretisation`](#discretisation) | Turning a number into a symbolic fact, with the threshold declared |
+| [`rules`](#rules) | Disciplines backed by a reviewed ASP program |
 | [`visualization`](#visualization) | XDSM diagrams |
 | [`pitfalls`](#pitfalls) | Mistakes that fail silently — read this one |
 | [`reference`](#reference) | Everything else exported from `smartmdao` |
@@ -438,6 +439,85 @@ synthetic step is named `discretise_<band>`, which usually sorts first alphabeti
 decides which variable needs a seed. Ask `analyze()`.
 
 **Deeper:** [`discretisation_demo.py`](../scripts/discretisation_demo.py)
+
+---
+
+## rules
+
+A **rule-backed discipline** is an ASP program (`.lp` file) wired in as a step. A language model may
+have drafted it, but the file is what runs — reviewed, diffed, version-controlled. Nothing is
+generated at run time, so the same facts give the same answer next year.
+
+Needs the extra: `pip install 'smartmdao[asp]'`.
+
+```python
+import pathlib, tempfile
+from smartmdao import Pipeline, Bands, Discretisation, RuleDiscipline, INFEASIBLE
+
+program = pathlib.Path(tempfile.mkdtemp()) / "spar.lp"
+program.write_text("""
+material(aluminium; cfrp).
+1 { spar(M) : material(M) } 1.
+:- spar(aluminium), mass_band(heavy).
+cost(aluminium, 1). cost(cfrp, 3).
+#minimize { C@1,M : spar(M), cost(M,C) }.
+rank(aluminium,1). rank(cfrp,2).
+#minimize { R@0,M : spar(M), rank(M,R) }.      % total tie-break: DISTINCT values
+#show spar/1.
+""")
+
+pipeline = Pipeline(
+    discretisation=Discretisation(
+        mass_band=Bands("mass_kg", edges=[800], names=["light", "heavy"]),
+    ),
+)
+
+@pipeline.step(outputs=["mass_kg"])
+def size_airframe(span_m: float) -> float:
+    return 120.0 * span_m
+
+pipeline.add(RuleDiscipline(program, facts=["mass_band"], produces="decisions"))
+
+assert pipeline.run(span_m=5.0)["decisions"] == frozenset({"spar(aluminium)"})
+assert pipeline.run(span_m=10.0)["decisions"] == frozenset({"spar(cfrp)"})
+```
+
+**The output is a `frozenset` of atoms**, which is why it couples to a feedback loop with no solver
+change — structural equality over a set of decisions, with no prose in it to perturb.
+
+**UNSAT is the honest `INFEASIBLE`.** Not a sentinel anyone invented: clingo proved no model
+satisfies the rules. It is an explicit value, never `None`, because a step returning `None` stores
+nothing and reads as converged.
+
+```python
+from smartmdao import RuleDiscipline, INFEASIBLE
+import pathlib, tempfile
+
+impossible = pathlib.Path(tempfile.mkdtemp()) / "none.lp"
+impossible.write_text("""
+1 { spar(aluminium); spar(cfrp) } 1.
+:- spar(aluminium), mass_band(heavy).
+:- spar(cfrp), mass_band(heavy).
+#show spar/1.
+""")
+
+rules = RuleDiscipline(impossible, facts=["mass_band"], produces="decisions")
+assert rules.solve(mass_band="heavy") is INFEASIBLE
+assert rules.solve(mass_band="heavy") is not None
+```
+
+**Three things that will bite you:**
+
+1. **A program with two equally optimal answer sets raises `AmbiguousProgramError`** rather than
+   picking one. Pin it with an optimisation statement *plus* a total tie-break that ranks over a
+   **distinct value per candidate** — `#minimize { 1@0,M : spar(M) }` looks like a tie-break and
+   separates nothing, because the weight is the same constant for every candidate.
+2. **Floats are refused** (`RuleProgramError`). ASP has no floating point, so injecting one would
+   mean choosing a threshold invisibly. Declare a [`Bands`](#discretisation) and pass the band.
+3. **The step name decides seeding inside a loop.** It defaults to `rules_<program stem>`; pass
+   `name=` deliberately if the discipline sits in a cycle, and ask `analyze()`.
+
+**Deeper:** [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py)
 
 ---
 

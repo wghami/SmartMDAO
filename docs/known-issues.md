@@ -177,6 +177,41 @@ eliminate it.
 
 ---
 
+## 🔴 Grounding a rule-backed discipline has no budget
+
+`RuleDiscipline.solve` grounds and solves with no wall clock. ASP grounding is worst-case
+exponential ([003](design/003-determinism-and-the-engineer-in-the-loop.md), risk 4), and a
+generated program can be accidentally intractable in a way nobody notices until it hangs — inside a
+convergence loop, which is the worst place to discover it.
+
+Worse, the program is re-grounded on **every call**. Inside a `HybridSolver` block that is once per
+sweep, and the facts are the only thing that changed.
+
+*Fix direction:* this is Phase 4.3's main job, and it wants the same answer as Phase 3's execution
+cost — a budget and an estimate, not a spinner. The re-grounding is separately fixable by grounding
+once and using `assign_external` for the facts, but that constrains how the `.lp` may be written
+(the injected atoms would have to be declared `#external`), so it is a real trade rather than an
+obvious win. Measured: injecting facts as plain program text works whether or not the program
+declares them external, which is why the simpler form shipped first.
+
+---
+
+## 🟡 A rule-backed discipline in a loop needs *two* seeds, not one
+
+`RuleDiscipline` registers under `rules_<program stem>` by default, and that name joins the
+alphabetical ordering inside a cyclic block just as `discretise_<band>` does.
+
+Put a rule-backed discipline into a mass loop that already has a band and the cycle typically needs
+**two** initial guesses — one for whichever step sorts first, one for the band — where the same
+loop needed one before. Adding a discipline changed what `run()` requires, with no existing
+discipline touched.
+
+*Mitigation:* `name=` is a constructor argument precisely so the ordering is the engineer's to
+choose, and `analyze()` reports the real answer because it plans over the same `effective_steps`
+the solver runs. Ask it.
+
+---
+
 ## 🔴 A threshold inside a feedback loop gives the loop more than one answer
 
 Found in 1.15.0 by running [`scripts/discretisation_demo.py`](../scripts/discretisation_demo.py),

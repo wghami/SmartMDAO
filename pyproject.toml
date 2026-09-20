@@ -1,6 +1,6 @@
 [project]
 name = "SmartMDAO"
-version = "1.15.0"
+version = "1.16.0"
 description = "Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,6 +32,14 @@ openturns = [
 mcp = [
     "mcp>=2.2.0",
 ]
+# Rule-backed disciplines (docs/design/004). clingo declares one dependency,
+# cffi, which brings pycparser - three packages, not the "zero transitive
+# dependencies" 003 claimed before anyone measured it. Still negligible, and
+# `smartmdao.rules` imports it lazily so a base install fails only at the point
+# a program is actually solved.
+asp = [
+    "clingo>=5.8.0",
+]
 
 [project.scripts]
 smartmdao-mcp = "smartmdao.mcp.server:main"
@@ -41,10 +49,11 @@ dev = [
     "h5py>=3.15.1",
     "pytest>=9.0.1",
     "pytest-cov>=7.1.0",
-    # Both extras are present in dev so the full suite runs and 100% coverage
-    # is reachable. Neither is in the base install.
+    # Every extra is present in dev so the full suite runs and 100% coverage is
+    # reachable. None of them is in the base install.
     "mcp>=2.2.0",
     "openturns>=1.27",
+    "clingo>=5.8.0",
     # Notebook kernel for local experimentation. Nothing in smartmdao/ imports
     # it; it was a runtime dependency until 1.8.0, which meant every install
     # dragged in 14 packages (a debugger, a Jupyter kernel, ZeroMQ, Tornado).

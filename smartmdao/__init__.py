@@ -27,6 +27,12 @@ from .optimization import (
     optimize,
 )
 from .discretisation import Bands, Discretisation, DiscretisationError
+from .rules import (
+    INFEASIBLE,
+    AmbiguousProgramError,
+    RuleDiscipline,
+    RuleProgramError,
+)
 from .validation import TypeChecker, StandardTypeChecker, TypeMismatchError
 from .analysis import (
     analyze,
@@ -73,6 +79,10 @@ __all__ = [
     "Bands",
     "Discretisation",
     "DiscretisationError",
+    "RuleDiscipline",
+    "RuleProgramError",
+    "AmbiguousProgramError",
+    "INFEASIBLE",
     "TypeChecker",
     "StandardTypeChecker",
     "TypeMismatchError",
