@@ -330,6 +330,30 @@ checks, not by design.
 
 ---
 
+## 🟡 The solve watchdog runs on a second thread, and CI failed once
+
+`RuleDiscipline`'s budget is enforced by a daemon thread that calls
+`SolveHandle.cancel()` when the wall clock expires. That is the only concurrency
+anywhere in this library.
+
+`rule_backed_discipline_demo.py` failed once in CI and passed eight times locally — five plain
+runs, three pinned to one core — and then passed CI on the next attempt. No traceback was available
+because `run_all.py` did not print one (fixed in the same change).
+
+The only plausible mechanism found: the watchdog could call `cancel()` on a handle the main thread
+was already disposing, which reaches a C extension. **1.22.0 serialises the two with a lock**, so a
+watchdog that wakes after the caller has finished does nothing.
+
+**Recorded as suspected, not proven.** The failure was never reproduced, and a fix that cannot be
+demonstrated against the symptom is a hypothesis. If it recurs, `run_all.py` now prints the captured
+output, which is where to start.
+
+*Fix direction if it does recur:* drive the timeout from the main thread with `handle.wait(timeout)`
+instead of a watchdog. That removes the cross-thread call entirely, at the cost of restructuring the
+optimal-model enumeration loop, which needs a per-model wait rather than one budget for the solve.
+
+---
+
 ## 🔴 A declared side effect in a loop is reported, not prevented
 
 `validate()` reports `side-effect-in-cycle` as of 1.22.0, and that is **all** it does. The run-time
