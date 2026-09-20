@@ -8,7 +8,7 @@ every design question is settled (three in
 [003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
 [004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
 findings and the grounding budget.
-**Baseline:** `v1.17.0` — 471 tests, 100% coverage, 29/29 scripts.
+**Baseline:** `v1.18.0` — 499 tests, 100% coverage, 29/29 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -267,8 +267,8 @@ Each sub-phase is its own branch and meets all four clauses of
 
       **Floats are refused as facts**, pointing at `Bands`. ASP has no floating point, so converting
       one inside the library would be precisely the undeclared threshold 4.1 exists to prevent.
-- [ ] **4.3 — Findings and the budget.** *Partly landed in 1.17.0: the topology findings below.
-      `unpinned-program` and the grounding budget are still open.*
+- [ ] **4.3 — Findings and the budget.** *Mostly landed across 1.17.0 and 1.18.0. Unsat cores are
+      the one item still outstanding.*
 
       **Landed (1.17.0) — where the decision sits.** `rules-in-cycle` and
       `discretisation-in-cycle`, both decided statically from the SCC decomposition with nothing
@@ -280,24 +280,31 @@ Each sub-phase is its own branch and meets all four clauses of
       it. Downgraded to info, because a warning that fires on the pattern the project recommends
       teaches people to ignore the finding list.
 
-      **Still open:** `unpinned-program` in `validate()`; the grounding rung with
-      its estimate quoted first; unsat cores surfaced. **Two risks recorded in 004, both found by
-      writing a worked `.lp` rather than by reasoning:** the unsat-core mapping named one of two
-      conflicting constraints on a first cut, and a half-explanation points the engineer at the wrong
-      rule; and `#minimize { 1@0,A : selected(A) }` *looks* like a total tie-break while separating
-      nothing, so `unpinned-program` must check that a tie-break ranks over a **distinct value per
-      candidate** rather than that one is present. Both fail in the flattering direction. Demonstrate
-      each against a program known to exhibit it.
+      **Landed (1.18.0) — the budget and `unpinned-program`.** `budget_seconds` bounds solving,
+      answers are memoised on their facts, and `RuleDiscipline.cost` reports calls, cache hits,
+      grounds and seconds so an engineer can be quoted a number. `validate()` reports
+      `unpinned-program` for a program that generates candidates and either states no optimisation
+      or carries only constant weights.
 
-      **Carried over from 4.2, and easy to lose:** `discretisation-unused` fires when no *step*
-      consumes a band. A band consumed only through a `RuleDiscipline`'s `facts=[...]` is consumed
-      in reality, and today that works only because the facts appear in the synthetic step's
-      signature. Any change to how facts are declared must keep that true, or the check will start
-      warning about correctly wired pipelines. There is a regression test pinning it.
+      **The honest boundary, measured rather than assumed.** A solve handle cancels promptly;
+      `Control.interrupt()` during `ground()` is **ignored** and grounding runs to completion. So
+      the budget bounds *search*, not grounding — which is the worst-case-exponential half. Calling
+      it a budget without saying which half it covers would repeat the Phase 3 mistake of letting a
+      reliability mechanism be described as a safety one. Recorded in
+      [known-issues.md](known-issues.md) as still open.
 
-      Also still open from 4.2: **grounding has no budget.** 003's risk 4 is that grounding is
-      worst-case exponential, and `RuleDiscipline.solve` currently has no wall clock, so a
-      pathological program hangs the solve. This is the rung's main job.
+      **What it cost us:** the UNSAT path returned before the memo store, so an infeasible fact set
+      re-grounded on *every* call — the worst case, since that is the one a loop revisits. And the
+      cache key was built from raw values before they were validated, so an unrepresentable fact
+      raised `TypeError` on an unhashable key instead of the message explaining that facts must be
+      symbols. Both found by tests, neither by reading the code.
+
+      **Still open: unsat cores.** [004](design/004-rule-backed-disciplines.md) records the risk —
+      `SolveHandle.core()` returns solver literals whose sign convention does not map naively onto
+      the assumption symbols, and a first-cut mapping named one of two conflicting constraints. A
+      half-explanation points the engineer at the wrong rule, so this needs demonstrating against a
+      known conflict rather than trusting the mechanism.
+
 - [ ] **4.4 — The didactic script.** Per handoff, it must show the *failure*: a program with two
       tied optimal answer sets caught as a finding, and an UNSAT with its core. Run it before writing
       its narration.

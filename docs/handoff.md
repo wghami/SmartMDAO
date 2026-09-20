@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.17.0:** `main` is clean. 471 tests, 100% coverage, 29/29 scripts passing.
+**State as of v1.18.0:** `main` is clean. 499 tests, 100% coverage, 29/29 scripts passing.
 Roadmap Phases 0–3 are complete. **Phase 4 (rule-backed disciplines) is under way** — 4.0, 4.1
 and 4.2 are merged; **4.3 is next**. Design questions all settled, see
 [004](design/004-rule-backed-disciplines.md).
@@ -90,7 +90,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 471 tests, 100% coverage
+uv run pytest                        # 499 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
@@ -215,17 +215,19 @@ deferred list of things recorded so they are not lost.
 4.0 (decisions), 4.1 (the discretisation layer, 1.15.0) and 4.2 (`RuleDiscipline`, 1.16.0) are
 done. **4.3, findings and the grounding budget, is next.**
 
-Three things to read before starting it, all in [known-issues.md](known-issues.md):
+4.3 is mostly landed too — the topology findings in 1.17.0, the budget and `unpinned-program` in
+1.18.0. **Two things remain before the phase closes:**
 
-- **Grounding has no budget.** `RuleDiscipline.solve` has no wall clock and re-grounds on every
-  call, so a pathological program hangs a solve. This is 4.3's main job, and it wants Phase 3's
-  answer: an estimate with a number, not a spinner.
-- **Ambiguity is not only an ASP problem.** A threshold inside a feedback loop gives the loop more
-  than one fixed point, both converged, chosen by the initial guess. Whatever 4.3 builds to report
-  ambiguity should cover the numeric case too.
-- **`unpinned-program` is harder than it looks.** A tie-break written the obvious way separates
-  nothing; checking that one is *present* passes a genuinely ambiguous program. See
-  [004](design/004-rule-backed-disciplines.md).
+- **Unsat cores (4.3).** The mechanism exists, but `SolveHandle.core()` returns solver literals
+  whose sign convention does not map naively onto the assumption symbols — a first-cut mapping
+  named *one* of two conflicting constraints. A half-explanation points the engineer at the wrong
+  rule, so demonstrate it against a known conflict rather than trusting it.
+- **4.4, the didactic script.** Per the contract above, it must show the failure, not the success.
+
+One thing that will **not** be fixed and should stop being attempted: a grounding blow-up cannot be
+interrupted in-process. `budget_seconds` bounds searching only. Measured, and recorded in
+[known-issues.md](known-issues.md) — do not let "budget" grow into a claim of protection it does
+not give, which is the same drift Phase 3 records about the subprocess.
 
 *This section previously read "Phase 3 (sandboxed execution)… nothing in Phase 3 should start before
 open decision #2 is settled", which had been stale since 1.13.0 shipped Phase 3. Noted rather than

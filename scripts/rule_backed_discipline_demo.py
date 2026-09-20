@@ -17,6 +17,7 @@ This script shows the things that argument turns on:
   5. All of it wired end to end, ordered by the solver.
   6. WHERE you put the decision - the one that matters most, and the one a
      working example will not teach you, because the wrong topology works too.
+  7. What it costs, and the one thing the budget cannot protect you from.
 
 The program is scripts/programs/wing_architecture.lp. Read it alongside this.
 """
@@ -30,6 +31,7 @@ from smartmdao import (
     Discretisation,
     HybridSolver,
     Pipeline,
+    RuleBudgetExceeded,
     RuleDiscipline,
     RuleProgramError,
     analyze,
@@ -289,3 +291,68 @@ print("   decide, evaluate completely, revise. docs/design/002 reached that")
 print("   conclusion for a language model. It holds for rules too, for a")
 print("   different reason - determinism is what makes the outer loop provably")
 print("   terminating, because a repeated decision set IS a cycle.")
+
+
+# ==============================================================================
+# 7. What it costs, and what the budget does NOT cover
+# ==============================================================================
+
+rule("7. A number, not a spinner - and an honest boundary")
+
+metered = RuleDiscipline(
+    PROGRAM,
+    facts=["mass_band", "certification"],
+    produces="decisions",
+    budget_seconds=5.0,
+)
+
+for _ in range(3):
+    metered.solve(mass_band="light", certification="part23")
+metered.solve(mass_band="heavy", certification="part23")
+
+print(f"cost after 4 calls: {metered.cost}")
+print(f"projected for a 30-sweep loop: {metered.cost.projected_seconds(30):.3f}s")
+
+print("\n-> Two distinct fact sets, four calls, two ground+solves. The cache is")
+print("   EXACT rather than approximate: the program is fixed and clingo is")
+print("   deterministic, so the same facts cannot give a different answer. That")
+print("   is the same property the whole direction was chosen for, paying off")
+print("   somewhere unexpected.")
+print()
+print("   The projection assumes NO cache hits, which is pessimistic on")
+print("   purpose. Quoting the optimistic number is how someone gets committed")
+print("   to a run that does not end.")
+
+HARD = """
+#const n=13.
+pigeon(1..n+1). hole(1..n).
+1 { in(P,H) : hole(H) } 1 :- pigeon(P).
+:- in(P1,H), in(P2,H), P1 < P2.
+seen(B) :- mass_band(B).
+#show in/2.
+"""
+
+with tempfile.TemporaryDirectory() as directory:
+    hard_path = pathlib.Path(directory) / "pigeonhole.lp"
+    hard_path.write_text(HARD)
+
+    hard = RuleDiscipline(
+        hard_path, facts=["mass_band"], produces="decisions", budget_seconds=0.5
+    )
+    try:
+        hard.solve(mass_band="light")
+    except RuleBudgetExceeded as error:
+        print(f"\nbudget stopped it: {str(error).splitlines()[0]}")
+
+print("\n-> Note what that is NOT. A timeout is not UNSAT. UNSAT is a proof that")
+print("   no model satisfies the rules; a budget running out proves nothing at")
+print("   all, and returning INFEASIBLE here would turn 'we gave up' into 'your")
+print("   architecture is impossible' - a silent wrong answer.")
+print()
+print("   And the boundary worth stating plainly: budget_seconds bounds")
+print("   SEARCHING, not GROUNDING. Verified against clingo 5.8.2 - a solve")
+print("   handle cancels promptly, while interrupt() during ground() is ignored")
+print("   and grounding runs to completion. Grounding is the worst-case")
+print("   exponential half, so this budget is not protection against a")
+print("   grounding blow-up, and saying otherwise would be the same overclaim")
+print("   Phase 3 records about the subprocess.")
