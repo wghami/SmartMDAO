@@ -67,7 +67,7 @@ by solving. Splitting it in two keeps both halves honest:
 
 | Layer | Cost | What it can say |
 |---|---|---|
-| `validate()` — static, parses the `.lp` | free | `unpinned-program`: no optimisation statement, or no total tie-break. A program that *can* be ambiguous. |
+| `validate()` — static, parses the `.lp` | free | `unpinned-program`: no optimisation statement, or no *well-formed* total tie-break. A program that *can* be ambiguous. See the finding below — presence of a tie-break is not the property to check. |
 | A new rung on the cost ladder — grounds and solves | budgeted, estimated first | `ambiguous-optimum`: this program, on these facts, **actually has** more than one optimal model. Here they are. |
 
 `validate()` never grounds. That is not pedantry about the invariant: 003's risk 4 is that grounding
@@ -92,6 +92,44 @@ optimal models: [(['choice(a)', ...], [3]), (['choice(b)', ...], [3])]
 So "enumerate and report rather than silently taking the first" is implementable as stated. Taking
 the first would have returned `choice(a)` with nothing anywhere indicating that `choice(b)` was
 equally good — which is the exact failure 003 forbids.
+
+### Verified, and it moves the static half: "has a tie-break" is not a check
+
+Writing a worked `.lp` to test the decision above produced the sharpest finding in this record.
+
+A total tie-break was written the obvious way — a second `#minimize` at lower priority:
+
+```prolog
+#minimize { C@1,A : selected(A), complexity(A,C) }.   % the real objective
+#minimize { 1@0,A : selected(A) }.                    % "tie-break"
+```
+
+It is not a tie-break. The weight is the constant `1` for every candidate, so it separates nothing.
+Two architectures tied on complexity still came back as **two proven-optimal models**. The working
+form ranks over a *distinct* value per candidate:
+
+```prolog
+rank(all_electric,1). rank(parallel_hybrid,2). rank(series_hybrid,3). rank(turboprop,4).
+#minimize { R@0,A : selected(A), rank(A,R) }.
+```
+
+Measured: two optimal models become one.
+
+**This changes what the static half of decision 2 has to do.** `unpinned-program` as first specified
+— "no optimisation statement, or no tie-break" — would have passed the broken program above, which
+is genuinely ambiguous. Presence is not the property. The check must establish that the tie-break
+**ranks over a distinct value per candidate**, and a generated program is exactly where the constant
+form will appear, because it is the shape that looks right.
+
+Two consequences, both carried into 4.3:
+
+1. The static check is harder than "grep for `#minimize`", and it has a **false-negative mode that
+   flatters the program**. That is the direction findings must never fail in.
+2. It raises the value of the runtime rung. Static analysis can establish that a tie-break is
+   *well-formed*; only solving establishes that the optimum is *unique on these facts*. The two
+   halves were a convenience when this record was drafted; they are now load-bearing.
+
+The decision itself stands — this sharpens the specification rather than changing the shape.
 
 ### Verified, and less comfortable: unsat cores do not map back for free
 

@@ -240,9 +240,13 @@ Each sub-phase is its own branch and meets all four clauses of
       non-numeric convergence couples to a frozenset of atoms with no solver change; if it does not,
       this phase is larger than it looks.
 - [ ] **4.3 — Findings and the budget.** `unpinned-program` in `validate()`; the grounding rung with
-      its estimate quoted first; unsat cores surfaced. **The core mapping is the risk here** — 004
-      records a first-cut attempt that named one of two conflicting constraints, and a half-explanation
-      points the engineer at the wrong rule. Demonstrate it against a known conflict.
+      its estimate quoted first; unsat cores surfaced. **Two risks recorded in 004, both found by
+      writing a worked `.lp` rather than by reasoning:** the unsat-core mapping named one of two
+      conflicting constraints on a first cut, and a half-explanation points the engineer at the wrong
+      rule; and `#minimize { 1@0,A : selected(A) }` *looks* like a total tie-break while separating
+      nothing, so `unpinned-program` must check that a tie-break ranks over a **distinct value per
+      candidate** rather than that one is present. Both fail in the flattering direction. Demonstrate
+      each against a program known to exhibit it.
 - [ ] **4.4 — The didactic script.** Per handoff, it must show the *failure*: a program with two
       tied optimal answer sets caught as a finding, and an UNSAT with its core. Run it before writing
       its narration.

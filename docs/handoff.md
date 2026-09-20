@@ -171,7 +171,9 @@ Not bugs — judgement calls left deliberately to the maintainer.
   `unpinned-program` statically and **never grounds**, because grounding is worst-case exponential
   and an analysis that can hang is one nobody runs. Actual multiplicity is an `ambiguous-optimum`
   finding from a new budgeted rung on the Phase 3 cost ladder. Verified against clingo 5.8.2 before
-  being written down — `--opt-mode=optN` does enumerate tied optima.
+  being written down — `--opt-mode=optN` does enumerate tied optima, and a tie-break written the
+  obvious way (`#minimize { 1@0,A : selected(A) }`) turned out to separate nothing, which is why the
+  static check tests that a tie-break is *well-formed* rather than *present*.
 
 - ~~Whether to build `compare_runs`~~ — built in **1.14.0**. Two translations differing only in
   their convergence criterion both reported success while one answer was 95% out; nothing that
