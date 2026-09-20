@@ -28,3 +28,12 @@ jobs:
         env:
           MPLBACKEND: Agg
         run: uv run pytest tests/
+
+      # The notebooks are committed WITH their outputs so GitHub renders them.
+      # Re-executing here is what stops them drifting away from the library: a
+      # notebook whose code no longer matches fails the build instead of sitting
+      # there looking authoritative.
+      - name: Execute notebooks
+        env:
+          MPLBACKEND: Agg
+        run: uv run python run_notebooks.py
