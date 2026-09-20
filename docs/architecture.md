@@ -18,6 +18,7 @@ The whole library is ~1800 lines across 12 modules. Read it in this order:
 | `validation.py` | `TypeChecker` protocol, static edge validation, per-call input validation. |
 | `executor.py` | `StepExecutor` — argument binding, invocation, memory updates. |
 | `solvers.py` | `DAGSolver`, `IterativeSolver`, `HybridSolver`, convergence checking. |
+| `discretisation.py` | `Bands` / `Discretisation` — declared thresholds turning a number into a symbolic fact. Each band becomes an ordinary `Step`. |
 | `core.py` | `Pipeline` — the user-facing façade that wires the above together. |
 | `optimization.py` | Bridge to external optimizers; backend registry. |
 | `cache.py` | `@cached` and its four storage backends. |

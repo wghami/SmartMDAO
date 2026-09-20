@@ -26,6 +26,7 @@ from .graph import (
     map_producers,
     weakly_connected_components,
 )
+from .discretisation import effective_steps
 from .models import Step
 from .solvers import (
     DAGSolver,
@@ -184,7 +185,7 @@ def analyze(pipeline, inputs: Sequence[str] = ()) -> PipelineAnalysis:
     Supplying it sharpens the analysis - without it, every external input looks
     like a missing initial guess.
     """
-    steps = list(pipeline.steps)
+    steps = effective_steps(pipeline)
     input_keys = set(inputs)
 
     producers = map_producers(steps)
@@ -392,6 +393,96 @@ def _check_missing_inputs(
     ]
 
 
+def _is_numeric_annotation(declared) -> bool:
+    """
+    Whether an annotation describes something `Bands.classify` can compare.
+
+    `bool` is excluded even though it subclasses `int`: True would silently
+    classify as 1.0 and land in whichever band contains it, which is a fact
+    nobody intended. Anything that is not a plain class - `Any`, a generic, a
+    missing annotation - is not judged here at all, per the invariant that
+    absent type information degrades to unchecked rather than to a failure.
+    """
+    return (
+        isinstance(declared, type)
+        and not issubclass(declared, bool)
+        and issubclass(declared, (int, float))
+    )
+
+
+def _check_discretisation(pipeline, steps: List[Step]) -> List[Finding]:
+    """
+    The declared thresholds that turn a number into a symbolic fact.
+
+    This is the check docs/design/003 asks for by name. A reviewed set of rules
+    sitting on an unreviewed mapping is not traceable, and the mapping is where
+    the answer is actually decided - so the thresholds are reported alongside
+    every other structural finding rather than left in a helper function.
+
+    Only two questions are asked here, because modelling a band as a real step
+    means the general checks already answer the rest: a source nothing produces
+    is reported by `missing-input` against the synthetic step, and a band name a
+    discipline also declares is reported by `duplicate-output`. What remains is
+    what those checks cannot see.
+
+    Nothing here classifies a value. Every finding comes from the declaration.
+    """
+    discretisation = getattr(pipeline, "discretisation", None)
+    if not discretisation:
+        return []
+
+    producers = map_producers(steps)
+    consumed: Set[str] = set()
+    for step in steps:
+        consumed.update(_step_inputs(step))
+
+    findings = []
+
+    for produced_name, band in discretisation.bands.items():
+        source = band.variable
+
+        if produced_name not in consumed:
+            findings.append(
+                Finding(
+                    code="discretisation-unused",
+                    severity=WARNING,
+                    message=(
+                        f"'{produced_name}' is discretised from '{source}' but "
+                        f"no step consumes it. The threshold is declared and "
+                        f"cannot influence the answer - the same shape of "
+                        f"mistake as a disconnected discipline, and not caught "
+                        f"by that check because the band is wired to its source."
+                    ),
+                    variable=produced_name,
+                )
+            )
+
+        producer = producers.get(source)
+        if producer is None:
+            continue
+
+        declared = producer.resolve_output_types().get(source)
+        if isinstance(declared, type) and not _is_numeric_annotation(declared):
+            findings.append(
+                Finding(
+                    code="discretisation-non-numeric",
+                    severity=WARNING,
+                    message=(
+                        f"'{source}' is declared as {_format_type(declared)} by "
+                        f"'{producer.name}', but bands for '{produced_name}' "
+                        f"compare it against numeric edges. Classification will "
+                        f"raise at run time. The band's own parameter is left "
+                        f"unannotated on purpose, so the type edges cannot "
+                        f"catch this."
+                    ),
+                    step=producer.name,
+                    variable=source,
+                )
+            )
+
+    return findings
+
+
 def _check_initial_guesses(
     analysis: PipelineAnalysis, solver_name: str
 ) -> List[Finding]:
@@ -589,7 +680,7 @@ def validate(
     Unlike `validate_structure`, this never raises and never stops at the first
     problem - the point is to hand back a complete list to fix in one pass.
     """
-    steps = list(pipeline.steps)
+    steps = effective_steps(pipeline)
     input_keys = set(inputs)
     checker = type_checker or StandardTypeChecker()
 
@@ -604,6 +695,7 @@ def validate(
         _check_initial_guesses(analysis, type(pipeline.solver).__name__)
     )
     findings.extend(_check_solver_fit(pipeline, analysis, steps, input_keys))
+    findings.extend(_check_discretisation(pipeline, steps))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])
@@ -658,6 +750,18 @@ def explain(pipeline, inputs: Sequence[str] = ()) -> str:
         lines.append("")
 
     lines.append(f"Execution order: {' -> '.join(analysis.execution_order)}")
+
+    discretisation = getattr(pipeline, "discretisation", None)
+    if discretisation:
+        lines.append("")
+        lines.append(f"Discretisation ({len(discretisation.bands)}):")
+        for name, band in discretisation.bands.items():
+            lines.append(f"  {name}: {band.describe()}")
+            lines.append(
+                f"     edge values fall in the band "
+                f"{'above' if band.closed == 'left' else 'below'} "
+                f"(closed={band.closed!r})"
+            )
 
     if findings:
         lines.append("")

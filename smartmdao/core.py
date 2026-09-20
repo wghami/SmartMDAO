@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, List, Literal
 
+from .discretisation import Discretisation, effective_steps
 from .models import Step
 from .solvers import Solver, DAGSolver
 from .visualization import visualize_pipeline
@@ -20,6 +21,11 @@ class Pipeline:
     # step invocation, which matters inside IterativeSolver's convergence loop.
     runtime_type_checks: bool = False
     type_checker: TypeChecker = field(default_factory=StandardTypeChecker)
+    # Declared thresholds mapping continuous variables to symbolic bands. Held
+    # on the pipeline rather than on a consumer so `validate()` can report on
+    # them without reaching into anything - the threshold is where the answer
+    # is actually decided, so it has to be as visible as the graph is.
+    discretisation: Discretisation = field(default_factory=Discretisation)
     _structure_validated: bool = field(default=False, init=False, repr=False, compare=False)
 
     def add(self, fn: Callable, outputs: list[str] = None):
@@ -52,18 +58,23 @@ class Pipeline:
         """
         Validates types, then delegates execution to the configured Solver.
         """
-        logger.info(f"Starting pipeline execution with {len(self.steps)} steps and inputs: {list(inputs.keys())}")
+        # A declared band is a step like any other, so the solver plans and runs
+        # it alongside the disciplines rather than having facts injected around
+        # the outside. See discretisation.effective_steps.
+        steps = effective_steps(self)
+
+        logger.info(f"Starting pipeline execution with {len(steps)} steps and inputs: {list(inputs.keys())}")
         try:
             if not self._structure_validated:
-                validate_structure(self.steps, self.type_checker)
+                validate_structure(steps, self.type_checker)
                 self._structure_validated = True
 
-            validate_external_inputs(self.steps, inputs, self.type_checker)
+            validate_external_inputs(steps, inputs, self.type_checker)
 
             if self.runtime_type_checks:
-                result = self.solver.solve(self.steps, inputs, type_checker=self.type_checker)
+                result = self.solver.solve(steps, inputs, type_checker=self.type_checker)
             else:
-                result = self.solver.solve(self.steps, inputs)
+                result = self.solver.solve(steps, inputs)
 
             logger.info("Pipeline execution completed successfully.")
             return result
