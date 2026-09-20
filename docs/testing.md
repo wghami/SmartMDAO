@@ -57,10 +57,31 @@ a label.
 uv run python run_all.py
 ```
 
-**You should see** `27 scripts`, all `✅ Pass`, and a final status report.
+**You should see** `29 scripts`, all `✅ Pass`, and a final status report.
 
 **What it proves:** the examples are not decoration. They run in CI, and a change that breaks one
 fails the build. It also means any of them can be read *and executed* to check a claim.
+
+> **On a headless machine, set `MPLBACKEND=Agg`.** Several scripts render a diagram, and on an
+> interactive backend `plt.show()` blocks forever rather than failing. CI sets it for this reason.
+
+---
+
+## Step 2b — Read the notebooks
+
+``` bash
+uv run python run_notebooks.py
+```
+
+**You should see** 15 notebooks, all `PASS`, in about 45 seconds.
+
+**What it proves:** [`notebooks/`](../notebooks) is one concept per file, committed **with its
+outputs** so GitHub renders what each cell printed. Re-executing them is what stops them drifting
+from the library — a notebook whose code no longer matches fails the build rather than sitting
+there looking authoritative. CI runs this too.
+
+You do not have to run it to read them: open any notebook on GitHub and the outputs are already
+there, diagrams included.
 
 ---
 
@@ -518,13 +539,14 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 389 tests, with skips | `uv sync` did not install the extras — check for `openturns` and `mcp` |
+| `pytest` reports fewer than 558 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
 | Typing `/` shows only two smartmdao entries | Correct — those are prompts. Tools are never slash commands; see Step 6a |
 | You changed the code but the agent behaves as before | Step 6b — start a new session; the old subprocess is still running |
 | A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read |
+| A notebook shows stale output | Re-run `run_notebooks.py`; the committed outputs are regenerated, not hand-edited |
 | A run is killed at 60s | That is the wall clock. Try `rung="smoke"` to see the unit cost, then raise `timeout_seconds` deliberately |
 | A diagram command hangs | You called `visualize()` directly in a headless shell; pass `view=False`. The MCP path forces this already |
 

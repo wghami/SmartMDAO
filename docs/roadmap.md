@@ -3,11 +3,9 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–3 complete. **Phase 4 (rule-backed disciplines) is under way**:
-every design question is settled (three in
-[003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
-[004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
-findings and the grounding budget.
+**Current position:** Phases 0–4 complete. **Phase 5 (steps that touch the world) is next**, with
+its design questions settled up front in [005](design/005-side-effecting-steps.md) and nothing built
+yet.
 **Baseline:** `v1.21.0` — 558 tests, 100% coverage, 29/29 scripts, 15 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -352,6 +350,40 @@ A program that admits more than one optimal model says so rather than picking on
 
 ---
 
+## Phase 5 — Steps that touch the world ⬜
+
+Direction set by [005](design/005-side-effecting-steps.md), which settles the three design questions
+before any code is written — the shape Phase 4 used, and the reason it stayed the size it claimed.
+
+A step inside a cyclic block runs **once per sweep**. For a numeric discipline that is the point;
+for one that writes a file, launches a subprocess or posts to an API it is something else. Nothing
+currently treats re-running a step as *unsafe* rather than merely wasteful, and that gap is what
+separates an MDAO engine from a workflow engine.
+
+**Settled in [005](design/005-side-effecting-steps.md):** side effects are **declared per step**
+(`@pipeline.step(outputs=[...], effects="once")`), so analysis sees them without executing anything;
+`validate()` reports `side-effect-in-cycle` statically **and the solver refuses at run time** unless
+the step said which behaviour it wants; and `"once"` means once per `run()`.
+
+**Refusing breaks the project's own pattern on purpose.** Every other finding describes something
+recoverable. You cannot un-send an email, so a warning printed alongside thirty created tickets is a
+post-mortem rather than information. Nothing stops `effects="every-sweep"` — the engineer keeps the
+choice and is simply required to make it explicitly.
+
+- [ ] **5.1 — Declaration and the static finding.** `effects` on `Step`, `side-effect-in-cycle` in
+      `validate()`. **Solver-aware**: `IterativeSolver` sweeps every step, so the question is "would
+      this run more than once", not "is it in a cycle".
+- [ ] **5.2 — Runtime refusal and the `"once"` latch.**
+- [ ] **5.3 — A notebook, and the tool descriptions.** `run_pipeline` executes side effects for
+      real, and `compare_runs` executes them **twice** — which "compare two translations" does not
+      sound like.
+
+**Left open deliberately:** the optimizer case. `optimize()` calls `run()` hundreds of times, and
+`"once"` is scoped per run, so a declared step still fires once per *evaluation*. Sharper than the
+loop case and not designed in passing — see 005, risk 1.
+
+---
+
 ## Deferred — not scheduled
 
 Recorded so they are not lost, with no commitment.
@@ -359,8 +391,12 @@ Recorded so they are not lost, with no commitment.
 *(The dependency diet is done: `openturns` behind an extra in 1.7.0, `ipykernel` to `dev` in
 1.8.0. `HybridSolver` forwarding `target_var` landed in 1.8.0. See
 [known-issues.md](known-issues.md).)*
-- **OpenMDAO / GEMSEO importer.** Translate competitor definitions into SmartMDAO. An adoption
-  lever rather than a capability.
+- ~~**OpenMDAO / GEMSEO importer.**~~ **Dropped (2026-09-20).** The idea was an adoption lever:
+  translate a competitor's problem definition into SmartMDAO. It is dropped because it pulls the
+  project toward *being* those frameworks. What SmartMDAO does that they do not — converge on a
+  decision rather than a number, report what a solve would do without running it, make a threshold
+  reviewable — has no counterpart to import from, so an importer would faithfully carry across only
+  the part that is not the point. Recorded rather than deleted: the reasoning is the useful part.
 - ~~**MCP sampling integration.**~~ Dropped — see Phase 4. The library will not call a model.
 - **Under-relaxation in the solvers.** Absent today, which is a translation hazard: a hand-written
   loop that relied on damping loses it silently. See [known-issues.md](known-issues.md).
