@@ -187,6 +187,10 @@ class Bands:
         classify_band.__doc__ = f"Derived from {self.describe()}"
         classify_band.__signature__ = _one_parameter_signature(self.variable)
         classify_band.__annotations__ = {"return": str}
+        # A marker rather than a name match: the step name is the engineer's to
+        # choose, and analysis that recognised steps by their name would start
+        # lying the moment someone renamed one.
+        classify_band.derives_band = produced
 
         return Step(classify_band, manual_outputs=[produced])
 

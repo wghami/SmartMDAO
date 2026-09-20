@@ -353,3 +353,50 @@ Three consequences for this record specifically:
   generates the program and SmartMDAO runs clingo. That dependency disappears from the roadmap.
 
 Read this document for the coupling mechanics. Read 003 for what goes in the loop.
+
+---
+
+## Findings added after Phase 4.2 (2026-09-20)
+
+**The B+D recommendation was re-examined against ASP, and it stands.** Phase 4.2 showed a
+rule-backed discipline *runs* inside a cycle and converges, with no change to `solvers.py`. That is
+a statement about plumbing, and it was briefly mistaken for a reason to revisit topology A. It is
+not.
+
+Of the four arguments this record makes for B+D, ASP weakens exactly one:
+
+| Argument | With ASP |
+|---|---|
+| **Cost** — one call per sweep vs per outer iteration | **Weakened.** clingo is milliseconds, not a billed API call. But grounding is worst-case exponential and currently re-grounds every sweep with no budget, so "expensive" became "unbounded and unmeasured" rather than "cheap". |
+| No "give up" problem | Unchanged. A discrete map has no contraction property: the residual is binary, so oscillation replaces slow convergence as the failure mode. |
+| No `target_var` conflict | Unchanged. `OscillationAwareConvergenceChecker` still needs one. |
+| No step-order trap | **Worse.** `rules_<stem>` joins the alphabetical ordering alongside `discretise_<band>`, and a rule-backed discipline in a loop typically needs *two* seeds where the loop needed one. |
+
+**The argument this record does not make, and should.** Inside the cycle, the decision is taken on
+**unconverged values**. An intermediate mass is an artifact of the iteration path, not a result, so
+the architecture selected becomes a function of the solver's trajectory. That is a traceability
+failure in [003](003-determinism-and-the-engineer-in-the-loop.md)'s terms: *"at sweep 2 the mass
+happened to be over 800 kg"* is not a reason anyone can give in a design review.
+
+**Determinism strengthens B+D rather than rescuing A.** Decision sets are finite and ASP is
+deterministic, so memoising visited decision sets in the outer loop yields a **termination proof**:
+either a fixed point is reached, or a set repeats — and a repeat *is* a cycle, reportable with its
+trace. This record could not claim that for a language model, where revisiting a state proves
+nothing. The property one might hope would license topology A is the one that most improves B+D.
+
+**Measured, not argued.** Phase 4.1 built a mass loop with a threshold in it and found **two**
+fixed points — 450 kg/`light` and 510 kg/`heavy` — each converged in two iterations, each
+self-consistent, selected by the initial guess alone, with nothing reporting that the other
+existed. The discreteness causes this, not ASP; a declared band does it with no rules engine
+present.
+
+**What shipped as a result (1.17.0).** `validate()` now reports `rules-in-cycle` and
+`discretisation-in-cycle`, both statically decided from the SCC decomposition with nothing
+executed. They are **warnings, not errors** — this record finds topology A defensible when the
+choice genuinely must react to intermediate state, and 003 says to inform the engineer rather than
+decide for them.
+
+**The naming mechanic pinned above applies verbatim to `facts`.** `facts=["mass_band"]` grows an
+edge back into the loop; `facts=["prior_mass_band"]` does not. One word, no visible difference
+between the two `.lp` files, and the topology changes. Pinned by
+`test_naming_a_fact_after_the_loops_own_variable_collapses_it_into_the_cycle`.

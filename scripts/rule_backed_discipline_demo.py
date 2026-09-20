@@ -8,12 +8,15 @@ equation. The answer is to move the model out of the loop entirely - it writes
 an ASP program once, at authoring time, a human reviews THAT, and the program
 becomes the discipline.
 
-This script shows the four things that argument turns on:
+This script shows the things that argument turns on:
 
   1. The rules are a file. You can read it, diff it, and it is what runs.
   2. UNSAT is a proof that no architecture works - the honest INFEASIBLE.
   3. A program that does not pin its own answer REFUSES rather than picks.
   4. No number crosses into the rules; a threshold has to be declared first.
+  5. All of it wired end to end, ordered by the solver.
+  6. WHERE you put the decision - the one that matters most, and the one a
+     working example will not teach you, because the wrong topology works too.
 
 The program is scripts/programs/wing_architecture.lp. Read it alongside this.
 """
@@ -25,6 +28,7 @@ from smartmdao import (
     AmbiguousProgramError,
     Bands,
     Discretisation,
+    HybridSolver,
     Pipeline,
     RuleDiscipline,
     RuleProgramError,
@@ -202,3 +206,86 @@ print("   ordinary step, exactly like a declared band is.")
 print()
 print("   analyze() and validate() read all of the above WITHOUT running clingo")
 print("   once. Introspection never requires execution.")
+
+
+# ==============================================================================
+# 6. Where you put the decision matters more than whether it works
+# ==============================================================================
+
+rule("6. Inside the loop it RUNS. That is not the same as it being right")
+
+LOOP_RULES = """
+spar(aluminium) :- {fact}(light).
+spar(cfrp)      :- {fact}(heavy).
+#show spar/1.
+"""
+
+WORKSPACE = tempfile.mkdtemp()
+
+
+def mass_loop(fact_name):
+    """
+    The same mass loop twice, differing only in what the rules READ.
+
+    `mass_band`       - the loop's own variable, so the rules join the cycle.
+    `prior_mass_band` - a separate input, so they sit on the linear part.
+    """
+    path = pathlib.Path(WORKSPACE) / f"{fact_name}.lp"
+    path.write_text(LOOP_RULES.format(fact=fact_name))
+
+    loop = Pipeline(
+        solver=HybridSolver(),
+        discretisation=Discretisation(
+            mass_band=Bands("total_mass_kg", edges=[500], names=["light", "heavy"]),
+        ),
+    )
+    loop.add(
+        RuleDiscipline(
+            path, facts=[fact_name], produces="decisions", name="choose_spar"
+        )
+    )
+
+    @loop.step(outputs=["structure_mass_kg"])
+    def size_structure(decisions: frozenset) -> float:
+        return 200.0 if "spar(aluminium)" in decisions else 260.0
+
+    @loop.step(outputs=["total_mass_kg"])
+    def sum_masses(structure_mass_kg: float, payload_kg: float) -> float:
+        return structure_mass_kg + payload_kg
+
+    return loop
+
+
+inside = mass_loop("mass_band")
+outside = mass_loop("prior_mass_band")
+outside_inputs = ["payload_kg", "prior_mass_band"]
+
+print("topology A - the rules read `mass_band`, the loop's own variable:")
+print(f"   cycle:    {' -> '.join(analyze(inside, inputs=['payload_kg']).cycles[0].steps)}")
+for finding in validate(inside, inputs=["payload_kg"]):
+    if finding.code.endswith("-in-cycle"):
+        print(f"   reported: {finding.code}")
+
+print("\ntopology B+D - the rules read `prior_mass_band`, a separate input:")
+print(f"   cycles:   {analyze(outside, inputs=outside_inputs).cycles or 'none'}")
+reported = [
+    f.code for f in validate(outside, inputs=outside_inputs) if f.code.endswith("-in-cycle")
+]
+print(f"   reported: {reported or 'nothing'}")
+
+print("\n-> ONE WORD of difference in the fact name decides the topology, and")
+print("   nothing about the two rule files looks different. Naming a fact after")
+print("   the loop's own variable grows an edge back into the cycle.")
+print()
+print("   Inside the cycle the rules are applied once per sweep, on values that")
+print("   have not settled - so the architecture is chosen from an artifact of")
+print("   the iteration path rather than from a result. 'At sweep 2 the mass")
+print("   happened to be over 800 kg' is not a reason you can give in a design")
+print("   review. And a discrete choice inside a loop can leave it oscillating,")
+print("   or give it several stable answers that each report success.")
+print()
+print("   The version needing no warning is the one with no cycle at all:")
+print("   decide, evaluate completely, revise. docs/design/002 reached that")
+print("   conclusion for a language model. It holds for rules too, for a")
+print("   different reason - determinism is what makes the outer loop provably")
+print("   terminating, because a repeated decision set IS a cycle.")

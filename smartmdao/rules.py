@@ -313,6 +313,11 @@ class RuleDiscipline:
         # states that directly. The return is annotated because a consumer
         # genuinely receives a frozenset - or INFEASIBLE.
         apply_rules.__annotations__ = {}
+        # A marker rather than a name match, for the same reason `Bands` carries
+        # one: `name=` is the engineer's to choose, so analysis must not depend
+        # on it. Carries the program path, which is what a finding wants to
+        # quote - the file is the artifact under review.
+        apply_rules.decides_from_rules = str(self.path)
 
         return Step(apply_rules, manual_outputs=[self.produces])
 
