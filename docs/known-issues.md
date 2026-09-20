@@ -330,6 +330,41 @@ checks, not by design.
 
 ---
 
+## 🔴 A declared side effect in a loop is reported, not prevented
+
+`validate()` reports `side-effect-in-cycle` as of 1.22.0, and that is **all** it does. The run-time
+refusal and the `"once"` latch are Phase 5.2, so today a step declared `effects="once"` still
+executes on every sweep.
+
+The finding says so in as many words rather than going quiet, because a declaration the library
+appears to honour and does not is worse than no declaration at all — the same drift Phase 3 records
+about the subprocess being described as a safety mechanism.
+
+**Two cases are worse than the loop and are not addressed at all:**
+
+- **`optimize()`** calls `run()` hundreds of times. `"once"` is scoped per run, so a declared step
+  fires once *per evaluation* — a thousand tickets rather than thirty. Left open in
+  [005](design/005-side-effecting-steps.md), risk 1; `PipelineEvaluator` refusing is the likely
+  shape but it is undesigned.
+- **`compare_runs`** executes both files, so it runs every side effect **twice**. "Compare two
+  translations" does not sound like "send every notification twice", and the tool description does
+  not currently say it.
+
+*Fix direction:* 5.2 for the loop case; the two above want deciding first.
+
+---
+
+## ⚪ Nothing verifies that a step declared pure is pure
+
+`effects` is a claim the author makes about their own function, like `outputs=[...]`. Nothing
+inspects the body, and nothing could in general — a step can write a file and return a float, which
+is exactly why the declaration is not inferred.
+
+This layer improves on silence, not on certainty. A pipeline with no declarations is not a pipeline
+with no side effects; it is a pipeline nobody has annotated.
+
+---
+
 ## 🔴 A threshold inside a feedback loop gives the loop more than one answer
 
 Found in 1.15.0 by running [`scripts/discretisation_demo.py`](../scripts/discretisation_demo.py),

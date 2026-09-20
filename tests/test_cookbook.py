@@ -197,18 +197,69 @@ def test_the_cookbook_resolves_wherever_it_is_installed():
 
 # --- documentation counts, which go stale silently ---------------------------
 
-def test_the_documented_counts_match_reality():
+def test_the_documented_counts_match_reality(request):
     """Three PRs in a row left `roadmap.md`'s baseline saying v1.12.0.
 
     Prose goes stale without anything failing, so the numbers people read are
-    asserted here: a stale count now breaks the build instead of misleading a
+    asserted here: a stale count breaks the build instead of misleading a
     reader.
+
+    **Every pattern below is also asserted to MATCH SOMETHING.** The first
+    version of this guard only recognised the `N/N scripts` form, so four stale
+    lines in `handoff.md` - "27/27 currently", "389 tests", "27 scripts" -
+    survived several releases by not being phrased the way it looked for. A
+    guard that silently passes when its pattern is absent is not a guard.
     """
     import re
     from importlib.metadata import version
 
     installed = version("smartmdao")
-    script_count = len(list((REPO / "scripts").glob("*.py")))
+    scripts = len(list((REPO / "scripts").glob("*.py")))
+    notebooks = len(list((REPO / "notebooks").glob("*.ipynb")))
+
+    # Exact, because pytest counts what it collected. Only meaningful for a
+    # whole run: collecting one file legitimately yields a smaller number.
+    tests = request.session.testscollected
+    whole_suite = not any(
+        "::" in argument or argument.endswith(".py")
+        for argument in request.config.args
+    )
+
+    # (file, regex, expected) - every capture group in the regex must equal
+    # `expected`, and the regex must match at least once.
+    checks = [
+        ("roadmap.md", r"\*\*Baseline:\*\* `v[\d.]+` — (\d+) tests", tests),
+        ("roadmap.md", r"100% coverage, (\d+)/(\d+) scripts", scripts),
+        ("roadmap.md", r"scripts, (\d+) notebooks", notebooks),
+        ("handoff.md", r"\*\*State as of v[\d.]+:\*\*.*?(\d+) tests", tests),
+        ("handoff.md", r"100% coverage, (\d+)/(\d+) scripts", scripts),
+        ("handoff.md", r"scripts, (\d+) notebooks", notebooks),
+        ("handoff.md", r"\*\*(\d+)/(\d+) currently\.\*\*", scripts),
+        ("handoff.md", r"uv run pytest\s+# (\d+) tests", tests),
+        ("handoff.md", r"run_all\.py\s+# (\d+) scripts", scripts),
+        ("handoff.md", r"run_notebooks\.py\s+# (\d+) notebooks", notebooks),
+        ("testing.md", r"`(\d+) scripts`, all", scripts),
+        ("testing.md", r"(\d+) notebooks, all", notebooks),
+        ("testing.md", r"fewer than (\d+) tests", tests),
+    ]
+
+    for name, pattern, expected in checks:
+        if expected is tests and not whole_suite:
+            continue
+
+        text = (REPO / "docs" / name).read_text()
+        found = re.findall(pattern, text)
+
+        assert found, (
+            f"{name} no longer contains anything matching {pattern!r}. Either the "
+            f"line was reworded - update this guard with it - or it was deleted."
+        )
+        for match in found:
+            for number in (match if isinstance(match, tuple) else (match,)):
+                assert int(number) == expected, (
+                    f"{name} says {number} where there are {expected} "
+                    f"(pattern {pattern!r})"
+                )
 
     for name in ("roadmap.md", "handoff.md"):
         text = (REPO / "docs" / name).read_text()
@@ -217,8 +268,3 @@ def test_the_documented_counts_match_reality():
         # Historical references ("moved in 1.7.0") are prose, not claims about
         # now; only the `v`-prefixed baseline/state lines are checked.
         assert not stale, f"{name} claims version(s) {sorted(stale)}, installed is {installed}"
-
-        for count in re.findall(r"(\d+)/(\d+) scripts", text):
-            assert int(count[0]) == script_count, (
-                f"{name} says {count[0]}/{count[1]} scripts; there are {script_count}"
-            )

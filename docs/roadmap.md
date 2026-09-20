@@ -6,7 +6,7 @@ it is considered done.
 **Current position:** Phases 0–4 complete. **Phase 5 (steps that touch the world) is next**, with
 its design questions settled up front in [005](design/005-side-effecting-steps.md) and nothing built
 yet.
-**Baseline:** `v1.21.0` — 558 tests, 100% coverage, 29/29 scripts, 15 notebooks.
+**Baseline:** `v1.22.0` — 579 tests, 100% coverage, 29/29 scripts, 15 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -370,9 +370,22 @@ recoverable. You cannot un-send an email, so a warning printed alongside thirty 
 post-mortem rather than information. Nothing stops `effects="every-sweep"` — the engineer keeps the
 choice and is simply required to make it explicitly.
 
-- [ ] **5.1 — Declaration and the static finding.** `effects` on `Step`, `side-effect-in-cycle` in
-      `validate()`. **Solver-aware**: `IterativeSolver` sweeps every step, so the question is "would
-      this run more than once", not "is it in a cycle".
+- [x] **5.1 — Declaration and the static finding.** Shipped in **1.22.0**. `effects` on `Step`
+      (`None` / `True` / `"once"` / `"every-sweep"`), plumbed through `Pipeline.add` and
+      `@pipeline.step`; `side-effect-in-cycle` in `validate()`; and `explain()` now states what a
+      pipeline touches outside itself, which settles one of 005's open questions — a reviewer wants
+      it and it costs nothing to say.
+
+      **Solver-aware, as designed.** `IterativeSolver` sweeps every registered step, so an *acyclic*
+      pipeline still repeats and is still reported. Asking the graph alone would have said nothing.
+
+      **A typo raises rather than reports**, which is the second deliberate departure from the
+      project's warn-don't-decide pattern: `effects="sometimes"` would silently declare a
+      destructive step pure, and there is no defensible reading of it to hand back.
+
+      **`"once"` is still reported.** The latch is 5.2, so today `"once"` is a statement of intent
+      that nothing enforces — and the finding says exactly that rather than implying protection.
+      Letting it go quiet here would be the same drift Phase 3 records about the subprocess.
 - [ ] **5.2 — Runtime refusal and the `"once"` latch.**
 - [ ] **5.3 — A notebook, and the tool descriptions.** `run_pipeline` executes side effects for
       real, and `compare_runs` executes them **twice** — which "compare two translations" does not

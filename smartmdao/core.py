@@ -28,7 +28,7 @@ class Pipeline:
     discretisation: Discretisation = field(default_factory=Discretisation)
     _structure_validated: bool = field(default=False, init=False, repr=False, compare=False)
 
-    def add(self, fn: Callable, outputs: list[str] = None):
+    def add(self, fn: Callable, outputs: list[str] = None, effects=None):
         """
         Add a step to the pipeline.
         :param fn: The function to execute, or any object exposing `as_step()`
@@ -39,28 +39,32 @@ class Pipeline:
         :param outputs: Optional list of variable names this function produces.
             Ignored for an object supplying its own step, which already declares
             what it produces.
+        :param effects: Declares that this step touches something outside the
+            pipeline - see `Step`. A step inside a cyclic block runs once per
+            sweep, which is a different proposition for a function that writes a
+            file than for one that computes a number.
         """
         builder = getattr(fn, "as_step", None)
         if callable(builder):
             step = builder()
         else:
-            step = Step(fn, outputs)
+            step = Step(fn, outputs, effects=effects)
 
         self.steps.append(step)
         self._structure_validated = False
         logger.debug(f"Added step '{step.name}' to pipeline.")
         return self
 
-    def step(self, fn: Callable = None, *, outputs: List[str] = None):
+    def step(self, fn: Callable = None, *, outputs: List[str] = None, effects=None):
         """
-        Decorator to register a step.
+        Decorator to register a step. See `add` for `effects`.
         """
         if fn is not None and callable(fn):
-            self.add(fn, outputs=outputs)
+            self.add(fn, outputs=outputs, effects=effects)
             return fn
 
         def wrapper(func):
-            self.add(func, outputs=outputs)
+            self.add(func, outputs=outputs, effects=effects)
             return func
         
         return wrapper

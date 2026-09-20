@@ -574,6 +574,87 @@ def _check_decisions_in_cycles(
     return findings
 
 
+def _repeating_steps(pipeline, analysis: PipelineAnalysis, steps: List[Step]) -> Set[str]:
+    """
+    The steps that would run more than once, which is **not** the same question
+    as which steps are in a cycle.
+
+    `IterativeSolver` sweeps every registered step, cyclic or not, so a
+    side-effecting step anywhere in one repeats. Everything else follows the
+    graph and repeats only inside a cyclic block. Asking the graph alone would
+    give the wrong answer for half the solvers - the same finding Phase 2 made
+    about seeding.
+    """
+    if isinstance(pipeline.solver, IterativeSolver):
+        return {step.name for step in steps}
+
+    return {name for cycle in analysis.cycles for name in cycle.steps}
+
+
+def _check_side_effects(
+    pipeline, analysis: PipelineAnalysis, steps: List[Step]
+) -> List[Finding]:
+    """
+    Declared side effects on steps that would run more than once.
+
+    A numeric discipline re-running is how convergence works. A step that writes
+    a file, launches a subprocess or posts to an API re-running thirty times is
+    something else, and unlike every other finding in this module the
+    consequence is **not recoverable** - see docs/design/005.
+
+    Reported here, statically. The run-time half (refusing, and the `"once"`
+    latch) is Phase 5.2; until it lands, `"once"` is a statement of intent that
+    nothing enforces, and this says so rather than implying protection.
+    """
+    repeating = _repeating_steps(pipeline, analysis, steps)
+    if not repeating:
+        return []
+
+    solver = type(pipeline.solver).__name__
+    findings = []
+
+    for step in steps:
+        if not step.has_effects or step.name not in repeating:
+            continue
+
+        where = (
+            f"every step is swept repeatedly by {solver}"
+            if solver == "IterativeSolver"
+            else f"it sits inside a feedback loop, which {solver} iterates"
+        )
+
+        if step.effects == "every-sweep":
+            continue
+
+        if step.effects == "once":
+            detail = (
+                "It declares effects=\"once\", but the latch that would honour "
+                "that is not implemented yet, so today it still runs on every "
+                "sweep. Treat the declaration as intent, not protection."
+            )
+        else:
+            detail = (
+                "It declares effects=True without saying what should happen in "
+                "a loop. Say which you mean: effects=\"once\" to run on the "
+                "first sweep only, or effects=\"every-sweep\" if repeating is "
+                "intended."
+            )
+
+        findings.append(
+            Finding(
+                code="side-effect-in-cycle",
+                severity=WARNING,
+                message=(
+                    f"'{step.name}' declares side effects and will run more "
+                    f"than once, because {where}. {detail}"
+                ),
+                step=step.name,
+            )
+        )
+
+    return findings
+
+
 def _check_rule_programs(steps: List[Step]) -> List[Finding]:
     """
     Programs that may not pin their own answer.
@@ -829,6 +910,7 @@ def validate(
     findings.extend(_check_discretisation(pipeline, steps))
     findings.extend(_check_decisions_in_cycles(analysis, steps))
     findings.extend(_check_rule_programs(steps))
+    findings.extend(_check_side_effects(pipeline, analysis, steps))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])
@@ -883,6 +965,14 @@ def explain(pipeline, inputs: Sequence[str] = ()) -> str:
         lines.append("")
 
     lines.append(f"Execution order: {' -> '.join(analysis.execution_order)}")
+
+    touching = [step for step in effective_steps(pipeline) if step.has_effects]
+    if touching:
+        lines.append("")
+        lines.append(f"Touches the world ({len(touching)}):")
+        for step in touching:
+            stated = "unspecified in a loop" if step.effects is True else str(step.effects)
+            lines.append(f"  {step.name}: {stated}")
 
     discretisation = getattr(pipeline, "discretisation", None)
     if discretisation:

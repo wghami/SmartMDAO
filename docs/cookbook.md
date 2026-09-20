@@ -20,6 +20,7 @@ Each section names the scripts in [`scripts/`](../scripts) that go deeper. Those
 | [`analysis`](#analysis) | Inspecting a pipeline without running it |
 | [`discretisation`](#discretisation) | Turning a number into a symbolic fact, with the threshold declared |
 | [`rules`](#rules) | Disciplines backed by a reviewed ASP program |
+| [`side-effects`](#side-effects) | Steps that write a file, launch a subprocess or post to an API |
 | [`visualization`](#visualization) | XDSM diagrams |
 | [`pitfalls`](#pitfalls) | Mistakes that fail silently — read this one |
 | [`reference`](#reference) | Everything else exported from `smartmdao` |
@@ -622,6 +623,79 @@ so memoising what you have seen gives you termination, not just a retry cap.
 and [design/002](design/002-agent-as-discipline.md).
 
 **Deeper:** [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py)
+
+---
+
+## side-effects
+
+A step inside a cyclic block runs **once per sweep**. For a numeric discipline that is the point;
+for one that writes a file, launches a subprocess or posts to an API it is something else entirely.
+
+Declare it, and `validate()` will tell you before it happens:
+
+```python
+from smartmdao import Pipeline, HybridSolver, validate
+
+pipeline = Pipeline(solver=HybridSolver())
+
+@pipeline.step(outputs=["ticket_id"], effects=True)
+def raise_ticket(mass: float) -> float:
+    # imagine: jira.create_issue(...)
+    return mass
+
+@pipeline.step(outputs=["mass"])
+def size_airframe(ticket_id: float) -> float:
+    return ticket_id * 0.5 + 10.0
+
+reported = [f for f in validate(pipeline, inputs=["ticket_id"])
+            if f.code == "side-effect-in-cycle"]
+assert len(reported) == 1
+assert "Say which you mean" in reported[0].message
+```
+
+| Value | Meaning |
+|---|---|
+| *absent* | Undeclared; assumed pure, nothing reported |
+| `effects=True` | Touches the world — **what should happen in a loop is not stated** |
+| `effects="once"` | Run on the first sweep of a `run()`, reuse the result after |
+| `effects="every-sweep"` | Run every sweep. You meant it |
+
+**`True` is refused in a loop and the others are not**, because `True` is the case where the author
+marked their function honestly without having thought about loops yet — exactly when the library
+should stop and ask. Declaring `"every-sweep"` silences it: you keep the choice, you just have to
+make it.
+
+**It is declared, never inferred.** A step returning `None` looks like a free signal and is not — a
+step can write a file *and* return a float.
+
+**A typo raises**, unlike every other judgement call here. `effects="sometimes"` would silently
+declare a destructive step pure, and there is no defensible reading of it to hand back.
+
+**The check is solver-aware.** `IterativeSolver` sweeps every step whether or not there is a cycle,
+so an acyclic pipeline still repeats — and is still reported.
+
+`explain()` lists what a pipeline touches outside itself:
+
+```python
+from smartmdao import Pipeline, explain
+
+pipeline = Pipeline()
+
+@pipeline.step(outputs=["summary"])
+def summarise(data: float) -> str:
+    return str(data)
+
+@pipeline.step(outputs=["path"], effects="once")
+def write_report(summary: str) -> str:
+    return "out.pdf"
+
+assert "Touches the world (1):" in explain(pipeline, inputs=["data"])
+assert "write_report: once" in explain(pipeline, inputs=["data"])
+```
+
+**Not yet enforced.** `"once"` currently states intent; the latch that honours it, and the run-time
+refusal, are Phase 5.2. `validate()` says so rather than implying protection. Full reasoning in
+[design/005](design/005-side-effecting-steps.md).
 
 ---
 
