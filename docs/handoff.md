@@ -4,7 +4,8 @@ For whoever picks this up next — a contributor, a maintainer returning after a
 agent. Read this before starting work.
 
 **State as of v1.14.0:** `main` is clean. 389 tests, 100% coverage, 27/27 scripts passing.
-Roadmap Phases 0–3 are complete and merged. Phase 4 (ASP) is next.
+Roadmap Phases 0–3 are complete and merged. **Phase 4 (rule-backed disciplines) is next**, its
+design questions all settled — see [004](design/004-rule-backed-disciplines.md).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -157,14 +158,20 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 
 Not bugs — judgement calls left deliberately to the maintainer.
 
-1. **A settled name for an "ASP-backed discipline"** — provisional throughout
-   [003](design/003-determinism-and-the-engineer-in-the-loop.md).
-
-2. **How answer-set multiplicity gets pinned** in practice. An optimisation statement plus a
-   total tie-break is the shape; what enforces it, and what `validate()` says when more than one
-   optimal model exists, is undesigned.
+**None currently open.** Both of Phase 4's remaining questions closed in
+[004](design/004-rule-backed-disciplines.md); the phase is unblocked.
 
 ### Settled
+
+- ~~A settled name for an "ASP-backed discipline"~~ — **004**: the concept is a **rule-backed
+  discipline**, `RuleDiscipline`. Named after what the engineer reviews, not the engine that runs
+  it; `ASP`/`clingo` stay confined to the extra and the implementation docs.
+
+- ~~How answer-set multiplicity gets pinned~~ — **004**: in two halves. `validate()` reports
+  `unpinned-program` statically and **never grounds**, because grounding is worst-case exponential
+  and an analysis that can hang is one nobody runs. Actual multiplicity is an `ambiguous-optimum`
+  finding from a new budgeted rung on the Phase 3 cost ladder. Verified against clingo 5.8.2 before
+  being written down — `--opt-mode=optN` does enumerate tied optima.
 
 - ~~Whether to build `compare_runs`~~ — built in **1.14.0**. Two translations differing only in
   their convergence criterion both reported success while one answer was 95% out; nothing that
@@ -192,5 +199,14 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-[roadmap.md](roadmap.md) — Phase 3 (sandboxed execution), plus a deferred list of things recorded
-so they are not lost. Nothing in Phase 3 should start before open decision #2 is settled.
+[roadmap.md](roadmap.md) — **Phase 4, rule-backed disciplines**, now broken into 4.0–4.4, plus a
+deferred list of things recorded so they are not lost.
+
+4.0 (settling the two design decisions) is done. **4.1, the discretisation layer, is the first
+code** — and it comes before any clingo, because a perfectly reviewed program sitting on an
+unreviewed threshold is not traceable, and the threshold is where the answer is actually decided.
+
+*This section previously read "Phase 3 (sandboxed execution)… nothing in Phase 3 should start before
+open decision #2 is settled", which had been stale since 1.13.0 shipped Phase 3. Noted rather than
+silently fixed: a doc that points the next contributor at finished work is the same failure as the
+Phase 2 box-ticking correction in [roadmap.md](roadmap.md).*
