@@ -231,27 +231,42 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-[roadmap.md](roadmap.md) — **Phase 4, rule-backed disciplines**, now broken into 4.0–4.4, plus a
-deferred list of things recorded so they are not lost.
+**Phase 4 is complete. Phase 5 is designed and unstarted.**
 
-4.0 (decisions), 4.1 (the discretisation layer, 1.15.0) and 4.2 (`RuleDiscipline`, 1.16.0) are
-done. **4.3, findings and the grounding budget, is next.**
+Phase 4's history is in [roadmap.md](roadmap.md); the short version is that 4.0–4.3 landed across
+1.15.0–1.19.0, 4.4 was *discharged rather than written* (recorded as a decision, not ticked
+silently), and 4.5 added the notebooks.
 
-**Phase 4 is complete.** 4.3 landed across 1.17.0–1.19.0; 4.4 was **discharged rather than
-written** (its exit criteria are already sections 3 and 8 of the rules demo — recorded as a decision
-in the roadmap, not ticked silently); and 4.5 added the notebooks.
+**Phase 5 — steps that touch the world.** A step inside a cyclic block runs once per sweep; for one
+that writes a file or launches a subprocess that is a different thing entirely, and nothing
+currently treats re-running as *unsafe* rather than wasteful. The three design questions are settled
+in [005](design/005-side-effecting-steps.md) before any code exists — the shape Phase 4 used.
 
-Nothing is scheduled after this. The deferred list in [roadmap.md](roadmap.md) is where the
-remaining ideas live, and [known-issues.md](known-issues.md) has the sharp edges worth fixing —
-the largest being that a **grounding blow-up cannot be interrupted in-process**, which no amount of
-in-process work will solve.
+Read 005 before starting. Two things in it are easy to get wrong:
 
-One thing that will **not** be fixed and should stop being attempted: a grounding blow-up cannot be
-interrupted in-process. `budget_seconds` bounds searching only. Measured, and recorded in
-[known-issues.md](known-issues.md) — do not let "budget" grow into a claim of protection it does
-not give, which is the same drift Phase 3 records about the subprocess.
+- **The refusal is deliberate, not an inconsistency.** Every other finding in this project is a
+  warning, because every other failure is recoverable. You cannot un-send an email, so a warning
+  printed alongside thirty created tickets is a post-mortem rather than information. Nothing stops
+  `effects="every-sweep"`; the engineer is simply required to say so.
+- **The check is solver-aware.** `IterativeSolver` sweeps every step, so the question is *would this
+  run more than once*, not *is it in a cycle*.
 
-*This section previously read "Phase 3 (sandboxed execution)… nothing in Phase 3 should start before
-open decision #2 is settled", which had been stale since 1.13.0 shipped Phase 3. Noted rather than
-silently fixed: a doc that points the next contributor at finished work is the same failure as the
-Phase 2 box-ticking correction in [roadmap.md](roadmap.md).*
+The **optimizer case is left open on purpose** (005, risk 1): `optimize()` calls `run()` hundreds of
+times, and `"once"` is scoped per run, so a declared step still fires once per evaluation. It is
+sharper than the loop case and should not be designed in passing.
+
+Smaller, and worth doing at some point:
+
+- **The count guard has a hole.** `test_the_documented_counts_match_reality` only matches the
+  `N/N scripts` form, which is how four stale lines survived in this file through several releases.
+- **[known-issues.md](known-issues.md)** holds the rest, each with a severity and a fix direction.
+
+One thing that will **not** be fixed, and should stop being attempted: a grounding blow-up cannot
+be interrupted in-process. `budget_seconds` bounds *searching* only. Measured against clingo 5.8.2
+and recorded — do not let "budget" grow into a claim of protection it does not give, which is the
+same drift Phase 3 records about the subprocess.
+
+*A note on this section's own history: it once pointed the next contributor at Phase 3 as upcoming
+work, months after Phase 3 shipped. A doc that points at finished work is the same failure as the
+Phase 2 box-ticking correction in [roadmap.md](roadmap.md), which is why the counts in this file are
+now asserted by a test.*

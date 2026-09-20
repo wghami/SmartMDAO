@@ -9,6 +9,22 @@
 
 **SmartMDAO** is a lightweight, purely Pythonic framework for Multidisciplinary Design Analysis and Optimization (MDAO). Define your disciplines as plain Python functions, and SmartMDAO maps the dependency graph, converges cyclic feedback loops, caches expensive calls, and bridges straight into your optimizer of choice.
 
+### What makes it different
+
+There are mature MDAO frameworks already. SmartMDAO is not trying to be a smaller one — these are the things it does that they do not:
+
+| | |
+|---|---|
+| **Converges on decisions, not just numbers** | A coupling variable can be a set, an enum, a frozen dataclass or a whole architecture. Anything supporting `==` converges on **structural equality** — unchanged since the last sweep means at rest. Discrete architectural choice sits *inside* the feedback loop, next to the floats. |
+| **Tells you what a solve would do, without running it** | `analyze()` and `validate()` read signatures, annotations and the graph. Execution order, feedback loops, which variable needs a starting value, every structural problem at once — all free, because **no discipline is ever called**. |
+| **Makes the assumptions reviewable** | The threshold that turns `mass_kg = 880` into `"heavy"` is a **declared object**, not a number buried in a helper. `explain()` states it; `validate()` checks it. A hypothesis you cannot see is one nobody reviews. |
+| **Disciplines can be rules, not code** | A reviewed `.lp` file becomes a discipline: deterministic, diffable, version-controlled. "No feasible architecture" stops being a sentinel someone invented and becomes a **proof**, with the minimal set of conflicting requirements to take into a design review. |
+| **Says what a run will cost before it starts** | One sweep proves the model executes *and* measures the unit cost, so every estimate above it falls out of it. An unbounded run is never what happens by accident. |
+| **Reports what actually happened** | Every iterative block returns a `ConvergenceReport`: converged, exhausted, or abandoned — with the reason and the full residual trace. You never infer it from a list of numbers. |
+| **Zero boilerplate, zero ceremony** | No component classes, no `add_subsystem`, no XML, no separate problem description. A discipline is a function; wiring is by parameter name. |
+
+The thread through all of it: **surface the consequences before the engineer commits to them**, and never let a default quietly decide the answer. That principle is written down in [design record 003](https://github.com/wghami/SmartMDAO/blob/main/docs/design/003-determinism-and-the-engineer-in-the-loop.md).
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/main/assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
 </p>
