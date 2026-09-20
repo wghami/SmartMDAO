@@ -530,8 +530,9 @@ def _check_decisions_in_cycles(
             if step is None:  # pragma: no cover - cycles are built from `steps`
                 continue
 
-            program = _decision_marker(step, "decides_from_rules")
-            if program is not None:
+            rules = _decision_marker(step, "rule_discipline")
+            if rules is not None:
+                program = rules.path
                 findings.append(
                     Finding(
                         code="rules-in-cycle",
@@ -569,6 +570,46 @@ def _check_decisions_in_cycles(
                         variable=band,
                     )
                 )
+
+    return findings
+
+
+def _check_rule_programs(steps: List[Step]) -> List[Finding]:
+    """
+    Programs that may not pin their own answer.
+
+    The question is asked of the discipline rather than answered here: ASP
+    syntax belongs in `rules.py`, and a second place that knows how to read an
+    `.lp` file is a second thing to keep correct.
+
+    Static and heuristic, and the finding says so. Only the runtime enumeration
+    can prove an optimum is unique; what this catches are the two shapes that
+    are ambiguous *by construction* and look right on the page.
+    """
+    findings = []
+
+    for step in steps:
+        rules = _decision_marker(step, "rule_discipline")
+        if rules is None:
+            continue
+
+        concern = rules.pinning_concern
+        if concern is None:
+            continue
+
+        findings.append(
+            Finding(
+                code="unpinned-program",
+                severity=WARNING,
+                message=(
+                    f"'{rules.path}' may not pin its own answer: {concern}. "
+                    f"Solving reports this exactly when it happens, but only "
+                    f"for the facts it was given - this reads the program "
+                    f"itself, and is a syntactic check rather than a proof."
+                ),
+                step=step.name,
+            )
+        )
 
     return findings
 
@@ -787,6 +828,7 @@ def validate(
     findings.extend(_check_solver_fit(pipeline, analysis, steps, input_keys))
     findings.extend(_check_discretisation(pipeline, steps))
     findings.extend(_check_decisions_in_cycles(analysis, steps))
+    findings.extend(_check_rule_programs(steps))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])

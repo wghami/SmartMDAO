@@ -517,6 +517,49 @@ assert rules.solve(mass_band="heavy") is not None
 3. **The step name decides seeding inside a loop.** It defaults to `rules_<program stem>`; pass
    `name=` deliberately if the discipline sits in a cycle, and ask `analyze()`.
 
+### What it costs, and what the budget covers
+
+Solving is **memoised on the facts**. The program is fixed and clingo is deterministic, so the same
+facts cannot give a different answer — the cache is exact, not an approximation. That matters inside
+a loop, where the facts repeat as it converges.
+
+```python
+from smartmdao import RuleDiscipline
+import pathlib, tempfile
+
+program = pathlib.Path(tempfile.mkdtemp()) / "pick.lp"
+program.write_text("spar(aluminium) :- mass_band(light).\nspar(cfrp) :- mass_band(heavy).\n#show spar/1.\n")
+
+rules = RuleDiscipline(program, facts=["mass_band"], produces="decisions",
+                       budget_seconds=5.0)
+
+rules.solve(mass_band="light")
+rules.solve(mass_band="light")          # same facts -> no re-grounding
+
+assert rules.cost.calls == 2
+assert rules.cost.grounds == 1
+assert rules.cost.cache_hits == 1
+print(rules.cost.projected_seconds(30))  # quote this before a long run
+```
+
+`rules.cost` is a `RuleCost`: calls, cache hits, grounds, and the seconds spent grounding versus
+searching. `projected_seconds(n)` assumes **no** cache hits, which is the pessimistic reading on
+purpose — quoting the optimistic number is how someone gets committed to a run that does not end.
+
+**`budget_seconds` bounds searching, not grounding.** Verified against clingo 5.8.2: a solve handle
+cancels promptly, while `interrupt()` during grounding is ignored and grounding runs to completion.
+Since grounding is the worst-case-exponential half, the budget catches a hard *search* — it is not
+protection against a grounding blow-up. For a hard kill around everything, run the pipeline through
+`run_pipeline`, which uses a subprocess.
+
+Exceeding the budget raises `RuleBudgetExceeded`. **That is not `INFEASIBLE`** — UNSAT is a proof
+that no model exists, while a timeout proves nothing at all, and treating them alike would turn "we
+gave up" into "your architecture is impossible".
+
+`validate()` also reports `unpinned-program` when a program generates candidates and either states
+no optimisation, or has only constant weights. It is a syntactic check, not a proof; solving is what
+actually establishes ambiguity, and only for the facts it was given.
+
 ### Where to put the decision
 
 **Keep the rules off the feedback loop.** Inside a cycle they are applied once per sweep, on values

@@ -38,7 +38,10 @@ the point a program is actually solved.
 import logging
 import pathlib
 import re
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Union
+import threading
+import time
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checkers
     from .models import Step
@@ -51,6 +54,58 @@ _BARE_CONSTANT = re.compile(r"^[a-z][A-Za-z0-9_]*$")
 
 class RuleProgramError(ValueError):
     """A program, or a fact, that cannot be solved as written."""
+
+
+class RuleBudgetExceeded(RuleProgramError):
+    """
+    Solving ran past its wall clock.
+
+    Deliberately **not** `INFEASIBLE`. UNSAT is a proof that no model satisfies
+    the rules; a timeout is the absence of an answer, and treating the two the
+    same would turn "we gave up" into "your architecture is impossible" - a
+    silent wrong answer of exactly the kind this library exists to prevent.
+    """
+
+
+@dataclass(frozen=True)
+class RuleCost:
+    """
+    What solving this discipline has actually cost so far.
+
+    Measured rather than estimated, for the reason Phase 3 gives: an engineer
+    asked to consent to a run deserves a number, and the cheapest way to get one
+    is to have already paid it once.
+    """
+    calls: int = 0
+    cache_hits: int = 0
+    grounds: int = 0
+    ground_seconds: float = 0.0
+    solve_seconds: float = 0.0
+
+    @property
+    def total_seconds(self) -> float:
+        return self.ground_seconds + self.solve_seconds
+
+    def projected_seconds(self, sweeps: int) -> float:
+        """
+        What `sweeps` more calls would cost if none of them hit the cache.
+
+        The pessimistic reading on purpose. Inside a converging loop the facts
+        repeat and most calls *are* hits, so the real figure is usually far
+        lower - but quoting the optimistic number is how someone gets committed
+        to a run that does not end.
+        """
+        if not self.grounds:
+            return 0.0
+        unit = self.total_seconds / self.grounds
+        return unit * sweeps
+
+    def __str__(self) -> str:
+        return (
+            f"{self.calls} call(s), {self.cache_hits} from cache, "
+            f"{self.grounds} ground+solve in {self.total_seconds:.3f}s "
+            f"({self.ground_seconds:.3f}s grounding)"
+        )
 
 
 class AmbiguousProgramError(RuleProgramError):
@@ -107,6 +162,91 @@ INFEASIBLE = _Infeasible()
 
 Fact = Union[str, int]
 Answer = Union[FrozenSet[str], _Infeasible]
+
+
+#: `#minimize`/`#maximize` bodies. Non-greedy: one match per statement.
+_OPTIMISATION = re.compile(r"#(minimize|maximize)\s*\{(.*?)\}", re.S)
+
+#: A choice rule head - `1 { p(X) : q(X) } 1`, or a bare `{ p(X) }`.
+_CHOICE = re.compile(r"(?<![#\w])\{[^{}]*\}")
+
+#: An ASP variable: uppercase or underscore, then word characters.
+_VARIABLE = re.compile(r"^[A-Z_]\w*$")
+
+
+def _strip_comments(source: str) -> str:
+    """
+    Remove `%` comments before any syntactic check.
+
+    Not optional: this repository's own example program *documents* the broken
+    tie-break form in a comment, so a checker that reads comments would report
+    the file as unpinned for explaining the mistake it avoids.
+    """
+    return "\n".join(line.split("%", 1)[0] for line in source.splitlines())
+
+
+def _weight_terms(body: str) -> List[str]:
+    """
+    The weight of every element of an optimisation statement.
+
+    `3@1,M : spar(M), cost(M,3)` -> `"3"`. The priority is dropped: what decides
+    whether a tie-break can separate anything is the weight, and carrying a
+    level nothing reads would be a field to keep correct for no purpose.
+    """
+    weights = []
+    for element in body.split(";"):
+        head = element.split(":", 1)[0].strip()
+        if not head:
+            continue
+        weight = head.split(",", 1)[0].strip()
+        weights.append(weight.split("@", 1)[0].strip())
+    return weights
+
+
+def pinning_concern(source: str) -> Optional[str]:
+    """
+    Why a program might not pin its own answer, or None if it looks pinned.
+
+    **A syntactic heuristic, and it says so.** It cannot prove a tie-break is
+    total - two candidates may still rank equal - so the runtime
+    `AmbiguousProgramError` remains the actual proof. What it *can* catch is the
+    two shapes that produce ambiguity by construction, both of which look
+    correct on the page:
+
+    1. A program that generates candidates and never says which is preferred.
+    2. An optimisation statement whose tie-break weight is a **constant**. That
+       form separates nothing, because the same number is contributed by every
+       candidate - documented in docs/design/004, where it was written by
+       accident and caught only by running it.
+
+    A program with no choice rule is not judged at all: plain rules derive one
+    answer set by construction, so there is nothing to pin, and flagging them
+    would fire on every correct deterministic program.
+    """
+    clean = _strip_comments(source)
+
+    if not _CHOICE.search(clean):
+        return None
+
+    statements = _OPTIMISATION.findall(clean)
+    if not statements:
+        return (
+            "it generates candidates with a choice rule but states no "
+            "#minimize or #maximize, so when more than one model satisfies the "
+            "rules, which one you get is decided by clingo's search order"
+        )
+
+    for _, body in statements:
+        for weight in _weight_terms(body):
+            if _VARIABLE.match(weight):
+                return None
+
+    return (
+        "every optimisation weight in it is a constant, so nothing distinguishes "
+        "two candidates that are otherwise equally good. A tie-break has to rank "
+        "over a DISTINCT value per candidate - `#minimize { 1@0,M : spar(M) }` "
+        "looks like one and separates nothing"
+    )
 
 
 def _load_clingo():
@@ -175,6 +315,8 @@ class RuleDiscipline:
         facts: Sequence[str],
         produces: str,
         name: Optional[str] = None,
+        budget_seconds: Optional[float] = 10.0,
+        memoise: bool = True,
     ):
         self.path = pathlib.Path(program)
         if not self.path.is_file():
@@ -211,6 +353,21 @@ class RuleDiscipline:
 
         self.name = name or f"rules_{self.path.stem}"
 
+        if budget_seconds is not None and budget_seconds <= 0:
+            raise RuleProgramError(
+                f"budget_seconds must be positive, got {budget_seconds!r}. Pass "
+                f"None to solve without a wall clock."
+            )
+        self.budget_seconds = budget_seconds
+        self.memoise = memoise
+        self._answers: Dict[Tuple, Answer] = {}
+        self.cost = RuleCost()
+
+    @property
+    def pinning_concern(self) -> Optional[str]:
+        """Why this program might not pin its own answer, or None. Static."""
+        return pinning_concern(self.source)
+
     # ------------------------------------------------------------------
     # Solving
     # ------------------------------------------------------------------
@@ -230,27 +387,79 @@ class RuleDiscipline:
                 f"'{self.path}' is missing fact(s) {missing}."
             )
 
-        injected = "\n".join(
-            f"{name}({_as_term(clingo, name, facts[name])})." for name in self.facts
-        )
+        # Convert before keying. Doing it the other way round meant an
+        # unrepresentable fact - a list, say - blew up as an unhashable dict key
+        # instead of the message explaining that facts must be symbols.
+        terms = [(name, _as_term(clingo, name, facts[name])) for name in self.facts]
+        key = tuple(str(term) for _, term in terms)
+
+        if self.memoise and key in self._answers:
+            # Exact, not approximate. The program is fixed and clingo is
+            # deterministic, so the same facts cannot produce a different answer
+            # - which is the property this whole direction was chosen for.
+            # Inside a converging loop most calls land here, which is what makes
+            # re-grounding every sweep survivable.
+            self.cost = replace(
+                self.cost, calls=self.cost.calls + 1,
+                cache_hits=self.cost.cache_hits + 1,
+            )
+            return self._answers[key]
+
+        injected = "\n".join(f"{name}({term})." for name, term in terms)
         logger.debug(f"Grounding '{self.path}' with: {injected!r}")
 
         control = clingo.Control(["--opt-mode=optN", "--models=0"])
         control.add("base", [], f"{self.source}\n{injected}\n")
+
+        started = time.perf_counter()
         control.ground([("base", [])])
+        grounded = time.perf_counter()
 
         optimal: List[FrozenSet[str]] = []
-        with control.solve(yield_=True) as handle:
-            for model in handle:
-                if model.optimality_proven:
-                    optimal.append(
-                        frozenset(str(symbol) for symbol in model.symbols(shown=True))
-                    )
-            satisfiable = handle.get().satisfiable
+        with control.solve(yield_=True, async_=True) as handle:
+            watchdog = self._start_watchdog(handle)
+            try:
+                handle.resume()
+                for model in handle:
+                    if model.optimality_proven:
+                        optimal.append(
+                            frozenset(
+                                str(symbol) for symbol in model.symbols(shown=True)
+                            )
+                        )
+                result = handle.get()
+            finally:
+                if watchdog is not None:
+                    watchdog.set()
+
+        solved = time.perf_counter()
+        self.cost = replace(
+            self.cost,
+            calls=self.cost.calls + 1,
+            grounds=self.cost.grounds + 1,
+            ground_seconds=self.cost.ground_seconds + (grounded - started),
+            solve_seconds=self.cost.solve_seconds + (solved - grounded),
+        )
+
+        if result.interrupted:
+            raise RuleBudgetExceeded(
+                f"Solving '{self.path}' passed its {self.budget_seconds}s budget "
+                f"and was stopped after {solved - started:.2f}s "
+                f"({grounded - started:.2f}s of that grounding). This is NOT the "
+                f"same as UNSAT - no conclusion was reached, so nothing has been "
+                f"proved about whether an answer exists. Raise budget_seconds, "
+                f"or simplify the program."
+            )
+
+        satisfiable = result.satisfiable
 
         if not satisfiable:
             logger.info(f"'{self.path}' is UNSAT for these facts: INFEASIBLE.")
-            return INFEASIBLE
+            # Cached like any other answer. UNSAT is a *proof*, so it is exactly
+            # as reusable as a model - and an infeasible fact set is the one a
+            # loop is most likely to revisit, so returning early here meant
+            # re-grounding every sweep in precisely the worst case.
+            return self._remember(key, INFEASIBLE)
 
         # An unoptimised program proves no model optimal; every model is then an
         # answer, and more than one is the same ambiguity by a different route.
@@ -265,7 +474,46 @@ class RuleDiscipline:
         if len(unique) > 1:
             raise AmbiguousProgramError(str(self.path), unique)
 
-        return unique[0]
+        return self._remember(key, unique[0])
+
+    def _remember(self, key: Tuple, answer: Answer) -> Answer:
+        """Store an answer against its facts, if memoisation is on."""
+        if self.memoise:
+            self._answers[key] = answer
+        return answer
+
+    def _start_watchdog(self, handle):
+        """
+        Cancel `handle` once the budget expires, or None if there is no budget.
+
+        **This bounds solving, not grounding.** Verified against clingo 5.8.2:
+        `Control.interrupt()` called during `ground()` is ignored and grounding
+        runs to completion, while a solve handle cancels promptly and reports
+        `interrupted`. Since grounding is the worst-case-exponential half
+        (docs/design/003, risk 4), the honest statement is that this budget
+        catches a hard *search*, not a grounding blow-up. A hard kill for the
+        latter needs a separate process - which `run_pipeline` already provides
+        for a whole pipeline, at a cost per call that would be absurd per sweep.
+
+        Saying this plainly rather than letting "budget" imply protection it
+        does not give: Phase 3 records the same mistake being made about the
+        subprocess, and how readily the claim creeps back.
+        """
+        if self.budget_seconds is None:
+            return None
+
+        done = threading.Event()
+
+        def watch():
+            if not done.wait(self.budget_seconds):
+                logger.warning(
+                    f"'{self.path}' passed its {self.budget_seconds}s budget; "
+                    f"cancelling the solve."
+                )
+                handle.cancel()
+
+        threading.Thread(target=watch, daemon=True).start()
+        return done
 
     def _all_models(self, clingo, injected: str) -> List[FrozenSet[str]]:
         """
@@ -313,11 +561,11 @@ class RuleDiscipline:
         # states that directly. The return is annotated because a consumer
         # genuinely receives a frozenset - or INFEASIBLE.
         apply_rules.__annotations__ = {}
-        # A marker rather than a name match, for the same reason `Bands` carries
-        # one: `name=` is the engineer's to choose, so analysis must not depend
-        # on it. Carries the program path, which is what a finding wants to
-        # quote - the file is the artifact under review.
-        apply_rules.decides_from_rules = str(self.path)
+        # A marker rather than a name match, for the same reason `Bands`
+        # carries one: `name=` is the engineer's to choose, so analysis must not
+        # depend on it. Carries the discipline itself, so a static check can ask
+        # it about the program without `analysis` needing to learn ASP syntax.
+        apply_rules.rule_discipline = self
 
         return Step(apply_rules, manual_outputs=[self.produces])
 

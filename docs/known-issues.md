@@ -177,22 +177,44 @@ eliminate it.
 
 ---
 
-## 🔴 Grounding a rule-backed discipline has no budget
+## 🟡 A grounding blow-up cannot be interrupted in-process
 
-`RuleDiscipline.solve` grounds and solves with no wall clock. ASP grounding is worst-case
-exponential ([003](design/003-determinism-and-the-engineer-in-the-loop.md), risk 4), and a
-generated program can be accidentally intractable in a way nobody notices until it hangs — inside a
-convergence loop, which is the worst place to discover it.
+**Partly addressed in 1.18.0, and the part that is not is worth stating plainly.**
 
-Worse, the program is re-grounded on **every call**. Inside a `HybridSolver` block that is once per
-sweep, and the facts are the only thing that changed.
+`RuleDiscipline(budget_seconds=...)` now bounds solving, and the program is memoised on its facts
+so a repeated fact set costs nothing. But the budget **cannot stop grounding**, which is the
+worst-case-exponential half ([003](design/003-determinism-and-the-engineer-in-the-loop.md), risk 4).
 
-*Fix direction:* this is Phase 4.3's main job, and it wants the same answer as Phase 3's execution
-cost — a budget and an estimate, not a spinner. The re-grounding is separately fixable by grounding
-once and using `assign_external` for the facts, but that constrains how the `.lp` may be written
-(the injected atoms would have to be declared `#external`), so it is a real trade rather than an
-obvious win. Measured: injecting facts as plain program text works whether or not the program
-declares them external, which is why the simpler form shipped first.
+Measured against clingo 5.8.2, because the shape of the fix depended on it:
+
+| | Interruptible? |
+|---|---|
+| `handle.cancel()` during a solve | **Yes** — returns promptly, `result.interrupted` is `True` |
+| `Control.interrupt()` during `ground()` | **No** — ignored; a 1.7M-atom grounding ran to completion in 2.9 s |
+
+So a generated program that is accidentally intractable *to ground* still hangs the process, and
+`budget_seconds` will not save you. Calling that a budget without saying which half it covers would
+be the same overclaim Phase 3 records about the subprocess, where a reliability mechanism kept
+getting described as a safety one.
+
+*What you can do today:* `run_pipeline` runs a whole pipeline in a subprocess under a mandatory wall
+clock, so it does provide a hard kill — at a per-call cost that would be absurd once per sweep.
+
+*Fix direction:* nothing in-process will do it. Either a persistent worker process that grounds on
+request and can be killed, or an upstream grounding limit clingo does not currently expose.
+
+---
+
+## ⚪ Grounding happens once per distinct fact set, not once
+
+Memoisation means a repeated fact set is free, but a *new* one re-grounds the whole program. Inside
+a converging loop that is usually a handful of grounds rather than one per sweep, and
+`RuleDiscipline.cost` reports exactly how many.
+
+Grounding once and using `assign_external` for the facts would reduce it to a single ground, but it
+constrains how the `.lp` may be written — the injected atoms would have to be declared `#external`.
+Measured: injecting facts as plain program text works **whether or not** the program declares them
+external, so the simpler form was chosen deliberately. A real trade, not an oversight.
 
 ---
 
