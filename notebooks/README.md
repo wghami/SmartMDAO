@@ -9,25 +9,29 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 | # | Notebook | Concept |
 |---|---|---|
 | 1 | [Pipelines and steps](01-pipelines-and-steps.ipynb) | Functions become a graph, wired by name |
-| 2 | [Solvers](02-solvers.ipynb) | `DAGSolver`, `HybridSolver`, `IterativeSolver` — and what each costs |
-| 3 | [Feedback loops](03-feedback-loops.ipynb) | Cycles, and which variable needs a starting value |
-| 4 | [Convergence](04-convergence.ipynb) | `ConvergenceReport`, `target_var`, oscillation, abandonment |
-| 5 | [Non-numeric convergence](05-non-numeric-convergence.ipynb) | Converging on sets, decisions and dataclasses |
-| 6 | [Type checking](06-type-checking.ipynb) | Catching wiring mistakes before anything runs |
-| 7 | [Caching](07-caching.ipynb) | `@cached` and its four backends |
-| 8 | [Optimization](08-optimization.ipynb) | Driving a pipeline with an optimizer |
-| 9 | [Analysis](09-analysis.ipynb) | `analyze` / `validate` / `explain` — free, executes nothing |
-| 10 | [Visualization](10-visualization.ipynb) | XDSM diagrams |
+| 2 | [Visualization](02-visualization.ipynb) | **Seeing** that graph — linear versus cyclic |
+| 3 | [Solvers](03-solvers.ipynb) | `DAGSolver`, `HybridSolver`, `IterativeSolver` — and what each costs |
+| 4 | [Feedback loops](04-feedback-loops.ipynb) | Cycles, and which variable needs a starting value |
+| 5 | [Convergence](05-convergence.ipynb) | `ConvergenceReport`, `target_var`, oscillation, abandonment |
+| 6 | [Non-numeric convergence](06-non-numeric-convergence.ipynb) | Converging on sets, decisions and dataclasses |
+| 7 | [Type checking](07-type-checking.ipynb) | Catching wiring mistakes before anything runs |
+| 8 | [Caching](08-caching.ipynb) | `@cached` and its four backends |
+| 9 | [Optimization](09-optimization.ipynb) | Driving a pipeline with an optimizer |
+| 10 | [Analysis](10-analysis.ipynb) | `analyze` / `validate` / `explain` — free, executes nothing |
 | 11 | [Discretisation](11-discretisation.ipynb) | Turning a number into a symbolic fact, with the threshold declared |
-| 12 | [Rule-backed disciplines](12-rule-backed-disciplines.ipynb) | An ASP program as a discipline |
+| 12 | [Rule-backed disciplines](12-rule-backed-disciplines.ipynb) | An ASP program as a discipline — introduces ASP and clingo from scratch |
 | 13 | [Execution and comparison](13-execution-and-comparison.ipynb) | The cost ladder, and proving a translation kept the answer |
 | 14 | [Discovery and MCP](14-pipeline-discovery-and-mcp.ipynb) | Finding a pipeline in a file, and the connector |
 | 15 | [Pitfalls](15-pitfalls.ipynb) | Mistakes that produce a wrong answer rather than an error |
 
 ## Reading order
 
-1–5 are the core and are meant to be read in order. 6–14 are independent and can be read as needed.
-**15 is the one to read twice** — everything in it runs, converges, and is wrong.
+1–5 are the core and are meant to be read in order. **Visualization comes second on purpose**: from
+there on, every notebook draws the pipeline it is describing, so you can see whether it is linear or
+cyclic instead of reconstructing that from parameter names.
+
+6–14 are independent and can be read as needed. **15 is the one to read twice** — everything in it
+runs, converges, and is wrong.
 
 ## Regenerating
 

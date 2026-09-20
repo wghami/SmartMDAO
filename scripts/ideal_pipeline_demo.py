@@ -86,7 +86,6 @@ def run_pipeline_demo():
     logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["x", "a"],
                    output_path=str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
-                   graph_type="bipartite",
                    view=False)
 
     # Run the pipeline

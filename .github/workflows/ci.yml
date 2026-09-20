@@ -29,6 +29,15 @@ jobs:
           MPLBACKEND: Agg
         run: uv run pytest tests/
 
+      # run_all.py is half of the Definition of Done in docs/handoff.md and had
+      # never actually been enforced. MPLBACKEND=Agg is load-bearing here: some
+      # scripts render a diagram, and plt.show() on an interactive backend would
+      # block a runner forever rather than failing.
+      - name: Run every script
+        env:
+          MPLBACKEND: Agg
+        run: uv run python run_all.py
+
       # The notebooks are committed WITH their outputs so GitHub renders them.
       # Re-executing here is what stops them drifting away from the library: a
       # notebook whose code no longer matches fails the build instead of sitting

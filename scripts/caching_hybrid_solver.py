@@ -152,8 +152,6 @@ def run_hybrid_workflow_demo():
     logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["initial_value"],
                     output_path=str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
-                    orientation="TB",
-                    graph_type="bipartite",
                     view=False)
 
 if __name__ == "__main__":

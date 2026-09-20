@@ -8,7 +8,7 @@ every design question is settled (three in
 [003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
 [004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
 findings and the grounding budget.
-**Baseline:** `v1.20.0` — 560 tests, 100% coverage, 29/29 scripts, 15 notebooks.
+**Baseline:** `v1.21.0` — 558 tests, 100% coverage, 29/29 scripts, 15 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -333,10 +333,18 @@ Each sub-phase is its own branch and meets all four clauses of
       guarantee `test_cookbook.py` makes for the cookbook.
 
       **What it cost us.** Writing them found two things nothing else had: `orientation` and
-      `graph_type` on `visualize()` are **inert** (byte-identical output), which is deliberate and
-      was documented only in a docstring; and the optimization API was written from recollection
-      first and was wrong in every particular, which is exactly what the cookbook exists to prevent
-      and what executing the notebooks caught.
+      `graph_type` on `visualize()` were **inert** (byte-identical output) — **removed in 1.21.0**
+      rather than documented, since a `Literal` in a signature is a strong hint that choosing between
+      the options does something, and a parameter that lies is worse than one that is absent; and the
+      optimization API was written from recollection first and was wrong in every particular, which
+      is exactly what the cookbook exists to prevent and what executing the notebooks caught.
+
+      **Revised in 1.21.0.** Visualization moved from tenth to **second**, and the notebooks after it
+      draw the pipeline they are describing — linear versus cyclic is the distinction the rest of the
+      series turns on, and a reader should not have to reconstruct it from parameter names. Notebook
+      12 now introduces ASP and clingo from scratch instead of assuming them. `visualize()` also
+      draws declared bands and rule-backed disciplines now, because it renders `effective_steps`
+      rather than only the registered ones.
 
 **Exit criterion:** an engineer can point at a `.lp` file and a declared discretisation, re-run the
 study and get the same answer, and be told — before committing to a run — what grounding will cost.

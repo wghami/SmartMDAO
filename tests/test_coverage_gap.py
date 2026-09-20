@@ -101,8 +101,7 @@ def test_visualization_missing_inputs(tmp_path):
     from smartmdao.visualization import PipelineVisualizer
     step = Step(fn=lambda missing_var: missing_var)
     viz = PipelineVisualizer([step], input_keys=set())
-    viz.build(graph_type="flow").render(output_path=str(tmp_path / "f.pdf"), view=False)
-    viz.build(graph_type="bipartite").render(output_path=str(tmp_path / "b.pdf"), view=False)
+    viz.build().render(output_path=str(tmp_path / "f.pdf"), view=False)
 
 def test_visualization_no_extension(tmp_path):
     # Hits visualization.py line 126 (fallback to 'pdf' when no extension is provided)

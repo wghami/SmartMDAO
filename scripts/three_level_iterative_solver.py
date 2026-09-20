@@ -97,7 +97,6 @@ def run_iterative_solver_complex():
     logger.info("Generating interactive diagram...")
     pipe.visualize(inputs=["history_x", "history_y", "history_z"],
                     output_path=str(Path("results") / f"{str(Path(__file__).stem)}.pdf"),
-                    graph_type="bipartite",
                     view=False)
 
     # ==============================================================================
