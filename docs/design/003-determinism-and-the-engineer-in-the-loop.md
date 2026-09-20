@@ -191,11 +191,30 @@ actually decided.
 
 ## Still open
 
-- **Naming.** "ASP-backed discipline" is provisional and used throughout this document for want of
-  a settled term.
-- **How answer-set multiplicity is pinned** in practice — an optimisation statement plus a total
+*(Both closed by [004](004-rule-backed-disciplines.md) on 2026-09-20. Left in place because this
+record is append-only; read the findings below before acting on either.)*
+
+- ~~**Naming.**~~ "ASP-backed discipline" is provisional and used throughout this document for want
+  of a settled term. **Settled: "rule-backed discipline", `RuleDiscipline`.**
+- ~~**How answer-set multiplicity is pinned**~~ in practice — an optimisation statement plus a total
   tie-break is the shape, but what enforces it, and what `validate()` says when more than one
-  optimal model exists, is undesigned.
+  optimal model exists, is undesigned. **Settled: a static `unpinned-program` finding from
+  `validate()`, and an `ambiguous-optimum` finding from a new, budgeted rung on the cost ladder.
+  `validate()` never grounds.**
+
+## Findings added after acceptance
+
+**2026-09-20 — one claim in this record is wrong.** The install-cost argument above states, twice,
+that `clingo` has **zero transitive dependencies**. It declares `cffi`, which brings `pycparser`:
+three packages, not one. The conclusion is unaffected (three is still negligible, and the
+one-repository decision rests on CI and versioning), but the fact was wrong in the direction that
+flattered the decision. Detail in [004](004-rule-backed-disciplines.md).
+
+**2026-09-20 — "unsat cores give machine-checkable *why not*" is true but not free.** Verified
+against clingo 5.8.2: `SolveHandle.core()` returns *solver literals*, and a naive mapping back to
+the assumption symbols named only one of the two constraints in a known two-constraint conflict. The
+mechanism holds; turning it into an explanation an engineer can trust is implementation work with a
+correctness risk of its own. See [004](004-rule-backed-disciplines.md).
 
 ## Related
 

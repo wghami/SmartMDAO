@@ -3,8 +3,10 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–3 complete and merged to `main`. **Phase 4 (ASP) is next**, with
-three of its four design questions now settled in [003](design/003-determinism-and-the-engineer-in-the-loop.md).
+**Current position:** Phases 0–3 complete and merged to `main`. **Phase 4 (rule-backed disciplines)
+is next and now has an order** — every design question is settled, three in
+[003](design/003-determinism-and-the-engineer-in-the-loop.md) and the last two in
+[004](design/004-rule-backed-disciplines.md). 4.1 (the discretisation layer) is the first code.
 **Baseline:** `v1.14.0` — 389 tests, 100% coverage, 27/27 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -197,10 +199,10 @@ a wing model simply ran `python` when the connector could not.
 
 ---
 
-## Phase 4 — ASP-backed disciplines ⬜
+## Phase 4 — Rule-backed disciplines ⬜
 
-Direction set by [003](design/003-determinism-and-the-engineer-in-the-loop.md). Not scheduled, and
-deliberately not designed in detail yet.
+Direction set by [003](design/003-determinism-and-the-engineer-in-the-loop.md); the last two design
+questions settled in [004](design/004-rule-backed-disciplines.md).
 
 A language model generates an ASP program (clingo) once, at authoring time, under engineer review.
 That program — not the model — becomes the discipline: deterministic at run time, inspectable,
@@ -213,10 +215,45 @@ optional `[asp]` extra in this repository; the generated program lives in a **se
 symbolic/numeric discretisation is a **declared, validated object** rather than glue code, because
 that is where the hypotheses hide.
 
-**Still open:** a settled name for the concept, and how answer-set multiplicity is pinned in
-practice.
+**Settled** in [004](design/004-rule-backed-disciplines.md): the concept is a **rule-backed
+discipline** (`RuleDiscipline`), named after what the engineer reviews rather than the engine; and
+multiplicity is pinned in two halves — a static `unpinned-program` finding from `validate()`, which
+**never grounds**, plus an `ambiguous-optimum` finding from a new budgeted rung on the Phase 3 cost
+ladder, which does.
 
 **This supersedes MCP sampling.** The library never calls a model.
+
+### Phasing
+
+Each sub-phase is its own branch and meets all four clauses of
+[handoff.md](handoff.md)'s Definition of Done on its own.
+
+- [x] **4.0 — Settle the decisions.** Docs only, no source changes: [004](design/004-rule-backed-disciplines.md),
+      this section, and handoff's stale `Next`. Mirrors Phase 0, which is the pattern that worked.
+- [ ] **4.1 — The discretisation layer.** `mass_kg = 880 → mass(heavy)` as a declared, inspectable
+      object that `validate()` reports on. **First, and deliberately before any clingo code:** it is
+      the sharpest risk in 003, it needs no extra installed to test, and building it second would
+      mean retrofitting the bridge around whatever the first `.lp` happened to need.
+- [ ] **4.2 — The `[asp]` extra and `RuleDiscipline`.** `.lp` loading, ground/solve, atoms →
+      pipeline outputs, and **UNSAT as the honest `INFEASIBLE`** — which retires Phase 1's invented
+      sentinel without breaking the rule that a discipline must be total. Verify early that
+      non-numeric convergence couples to a frozenset of atoms with no solver change; if it does not,
+      this phase is larger than it looks.
+- [ ] **4.3 — Findings and the budget.** `unpinned-program` in `validate()`; the grounding rung with
+      its estimate quoted first; unsat cores surfaced. **Two risks recorded in 004, both found by
+      writing a worked `.lp` rather than by reasoning:** the unsat-core mapping named one of two
+      conflicting constraints on a first cut, and a half-explanation points the engineer at the wrong
+      rule; and `#minimize { 1@0,A : selected(A) }` *looks* like a total tie-break while separating
+      nothing, so `unpinned-program` must check that a tie-break ranks over a **distinct value per
+      candidate** rather than that one is present. Both fail in the flattering direction. Demonstrate
+      each against a program known to exhibit it.
+- [ ] **4.4 — The didactic script.** Per handoff, it must show the *failure*: a program with two
+      tied optimal answer sets caught as a finding, and an UNSAT with its core. Run it before writing
+      its narration.
+
+**Exit criterion:** an engineer can point at a `.lp` file and a declared discretisation, re-run the
+study and get the same answer, and be told — before committing to a run — what grounding will cost.
+A program that admits more than one optimal model says so rather than picking one.
 
 ---
 
