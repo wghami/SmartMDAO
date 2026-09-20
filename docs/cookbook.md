@@ -18,6 +18,7 @@ Each section names the scripts in [`scripts/`](../scripts) that go deeper. Those
 | [`caching`](#caching) | Expensive disciplines, repeated evaluations |
 | [`optimization`](#optimization) | Driving a pipeline with an optimizer |
 | [`analysis`](#analysis) | Inspecting a pipeline without running it |
+| [`discretisation`](#discretisation) | Turning a number into a symbolic fact, with the threshold declared |
 | [`visualization`](#visualization) | XDSM diagrams |
 | [`pitfalls`](#pitfalls) | Mistakes that fail silently — read this one |
 | [`reference`](#reference) | Everything else exported from `smartmdao` |
@@ -366,6 +367,77 @@ variables and solver misconfiguration — worst first, all at once.
 **Deeper:** [`pipeline_analysis_demo.py`](../scripts/pipeline_analysis_demo.py),
 [`mcp_connector_demo.py`](../scripts/mcp_connector_demo.py),
 [`pipeline_discovery_demo.py`](../scripts/pipeline_discovery_demo.py)
+
+---
+
+## discretisation
+
+Turning a number into a symbolic fact — `mass_kg = 880` into `mass_band = "heavy"` — needs a
+threshold, and **that threshold decides the answer**. Declare it with `Bands` so it is visible,
+diffable and checkable, instead of burying it in a helper function.
+
+```python
+from smartmdao import Bands, Discretisation, Pipeline, explain, validate
+
+pipeline = Pipeline(
+    discretisation=Discretisation(
+        mass_band=Bands("mass_kg", edges=[800, 1200],
+                        names=["light", "medium", "heavy"]),
+    ),
+)
+
+@pipeline.step(outputs=["mass_kg"])
+def size_airframe(span: float) -> float:
+    return 120.0 * span
+
+@pipeline.step(outputs=["margin"])
+def pick_margin(mass_band: str) -> float:
+    return {"light": 0.05, "medium": 0.10, "heavy": 0.20}[mass_band]
+
+# The band is an ordinary step: the solver orders it, and it runs in between.
+result = pipeline.run(span=7.0)
+assert result["mass_kg"] == 840.0
+assert result["mass_band"] == "medium"
+assert result["margin"] == 0.10
+
+assert validate(pipeline, inputs=["span"]) == ()
+assert "light=(-inf, 800); medium=[800, 1200); heavy=[1200, +inf)" in explain(
+    pipeline, inputs=["span"]
+)
+```
+
+**An exact edge value has a declared side.** `closed="left"` (the default) means each band is
+`[lower, upper)`, so `800.0` is `"medium"`, not `"light"`. Pass `closed="right"` for the other
+convention. This is a field rather than a convention because it changes answers quietly:
+
+```python
+from smartmdao import Bands
+
+left = Bands("mass_kg", edges=[800], names=["light", "heavy"])
+right = Bands("mass_kg", edges=[800], names=["light", "heavy"], closed="right")
+
+assert left.classify(800) == "heavy"
+assert right.classify(800) == "light"
+assert left.classify(799.9) == right.classify(799.9) == "light"   # agree away from the edge
+```
+
+Bands must be **strictly ascending** and carry **one more name than edges**; anything else raises
+`DiscretisationError` at construction, because it cannot classify at all. Judgement calls are
+reported by `validate()` instead:
+
+| Finding | Means |
+|---|---|
+| `discretisation-unused` | The band is derived and nothing consumes it — a declared threshold that cannot affect the answer |
+| `discretisation-non-numeric` | The source variable is annotated `str`/`bool`, so classification will raise at run time |
+| `missing-input` | The source variable is neither produced nor supplied — reported against the band's own step, `discretise_<name>` |
+| `duplicate-output` | A step also declares the band's name |
+
+**Two traps.** A band inside a feedback loop can give the loop **more than one fixed point** —
+seeded light it settles light, seeded heavy it settles heavy, and both report `converged`. And the
+synthetic step is named `discretise_<band>`, which usually sorts first alphabetically, so **it**
+decides which variable needs a seed. Ask `analyze()`.
+
+**Deeper:** [`discretisation_demo.py`](../scripts/discretisation_demo.py)
 
 ---
 

@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.14.0:** `main` is clean. 389 tests, 100% coverage, 27/27 scripts passing.
+**State as of v1.15.0:** `main` is clean. 434 tests, 100% coverage, 28/28 scripts passing.
 Roadmap Phases 0–3 are complete and merged. **Phase 4 (rule-backed disciplines) is next**, its
 design questions all settled — see [004](design/004-rule-backed-disciplines.md).
 
@@ -204,9 +204,14 @@ Not bugs — judgement calls left deliberately to the maintainer.
 [roadmap.md](roadmap.md) — **Phase 4, rule-backed disciplines**, now broken into 4.0–4.4, plus a
 deferred list of things recorded so they are not lost.
 
-4.0 (settling the two design decisions) is done. **4.1, the discretisation layer, is the first
-code** — and it comes before any clingo, because a perfectly reviewed program sitting on an
-unreviewed threshold is not traceable, and the threshold is where the answer is actually decided.
+4.0 (settling the decisions) and 4.1 (the discretisation layer, in 1.15.0) are done. **4.2, the
+`[asp]` extra and `RuleDiscipline`, is next.**
+
+Before starting it, read the two entries 4.1 added to [known-issues.md](known-issues.md). One of
+them matters for the design: a threshold inside a feedback loop gives the loop **more than one
+fixed point**, both converged, chosen by the initial guess — which is 003's answer-set multiplicity
+appearing on the numeric side before any rules engine exists. Whatever 4.3 builds to report
+ambiguity should cover both, rather than treating it as an ASP problem.
 
 *This section previously read "Phase 3 (sandboxed execution)… nothing in Phase 3 should start before
 open decision #2 is settled", which had been stale since 1.13.0 shipped Phase 3. Noted rather than

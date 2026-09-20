@@ -26,6 +26,7 @@ from .optimization import (
     register_backend,
     optimize,
 )
+from .discretisation import Bands, Discretisation, DiscretisationError
 from .validation import TypeChecker, StandardTypeChecker, TypeMismatchError
 from .analysis import (
     analyze,
@@ -69,6 +70,9 @@ __all__ = [
     "OptimizerBackend",
     "register_backend",
     "optimize",
+    "Bands",
+    "Discretisation",
+    "DiscretisationError",
     "TypeChecker",
     "StandardTypeChecker",
     "TypeMismatchError",

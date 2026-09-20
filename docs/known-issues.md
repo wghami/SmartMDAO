@@ -177,6 +177,92 @@ eliminate it.
 
 ---
 
+## 🔴 A threshold inside a feedback loop gives the loop more than one answer
+
+Found in 1.15.0 by running [`scripts/discretisation_demo.py`](../scripts/discretisation_demo.py),
+not by reasoning about it.
+
+A band inside a cycle makes the loop piecewise: structure mass depends on which band the total
+falls in, and the total depends on the structure mass. With a 500 kg cutover and a 250 kg payload,
+**both** of these are genuine fixed points:
+
+| Initial guess | Settles at | Band | Status |
+|---|---|---|---|
+| `total_mass_kg=400` | 450 kg | `light` | `converged`, 2 iterations |
+| `total_mass_kg=900` | 510 kg | `heavy` | `converged`, 2 iterations |
+
+450 really is light and 510 really is heavy, so neither run is wrong and neither is a rounding
+artifact. **The initial guess alone decides which answer comes back, and nothing in the result says
+the other one exists.**
+
+This is what [003](design/003-determinism-and-the-engineer-in-the-loop.md) calls answer-set
+multiplicity, arriving on the *numeric* side before any rules engine is involved — which means
+"more than one optimal model is a finding, not a detail" is not an ASP-specific requirement, and
+[004](design/004-rule-backed-disciplines.md)'s two-halves split applies here too.
+
+*Fix direction:* nothing statically decidable. A band's edges are known and so are the steps in the
+cycle, but whether two fixed points exist depends on the discipline functions, which analysis never
+executes. The honest tool is the runtime one: re-solve from seeds either side of each edge and
+report divergent destinations — the same shape as `compare_runs`, and a natural companion to the
+grounding rung planned in 4.3.
+
+---
+
+## 🟡 Declaring a band changes which variable needs an initial guess
+
+`Discretisation` synthesises one step per band, named `discretise_<band>`. That name takes part in
+the **alphabetical ordering** `HybridSolver` uses inside a cyclic block, and `discretise_` sorts
+before most verbs an engineer would choose (`size_`, `sum_`, `compute_`).
+
+So the synthetic step usually runs *first*, and its unproduced input — the band's **source**
+variable — becomes the one needing a seed. In the demo's mass loop the guess must be
+`total_mass_kg`, not the `mass_band` you would reach for by looking at what the first discipline
+consumes.
+
+The same trap as the existing alphabetical-ordering entry below, with a new way to trigger it:
+adding a band to a working pipeline can change what `run()` requires, without any discipline
+changing.
+
+*Mitigation, not a fix:* `analyze()` reports it correctly — it plans over the same
+`effective_steps` the solver runs, so the answer is right by construction. Ask it rather than
+reasoning it out.
+
+---
+
+## ✅ RESOLVED in 1.15.0 — the symbolic/numeric threshold was invisible
+
+[003](design/003-determinism-and-the-engineer-in-the-loop.md) names this as its sharpest risk.
+Going from `mass_kg = 880.0` to `mass(heavy)` requires a threshold; the threshold is a hypothesis;
+and in ordinary code it lives in a helper function where nobody reviews it. A perfectly reviewed
+set of rules sitting on an unreviewed mapping is not traceable, because the mapping is where the
+answer is actually decided.
+
+**Fixed** by `Bands` / `Discretisation`, declared on the `Pipeline`:
+
+```python
+Pipeline(discretisation=Discretisation(
+    mass_band=Bands("mass_kg", edges=[800], names=["light", "heavy"]),
+))
+```
+
+`explain()` states every interval and which side an edge value falls on; `validate()` reports
+`discretisation-unused` and `discretisation-non-numeric`. Incoherent declarations — two names for
+three intervals, descending edges, an unreachable band — raise `DiscretisationError` at
+construction, since there is no informed decision to hand back about a typo.
+
+**The design choice worth remembering:** a band is registered as an ordinary `Step` rather than
+handled as a special case. A band genuinely *is* a function from one variable to another, so the
+existing machinery already fits — `missing-input` reports a source nothing produces (against
+`discretise_<name>`, which reads well in the message), `duplicate-output` reports a name a step
+also declares, and the solver orders it with no changes at all. **The feature shipped two findings
+instead of the four that were planned**, and the instinct to add a parallel set of
+discretisation-aware checks would have produced a second planner that drifts.
+
+`closed="left"` vs `closed="right"` is a declared field rather than a convention, because whether
+880 is heavy is exactly the kind of default that changes an answer quietly.
+
+---
+
 ## 🔴 Step registration order is load-bearing, and getting it wrong is silent
 
 `IterativeSolver` runs steps in registration order. If a step that *consumes* a feedback variable

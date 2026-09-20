@@ -3,11 +3,12 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–3 complete and merged to `main`. **Phase 4 (rule-backed disciplines)
-is next and now has an order** — every design question is settled, three in
-[003](design/003-determinism-and-the-engineer-in-the-loop.md) and the last two in
-[004](design/004-rule-backed-disciplines.md). 4.1 (the discretisation layer) is the first code.
-**Baseline:** `v1.14.0` — 389 tests, 100% coverage, 27/27 scripts.
+**Current position:** Phases 0–3 complete. **Phase 4 (rule-backed disciplines) is under way**:
+every design question is settled (three in
+[003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
+[004](design/004-rule-backed-disciplines.md)), 4.0 and **4.1 (the discretisation layer) are
+merged**. Next is 4.2 — the `[asp]` extra and `RuleDiscipline`.
+**Baseline:** `v1.15.0` — 434 tests, 100% coverage, 28/28 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -230,10 +231,23 @@ Each sub-phase is its own branch and meets all four clauses of
 
 - [x] **4.0 — Settle the decisions.** Docs only, no source changes: [004](design/004-rule-backed-disciplines.md),
       this section, and handoff's stale `Next`. Mirrors Phase 0, which is the pattern that worked.
-- [ ] **4.1 — The discretisation layer.** `mass_kg = 880 → mass(heavy)` as a declared, inspectable
-      object that `validate()` reports on. **First, and deliberately before any clingo code:** it is
-      the sharpest risk in 003, it needs no extra installed to test, and building it second would
-      mean retrofitting the bridge around whatever the first `.lp` happened to need.
+- [x] **4.1 — The discretisation layer.** `mass_kg = 880 → mass_band = "heavy"` as a declared,
+      inspectable object that `validate()` reports on. Shipped in **1.15.0**, deliberately before any
+      clingo code: it is the sharpest risk in 003, it needs no extra installed to test, and building
+      it second would mean retrofitting the bridge around whatever the first `.lp` happened to need.
+
+      **What changed from the plan.** The design assumed discretisation-specific checks. Modelling a
+      band as an ordinary `Step` instead — a band *is* a function from one variable to another —
+      meant `missing-input` and `duplicate-output` already covered two of the four planned findings,
+      and the solver ordered the band with no special case. Two checks shipped instead of four, and
+      `effective_steps` is shared by `Pipeline.run` and `analysis` so the two cannot drift.
+
+      **What it cost us.** Two sharp edges found by running it, both now in
+      [known-issues.md](known-issues.md): a threshold inside a feedback loop gives the loop **more
+      than one fixed point**, each converged and self-consistent, selected by the initial guess
+      alone; and the synthetic step's *name* participates in the alphabetical seeding rule, so
+      declaring a band changes which variable needs a seed. The first is the more serious — it is
+      003's answer-set multiplicity arriving on the numeric side, before any rules engine exists.
 - [ ] **4.2 — The `[asp]` extra and `RuleDiscipline`.** `.lp` loading, ground/solve, atoms →
       pipeline outputs, and **UNSAT as the honest `INFEASIBLE`** — which retires Phase 1's invented
       sentinel without breaking the rule that a discipline must be total. Verify early that
