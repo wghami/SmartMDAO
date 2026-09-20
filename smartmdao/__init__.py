@@ -30,6 +30,7 @@ from .discretisation import Bands, Discretisation, DiscretisationError
 from .rules import (
     INFEASIBLE,
     AmbiguousProgramError,
+    Conflict,
     RuleBudgetExceeded,
     RuleCost,
     RuleDiscipline,
@@ -86,6 +87,7 @@ __all__ = [
     "AmbiguousProgramError",
     "RuleBudgetExceeded",
     "RuleCost",
+    "Conflict",
     "INFEASIBLE",
     "TypeChecker",
     "StandardTypeChecker",

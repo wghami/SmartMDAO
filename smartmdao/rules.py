@@ -108,6 +108,34 @@ class RuleCost:
         )
 
 
+@dataclass(frozen=True)
+class Conflict:
+    """
+    Why a set of facts has no answer — as a **minimal** set of facts, or as a
+    statement that the rules contradict themselves.
+
+    `facts` is minimal in the strong sense: remove any one of them and the rules
+    become satisfiable. That is what makes it usable in a design review, where
+    "these two requirements cannot both hold" is an argument and "something is
+    wrong somewhere" is not.
+    """
+    facts: Dict[str, "Fact"]
+    rules_alone: bool
+    solves: int
+
+    def __str__(self) -> str:
+        if self.rules_alone:
+            return (
+                "the rules are unsatisfiable on their own: no facts are "
+                "involved, so no input could have made this work"
+            )
+        listed = ", ".join(f"{name}({value})" for name, value in self.facts.items())
+        return (
+            f"these facts cannot hold together: {listed}. Removing any one of "
+            f"them makes the rules satisfiable"
+        )
+
+
 class AmbiguousProgramError(RuleProgramError):
     """
     More than one optimal answer set, so the program does not pin its own
@@ -247,6 +275,18 @@ def pinning_concern(source: str) -> Optional[str]:
         "over a DISTINCT value per candidate - `#minimize { 1@0,M : spar(M) }` "
         "looks like one and separates nothing"
     )
+
+
+def _relay(code, message):
+    """
+    Send clingo's own diagnostics to logging instead of stderr.
+
+    Left on stderr they are printed straight through a pipeline run - and
+    "atom does not occur in any rule head" fires for every injected fact, since
+    a fact is by definition not derived by a rule. Correct programs would look
+    alarming, once per sweep.
+    """
+    logger.debug(f"clingo [{code}]: {message}")
 
 
 def _load_clingo():
@@ -408,7 +448,7 @@ class RuleDiscipline:
         injected = "\n".join(f"{name}({term})." for name, term in terms)
         logger.debug(f"Grounding '{self.path}' with: {injected!r}")
 
-        control = clingo.Control(["--opt-mode=optN", "--models=0"])
+        control = clingo.Control(["--opt-mode=optN", "--models=0"], logger=_relay)
         control.add("base", [], f"{self.source}\n{injected}\n")
 
         started = time.perf_counter()
@@ -476,6 +516,93 @@ class RuleDiscipline:
 
         return self._remember(key, unique[0])
 
+    def explain_infeasible(self, **facts: Fact) -> Conflict:
+        """
+        The smallest set of facts that cannot hold together, for facts that have
+        no answer.
+
+        **On demand, not automatic.** It costs one solve per fact, so computing
+        it inside a convergence loop would charge every sweep for an explanation
+        nobody read. `solve` returns `INFEASIBLE` cheaply; ask for the reason
+        when you want it.
+
+        **Deletion, not `SolveHandle.core()`.** docs/design/004 recorded the
+        core mapping as a risk, and it was right for a sharper reason than the
+        one it gave: clingo's core is expressed in solver literals *and is not
+        minimal*. Measured on a three-fact conflict, it returned all three
+        facts, including one that had no bearing on the contradiction - an
+        explanation that points at an innocent constraint is worse than none,
+        because it gets acted on. Dropping one fact at a time and asking whether
+        it is still unsatisfiable costs more solves and yields a set that is
+        minimal by construction, with no dependence on clingo's internals.
+        """
+        clingo = _load_clingo()
+
+        missing = [name for name in self.facts if name not in facts]
+        if missing:
+            raise RuleProgramError(f"'{self.path}' is missing fact(s) {missing}.")
+
+        present = {name: facts[name] for name in self.facts}
+        solves = 1
+        if self._satisfiable(clingo, present):
+            raise RuleProgramError(
+                f"'{self.path}' is satisfiable for these facts, so there is no "
+                f"conflict to explain. Call solve() for the answer."
+            )
+
+        remaining = dict(present)
+        for name in list(present):
+            trial = {key: value for key, value in remaining.items() if key != name}
+            solves += 1
+            if not self._satisfiable(clingo, trial):
+                # Still impossible without it, so it was never part of the
+                # reason. Dropping it permanently is what makes the result
+                # minimal rather than merely sufficient.
+                del remaining[name]
+
+        return Conflict(facts=remaining, rules_alone=not remaining, solves=solves)
+
+    def _satisfiable(self, clingo, facts: Dict[str, Fact]) -> bool:
+        """Whether the program admits any model given exactly these facts."""
+        injected = "\n".join(
+            f"{name}({_as_term(clingo, name, value)})."
+            for name, value in facts.items()
+        )
+
+        control = clingo.Control(logger=_relay)
+        control.add("base", [], f"{self.source}\n{injected}\n")
+
+        started = time.perf_counter()
+        control.ground([("base", [])])
+        grounded = time.perf_counter()
+
+        with control.solve(yield_=True, async_=True) as handle:
+            watchdog = self._start_watchdog(handle)
+            try:
+                handle.resume()
+                handle.wait()
+                result = handle.get()
+            finally:
+                if watchdog is not None:
+                    watchdog.set()
+
+        finished = time.perf_counter()
+        self.cost = replace(
+            self.cost,
+            grounds=self.cost.grounds + 1,
+            ground_seconds=self.cost.ground_seconds + (grounded - started),
+            solve_seconds=self.cost.solve_seconds + (finished - grounded),
+        )
+
+        if result.interrupted:
+            raise RuleBudgetExceeded(
+                f"Explaining '{self.path}' passed its {self.budget_seconds}s "
+                f"budget. An explanation costs one solve per fact, so it is "
+                f"more expensive than the answer it explains."
+            )
+
+        return bool(result.satisfiable)
+
     def _remember(self, key: Tuple, answer: Answer) -> Answer:
         """Store an answer against its facts, if memoisation is on."""
         if self.memoise:
@@ -523,7 +650,7 @@ class RuleDiscipline:
         is ever *proven* optimal. Two is enough: the question being asked is
         whether the answer is unique, not how many there are.
         """
-        control = clingo.Control(["--models=2"])
+        control = clingo.Control(["--models=2"], logger=_relay)
         control.add("base", [], f"{self.source}\n{injected}\n")
         control.ground([("base", [])])
 

@@ -18,6 +18,7 @@ This script shows the things that argument turns on:
   6. WHERE you put the decision - the one that matters most, and the one a
      working example will not teach you, because the wrong topology works too.
   7. What it costs, and the one thing the budget cannot protect you from.
+  8. WHY there is no answer, when there is no answer.
 
 The program is scripts/programs/wing_architecture.lp. Read it alongside this.
 """
@@ -356,3 +357,62 @@ print("   and grounding runs to completion. Grounding is the worst-case")
 print("   exponential half, so this budget is not protection against a")
 print("   grounding blow-up, and saying otherwise would be the same overclaim")
 print("   Phase 3 records about the subprocess.")
+
+
+# ==============================================================================
+# 8. Why there is no answer
+# ==============================================================================
+
+rule("8. INFEASIBLE is a start. The engineer needs to know WHY")
+
+blocked = RuleDiscipline(
+    PROGRAM,
+    facts=["mass_band", "certification"],
+    produces="decisions",
+)
+
+facts = dict(mass_band="heavy", certification="part25")
+print(f"solve({facts}) -> {blocked.solve(**facts)!r}")
+
+conflict = blocked.explain_infeasible(**facts)
+print(f"\nexplain_infeasible -> {conflict}")
+print(f"   minimal facts: {conflict.facts}")
+print(f"   rules alone?   {conflict.rules_alone}")
+print(f"   cost:          {conflict.solves} solves")
+
+print("\n-> Minimal in the strong sense: remove either one and an answer exists.")
+for dropped, keep in (("certification", "part23"), ("mass_band", "light")):
+    alternative = dict(facts)
+    alternative[dropped] = keep
+    answer = blocked.solve(**alternative)
+    print(f"   {dropped}={keep:7} -> {', '.join(sorted(answer))}")
+
+SELF_CONTRADICTORY = """
+:- not spar(x).
+:- spar(x).
+seen(B) :- mass_band(B).
+#show spar/1.
+"""
+
+with tempfile.TemporaryDirectory() as directory:
+    broken_path = pathlib.Path(directory) / "impossible.lp"
+    broken_path.write_text(SELF_CONTRADICTORY)
+
+    broken = RuleDiscipline(
+        broken_path, facts=["mass_band"], produces="decisions"
+    )
+    print(f"\na program that contradicts itself -> {broken.explain_infeasible(mass_band='light')}")
+
+print("\n-> Two different answers to 'why not', and the difference tells the")
+print("   engineer where to look: at their requirements, or at the program.")
+print()
+print("   NOT clingo's own unsat core. docs/design/004 recorded that mapping as")
+print("   a risk and was right for a sharper reason than it gave: the core is")
+print("   expressed in solver literals AND is not minimal. Measured on a")
+print("   three-fact version of this conflict, it returned ALL THREE - including")
+print("   one that appears in no rule at all. An explanation that implicates an")
+print("   innocent constraint is worse than none, because it gets acted on.")
+print()
+print("   Dropping one fact at a time costs more solves and is minimal by")
+print("   construction. That is why it is on demand rather than automatic -")
+print("   one solve per fact, charged only when someone asks.")

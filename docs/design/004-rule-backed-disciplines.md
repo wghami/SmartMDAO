@@ -181,3 +181,41 @@ retrofitting the bridge around whatever the first `.lp` file happened to need.
   questions of.
 - [001](001-mcp-connector.md) — the cost-ladder shape that the grounding budget reuses.
 - [../roadmap.md](../roadmap.md) — Phase 4 phasing.
+
+---
+
+## Finding added after Phase 4.3 (2026-09-20)
+
+**The unsat-core risk recorded above was real, and sharper than stated. The mechanism was dropped.**
+
+This record warned that `SolveHandle.core()` returns solver literals whose sign convention does not
+map naively onto the assumption symbols, and that a first-cut mapping named one of two conflicting
+constraints. Building the feature found a second problem that settles the question:
+
+**clingo's core is not minimal.** Measured on a program with three facts, where exactly two of them
+conflict and the third appears in no rule at all, the core came back naming **all three** — plus a
+literal whose sign did not correspond to any assumption. Both the selector-atom technique and
+direct assumptions produced the same shape.
+
+An explanation that implicates an innocent constraint is worse than no explanation, because it gets
+acted on: the engineer changes the wrong requirement and the contradiction stays.
+
+**What shipped instead (1.19.0):** `RuleDiscipline.explain_infeasible` drops one fact at a time and
+asks whether the program is still unsatisfiable. A fact whose absence keeps it unsatisfiable was
+never part of the reason, so it is discarded. What remains is **minimal by construction** — remove
+any one of it and the rules become satisfiable — with no dependence on clingo's internal
+representation at all.
+
+It costs one solve per fact, plus one to confirm. That is why it is a separate method rather than
+something `solve` does: charging every sweep of a convergence loop for an explanation nobody read is
+exactly what [001](001-mcp-connector.md)'s cost ladder exists to prevent.
+
+A second, unplanned result falls out of the same mechanism: when no fact is implicated, the rules
+contradict themselves regardless of input. `Conflict.rules_alone` reports it, and the distinction is
+the useful part — it tells the engineer whether to read their requirements or the program.
+
+**The general lesson, which is the reason this is recorded here rather than in a changelog.** The
+risk in this document was identified by *running the mechanism once and looking at the output*.
+Trusting it because clingo is a mature solver and the API is named `core()` would have shipped a
+feature that confidently points at the wrong rule. A mechanism can be correct by its own
+specification and still be the wrong thing to build a claim on.
