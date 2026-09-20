@@ -3,9 +3,10 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.15.0:** `main` is clean. 434 tests, 100% coverage, 28/28 scripts passing.
-Roadmap Phases 0–3 are complete and merged. **Phase 4 (rule-backed disciplines) is next**, its
-design questions all settled — see [004](design/004-rule-backed-disciplines.md).
+**State as of v1.16.0:** `main` is clean. 461 tests, 100% coverage, 29/29 scripts passing.
+Roadmap Phases 0–3 are complete. **Phase 4 (rule-backed disciplines) is under way** — 4.0, 4.1
+and 4.2 are merged; **4.3 is next**. Design questions all settled, see
+[004](design/004-rule-backed-disciplines.md).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -52,7 +53,7 @@ uv run pytest          # pytest.ini already adds --cov with term-missing
 If a line is genuinely unreachable, `# pragma: no cover` with a comment saying *why* is
 acceptable — sparingly, and never for logic.
 
-Full coverage needs the dev environment (`uv sync`), which installs both optional extras.
+Full coverage needs the dev environment (`uv sync`), which installs every optional extra.
 
 ### 3. A didactic script
 
@@ -76,7 +77,7 @@ not the same as checking it.
 uv run python run_all.py
 ```
 
-It runs every script in `scripts/` and fails on any non-zero exit. **27/27 currently.** A script
+It runs every script in `scripts/` and fails on any non-zero exit. **29/29 currently.** A script
 that depends on an optional extra must *skip cleanly* (exit 0 with an explanatory message), not
 fail — see [`sellar_benchmark_mdo_openturns.py`](../scripts/sellar_benchmark_mdo_openturns.py).
 
@@ -88,9 +89,9 @@ New to the project? **[testing.md](testing.md)** walks through all of this step 
 explaining what each command proves.
 
 ```bash
-uv sync                              # dev env, includes both extras
-uv run pytest                        # 389 tests, 100% coverage
-uv run python run_all.py             # 27 scripts
+uv sync                              # dev env, includes every extra
+uv run pytest                        # 461 tests, 100% coverage
+uv run python run_all.py             # 29 scripts
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -114,6 +115,8 @@ Read [architecture.md](architecture.md) for the internals. The short version:
 | `graph.py` | Producer mapping, Tarjan SCC, `build_execution_plan` |
 | `solvers.py` | `DAGSolver`, `IterativeSolver`, `HybridSolver`, convergence checkers |
 | `analysis.py` | `analyze` / `validate` / `explain` — static, executes nothing |
+| `discretisation.py` | `Bands` / `Discretisation` — declared thresholds; each becomes a `Step` |
+| `rules.py` | `RuleDiscipline` — an `.lp` program as a discipline; lazy `clingo` import |
 | `mcp/` | MCP server; `handlers.py` has the behaviour, `server.py` only registers |
 
 **Three invariants worth protecting:**
@@ -151,6 +154,11 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
 - **The MCP loader reads module-level instances and factories, nothing else.** A pipeline built
   inside a function body and never returned is unreachable by design. Verify against real files
   before assuming the connector can see a model.
+- **Declared bands and rule-backed disciplines register as real steps**, so their *names* join the
+  alphabetical ordering and can change which variable needs a seed. Adding either to a working
+  pipeline can change what `run()` requires without any discipline being touched.
+- **A threshold inside a loop can give the loop two converged answers**, chosen by the initial
+  guess alone, with nothing reporting it.
 
 ---
 
@@ -204,14 +212,20 @@ Not bugs — judgement calls left deliberately to the maintainer.
 [roadmap.md](roadmap.md) — **Phase 4, rule-backed disciplines**, now broken into 4.0–4.4, plus a
 deferred list of things recorded so they are not lost.
 
-4.0 (settling the decisions) and 4.1 (the discretisation layer, in 1.15.0) are done. **4.2, the
-`[asp]` extra and `RuleDiscipline`, is next.**
+4.0 (decisions), 4.1 (the discretisation layer, 1.15.0) and 4.2 (`RuleDiscipline`, 1.16.0) are
+done. **4.3, findings and the grounding budget, is next.**
 
-Before starting it, read the two entries 4.1 added to [known-issues.md](known-issues.md). One of
-them matters for the design: a threshold inside a feedback loop gives the loop **more than one
-fixed point**, both converged, chosen by the initial guess — which is 003's answer-set multiplicity
-appearing on the numeric side before any rules engine exists. Whatever 4.3 builds to report
-ambiguity should cover both, rather than treating it as an ASP problem.
+Three things to read before starting it, all in [known-issues.md](known-issues.md):
+
+- **Grounding has no budget.** `RuleDiscipline.solve` has no wall clock and re-grounds on every
+  call, so a pathological program hangs a solve. This is 4.3's main job, and it wants Phase 3's
+  answer: an estimate with a number, not a spinner.
+- **Ambiguity is not only an ASP problem.** A threshold inside a feedback loop gives the loop more
+  than one fixed point, both converged, chosen by the initial guess. Whatever 4.3 builds to report
+  ambiguity should cover the numeric case too.
+- **`unpinned-program` is harder than it looks.** A tie-break written the obvious way separates
+  nothing; checking that one is *present* passes a genuinely ambiguous program. See
+  [004](design/004-rule-backed-disciplines.md).
 
 *This section previously read "Phase 3 (sandboxed execution)… nothing in Phase 3 should start before
 open decision #2 is settled", which had been stale since 1.13.0 shipped Phase 3. Noted rather than

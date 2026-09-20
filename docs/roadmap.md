@@ -6,9 +6,9 @@ it is considered done.
 **Current position:** Phases 0–3 complete. **Phase 4 (rule-backed disciplines) is under way**:
 every design question is settled (three in
 [003](design/003-determinism-and-the-engineer-in-the-loop.md), the last two in
-[004](design/004-rule-backed-disciplines.md)), 4.0 and **4.1 (the discretisation layer) are
-merged**. Next is 4.2 — the `[asp]` extra and `RuleDiscipline`.
-**Baseline:** `v1.15.0` — 434 tests, 100% coverage, 28/28 scripts.
+[004](design/004-rule-backed-disciplines.md)), 4.0, 4.1 (the discretisation layer) and **4.2 (`RuleDiscipline`) are merged**. Next is 4.3 —
+findings and the grounding budget.
+**Baseline:** `v1.16.0` — 461 tests, 100% coverage, 29/29 scripts.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -248,11 +248,25 @@ Each sub-phase is its own branch and meets all four clauses of
       alone; and the synthetic step's *name* participates in the alphabetical seeding rule, so
       declaring a band changes which variable needs a seed. The first is the more serious — it is
       003's answer-set multiplicity arriving on the numeric side, before any rules engine exists.
-- [ ] **4.2 — The `[asp]` extra and `RuleDiscipline`.** `.lp` loading, ground/solve, atoms →
-      pipeline outputs, and **UNSAT as the honest `INFEASIBLE`** — which retires Phase 1's invented
-      sentinel without breaking the rule that a discipline must be total. Verify early that
-      non-numeric convergence couples to a frozenset of atoms with no solver change; if it does not,
-      this phase is larger than it looks.
+- [x] **4.2 — The `[asp]` extra and `RuleDiscipline`.** Shipped in **1.16.0**: `.lp` loading,
+      ground/solve, atoms → pipeline outputs, and **UNSAT as the honest `INFEASIBLE`** — which
+      retires Phase 1's invented sentinel without breaking the rule that a discipline must be total.
+
+      **The coupling question was answered first, as planned.** A `frozenset` of atoms converges
+      under the existing non-numeric checker with **no change to `solvers.py`** — verified by spike
+      before any of this was designed, which is what kept the phase the size the roadmap claimed.
+
+      **Registered as an ordinary `Step`, like a band.** `Pipeline.add` accepts anything exposing
+      `as_step()`, so the planner, the solver and every check in `analysis` handle a logic program
+      without knowing it is one. No analysis code was added for it at all.
+
+      **Ambiguity raises rather than resolves.** A program with two proven-optimal answer sets
+      raises `AmbiguousProgramError` listing both. 4.3 turns this into a reported finding on the
+      budgeted rung; refusing is the honest interim, since silently taking the first is what 003
+      forbids.
+
+      **Floats are refused as facts**, pointing at `Bands`. ASP has no floating point, so converting
+      one inside the library would be precisely the undeclared threshold 4.1 exists to prevent.
 - [ ] **4.3 — Findings and the budget.** `unpinned-program` in `validate()`; the grounding rung with
       its estimate quoted first; unsat cores surfaced. **Two risks recorded in 004, both found by
       writing a worked `.lp` rather than by reasoning:** the unsat-core mapping named one of two
@@ -261,6 +275,16 @@ Each sub-phase is its own branch and meets all four clauses of
       nothing, so `unpinned-program` must check that a tie-break ranks over a **distinct value per
       candidate** rather than that one is present. Both fail in the flattering direction. Demonstrate
       each against a program known to exhibit it.
+
+      **Carried over from 4.2, and easy to lose:** `discretisation-unused` fires when no *step*
+      consumes a band. A band consumed only through a `RuleDiscipline`'s `facts=[...]` is consumed
+      in reality, and today that works only because the facts appear in the synthetic step's
+      signature. Any change to how facts are declared must keep that true, or the check will start
+      warning about correctly wired pipelines. There is a regression test pinning it.
+
+      Also still open from 4.2: **grounding has no budget.** 003's risk 4 is that grounding is
+      worst-case exponential, and `RuleDiscipline.solve` currently has no wall clock, so a
+      pathological program hangs the solve. This is the rung's main job.
 - [ ] **4.4 — The didactic script.** Per handoff, it must show the *failure*: a program with two
       tied optimal answer sets caught as a finding, and an UNSAT with its core. Run it before writing
       its narration.

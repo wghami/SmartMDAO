@@ -31,10 +31,21 @@ class Pipeline:
     def add(self, fn: Callable, outputs: list[str] = None):
         """
         Add a step to the pipeline.
-        :param fn: The function to execute.
+        :param fn: The function to execute, or any object exposing `as_step()`
+            - a `RuleDiscipline`, for instance. A discipline backed by a
+            reviewed `.lp` file is a step like any other, and registering it as
+            one is what lets the planner, the solver and every check in
+            `analysis` handle it without a special case.
         :param outputs: Optional list of variable names this function produces.
+            Ignored for an object supplying its own step, which already declares
+            what it produces.
         """
-        step = Step(fn, outputs)
+        builder = getattr(fn, "as_step", None)
+        if callable(builder):
+            step = builder()
+        else:
+            step = Step(fn, outputs)
+
         self.steps.append(step)
         self._structure_validated = False
         logger.debug(f"Added step '{step.name}' to pipeline.")
