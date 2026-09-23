@@ -73,7 +73,7 @@ fails the build. It also means any of them can be read *and executed* to check a
 uv run python run_notebooks.py
 ```
 
-**You should see** 15 notebooks, all `PASS`, in about 45 seconds.
+**You should see** 16 notebooks, all `PASS`, in about 45 seconds.
 
 **What it proves:** [`notebooks/`](../notebooks) is one concept per file, committed **with its
 outputs** so GitHub renders what each cell printed. Re-executing them is what stops them drifting
@@ -539,7 +539,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 579 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 608 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

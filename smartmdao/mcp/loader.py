@@ -282,8 +282,15 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
     if added_to_path:
         sys.path.insert(0, parent)
 
+    # Importing executes the file's top-level code, so a bare
+    # `pipeline.run(...)` there would run the study just to find the pipeline -
+    # twice under run_pipeline, which then runs it for real. Suspending
+    # execution keeps "no discipline is ever invoked" true for that shape.
+    from ..core import suspend_execution
+
     try:
-        spec.loader.exec_module(module)
+        with suspend_execution():
+            spec.loader.exec_module(module)
     except Exception as error:
         raise PipelineLoadError(
             f"Importing {resolved.name} failed: {type(error).__name__}: {error}"

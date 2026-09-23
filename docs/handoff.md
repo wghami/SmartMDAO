@@ -3,10 +3,10 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.22.0:** `main` is clean. 579 tests, 100% coverage, 29/29 scripts, 15 notebooks.
-Roadmap Phases 0–3 are complete. **Phase 4 (rule-backed disciplines) is under way** — 4.0, 4.1
-and 4.2 are merged; **4.3 is next**. Design questions all settled, see
-[004](design/004-rule-backed-disciplines.md).
+**State as of v1.23.0:** `main` is clean. 608 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
+([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
+([005](design/005-side-effecting-steps.md)). Nothing is scheduled.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -55,9 +55,11 @@ acceptable — sparingly, and never for logic.
 
 Full coverage needs the dev environment (`uv sync`), which installs every optional extra.
 
-### 3. A didactic script
+### 3. Didactic material — a notebook for a concept, a script for a failure mode
 
-**Scripts are how this project is read.** Every feature gets one in [`scripts/`](../scripts),
+**This is how the project is read.** Every feature teaches itself somewhere. Since 1.20.0 the
+preferred vehicle for a new *concept* is a notebook (3b below), and [`scripts/`](../scripts) is kept
+small — a script earns its place by demonstrating one failure mode end to end. Either way it is
 written to teach rather than to exercise:
 
 - Print what it is doing and, more importantly, **why it matters** — the `-> ...` commentary lines
@@ -103,9 +105,9 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 579 tests, 100% coverage
+uv run pytest                        # 608 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
-uv run python run_notebooks.py       # 15 notebooks, rewritten with outputs
+uv run python run_notebooks.py       # 16 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```
@@ -131,6 +133,7 @@ Read [architecture.md](architecture.md) for the internals. The short version:
 | `analysis.py` | `analyze` / `validate` / `explain` — static, executes nothing |
 | `discretisation.py` | `Bands` / `Discretisation` — declared thresholds; each becomes a `Step` |
 | `rules.py` | `RuleDiscipline` — an `.lp` program as a discipline; lazy `clingo` import |
+| `effects.py` | Side effects at run time: the refusal, the `"once"` latch, `repeating_step_names` |
 | `mcp/` | MCP server; `handlers.py` has the behaviour, `server.py` only registers |
 
 Documentation, and what each part is for:
@@ -180,7 +183,12 @@ All in [known-issues.md](known-issues.md) with detail. The ones that cost the mo
   alphabetical ordering and can change which variable needs a seed. Adding either to a working
   pipeline can change what `run()` requires without any discipline being touched.
 - **A threshold inside a loop can give the loop two converged answers**, chosen by the initial
-  guess alone, with nothing reporting it.
+  guess alone. `validate()` reports it as `discretisation-in-cycle`.
+- **A side-effecting step in a loop runs once per sweep.** Declare it with `effects=`; `run()`
+  refuses `effects=True` there, and `effects="once"` freezes a coupling so the loop converges
+  somewhere else. Keep loops pure and put effects after them.
+- **Loading a file used to run it.** Importing executed any top-level `pipeline.run(...)`. Fixed in
+  1.23.0, but it is why real runs belong under `if __name__ == "__main__":`.
 
 ---
 
@@ -231,35 +239,26 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-**Phase 4 is complete. Phase 5 is designed and unstarted.**
+**Phases 0–5 are complete and nothing is scheduled.** [roadmap.md](roadmap.md) has the history,
+including what each phase cost; its deferred list holds the remaining ideas with no commitment.
 
-Phase 4's history is in [roadmap.md](roadmap.md); the short version is that 4.0–4.3 landed across
-1.15.0–1.19.0, 4.4 was *discharged rather than written* (recorded as a decision, not ticked
-silently), and 4.5 added the notebooks.
+Phase 5 is the one to read before extending the engine toward workflows. Three of its lessons will
+recur:
 
-**Phase 5 — steps that touch the world.** A step inside a cyclic block runs once per sweep; for one
-that writes a file or launches a subprocess that is a different thing entirely, and nothing
-currently treats re-running as *unsafe* rather than wasteful. The three design questions are settled
-in [005](design/005-side-effecting-steps.md) before any code exists — the shape Phase 4 used.
+- **Refusing is sometimes the informed choice.** Every finding here is a warning, because every
+  other failure is recoverable. Side effects are not — you cannot un-send an email — so `run()`
+  refuses `effects=True` in a loop, and anything that multiplies runs refuses any declared effect
+  unless `allow_effects=True`. That is a reasoned exception to [003](design/003-determinism-and-the-engineer-in-the-loop.md),
+  recorded in [005](design/005-side-effecting-steps.md); do not let it read as a drift in standards.
+- **A declaration can be honoured and the answer still be wrong.** `effects="once"` freezes a
+  coupling, so a loop settles somewhere other than its fixed point and reports success. Measure the
+  consequence of a mechanism, not just that it works.
+- **"Introspection never requires execution" was not true of files.** The loader imported them, and
+  importing ran any top-level `pipeline.run(...)`. It is true now — run() is suspended during the
+  import — but it went unnoticed through five phases because nothing had a side effect to show it.
 
-Read 005 before starting. Two things in it are easy to get wrong:
-
-- **The refusal is deliberate, not an inconsistency.** Every other finding in this project is a
-  warning, because every other failure is recoverable. You cannot un-send an email, so a warning
-  printed alongside thirty created tickets is a post-mortem rather than information. Nothing stops
-  `effects="every-sweep"`; the engineer is simply required to say so.
-- **The check is solver-aware.** `IterativeSolver` sweeps every step, so the question is *would this
-  run more than once*, not *is it in a cycle*.
-
-The **optimizer case is left open on purpose** (005, risk 1): `optimize()` calls `run()` hundreds of
-times, and `"once"` is scoped per run, so a declared step still fires once per evaluation. It is
-sharper than the loop case and should not be designed in passing.
-
-Smaller, and worth doing at some point:
-
-- **The count guard has a hole.** `test_the_documented_counts_match_reality` only matches the
-  `N/N scripts` form, which is how four stale lines survived in this file through several releases.
-- **[known-issues.md](known-issues.md)** holds the rest, each with a severity and a fix direction.
+Smaller things worth doing at some point are in [known-issues.md](known-issues.md), each with a
+severity and a fix direction.
 
 One thing that will **not** be fixed, and should stop being attempted: a grounding blow-up cannot
 be interrupted in-process. `budget_seconds` bounds *searching* only. Measured against clingo 5.8.2
@@ -267,6 +266,5 @@ and recorded — do not let "budget" grow into a claim of protection it does not
 same drift Phase 3 records about the subprocess.
 
 *A note on this section's own history: it once pointed the next contributor at Phase 3 as upcoming
-work, months after Phase 3 shipped. A doc that points at finished work is the same failure as the
-Phase 2 box-ticking correction in [roadmap.md](roadmap.md), which is why the counts in this file are
-now asserted by a test.*
+work, months after Phase 3 shipped. The counts in this file are now asserted by a test that also
+fails if the lines it checks disappear.*

@@ -1,8 +1,11 @@
 import logging
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable, List, Literal
 
 from .discretisation import Discretisation, effective_steps
+from .effects import SideEffectError, latch_once, refuse_unstated_effects
 from .models import Step
 from .solvers import Solver, DAGSolver
 from .visualization import visualize_pipeline
@@ -10,6 +13,64 @@ from .validation import TypeChecker, StandardTypeChecker, validate_structure, va
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)
+
+_suspension = threading.local()
+
+
+class ExecutionSuspended(RuntimeError):
+    """The result of a `run()` made while execution was suspended was used."""
+
+
+class _NotExecuted:
+    """
+    What `run()` returns while execution is suspended.
+
+    Any attempt to *use* it raises, with an explanation. A module that merely
+    calls `pipeline.run(...)` at top level loads fine; one that goes on to read
+    the result has to be told plainly that nothing ran, rather than handed an
+    empty dict it would misread as an answer.
+    """
+
+    _MESSAGE = (
+        "this file calls pipeline.run() at module level and then uses the "
+        "result. Nothing was executed: files are loaded for analysis without "
+        "running their pipelines. Put the run under "
+        "`if __name__ == \"__main__\":` so importing the file stays free."
+    )
+
+    def __getitem__(self, key):
+        raise ExecutionSuspended(self._MESSAGE)
+
+    def __getattr__(self, name):
+        raise ExecutionSuspended(self._MESSAGE)
+
+    def __iter__(self):
+        raise ExecutionSuspended(self._MESSAGE)
+
+    def __repr__(self) -> str:
+        return "<not executed: pipeline.run() called while loading for analysis>"
+
+
+@contextmanager
+def suspend_execution():
+    """
+    Make `Pipeline.run()` a no-op on this thread for the duration.
+
+    Used by the MCP loader, which has to *import* a file to find the pipeline in
+    it - and importing a script executes its top-level code. Without this, a
+    bare `pipeline.run(...)` at module level ran the whole study every time the
+    file was analysed, which broke the one promise the analysis layer makes:
+    introspection never requires execution. Measured, not theorised: two calls
+    to `validate_pipeline` fired a declared side effect twice.
+
+    Thread-local, so a real solve on another thread is unaffected.
+    """
+    previous = getattr(_suspension, "active", False)
+    _suspension.active = True
+    try:
+        yield
+    finally:
+        _suspension.active = previous
 
 @dataclass
 class Pipeline:
@@ -73,6 +134,13 @@ class Pipeline:
         """
         Validates types, then delegates execution to the configured Solver.
         """
+        if getattr(_suspension, "active", False):
+            logger.info(
+                "Pipeline.run() called while loading a file for analysis; "
+                "not executed."
+            )
+            return _NotExecuted()
+
         # A declared band is a step like any other, so the solver plans and runs
         # it alongside the disciplines rather than having facts injected around
         # the outside. See discretisation.effective_steps.
@@ -86,6 +154,12 @@ class Pipeline:
 
             validate_external_inputs(steps, inputs, self.type_checker)
 
+            # Before anything executes: a step that touches the world and
+            # would repeat without saying so is refused, and "once" steps are
+            # latched for this run only. See docs/design/005.
+            refuse_unstated_effects(self.solver, steps, inputs.keys())
+            steps = latch_once(steps)
+
             if self.runtime_type_checks:
                 result = self.solver.solve(steps, inputs, type_checker=self.type_checker)
             else:
@@ -93,6 +167,11 @@ class Pipeline:
 
             logger.info("Pipeline execution completed successfully.")
             return result
+        except SideEffectError as e:
+            # Not a failure: nothing ran. Calling it one would misdescribe
+            # exactly the case the refusal exists to make clear.
+            logger.warning(f"Pipeline execution refused, nothing was run: {e}")
+            raise
         except Exception as e:
             logger.error(f"Pipeline execution failed: {e}")
             raise

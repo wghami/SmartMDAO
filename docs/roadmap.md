@@ -3,10 +3,9 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–4 complete. **Phase 5 (steps that touch the world) is next**, with
-its design questions settled up front in [005](design/005-side-effecting-steps.md) and nothing built
-yet.
-**Baseline:** `v1.22.0` — 579 tests, 100% coverage, 29/29 scripts, 15 notebooks.
+**Current position:** Phases 0–5 complete. Nothing is scheduled; the deferred list below holds
+what remains, with no commitment.
+**Baseline:** `v1.23.0` — 608 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -350,7 +349,7 @@ A program that admits more than one optimal model says so rather than picking on
 
 ---
 
-## Phase 5 — Steps that touch the world ⬜
+## Phase 5 — Steps that touch the world ✅
 
 Direction set by [005](design/005-side-effecting-steps.md), which settles the three design questions
 before any code is written — the shape Phase 4 used, and the reason it stayed the size it claimed.
@@ -386,14 +385,38 @@ choice and is simply required to make it explicitly.
       **`"once"` is still reported.** The latch is 5.2, so today `"once"` is a statement of intent
       that nothing enforces — and the finding says exactly that rather than implying protection.
       Letting it go quiet here would be the same drift Phase 3 records about the subprocess.
-- [ ] **5.2 — Runtime refusal and the `"once"` latch.**
-- [ ] **5.3 — A notebook, and the tool descriptions.** `run_pipeline` executes side effects for
-      real, and `compare_runs` executes them **twice** — which "compare two translations" does not
-      sound like.
+- [x] **5.2 — Runtime refusal and the `"once"` latch.** Shipped in **1.23.0**. `run()` refuses
+      `effects=True` that would repeat, with `SideEffectError`, **before anything executes**; `"once"`
+      is latched per `run()`. The optimizer and `compare_runs` questions were decided rather than
+      designed in passing: both refuse any declared effect unless `allow_effects=True`, because both
+      multiply runs and a per-run latch cannot help. The refusal and `validate()` share
+      `effects.repeating_step_names`, so what the analysis describes and what `run()` refuses cannot
+      drift — one planner, not two.
 
-**Left open deliberately:** the optimizer case. `optimize()` calls `run()` hundreds of times, and
-`"once"` is scoped per run, so a declared step still fires once per *evaluation*. Sharper than the
-loop case and not designed in passing — see 005, risk 1.
+      **What it cost us, found by measuring rather than reasoning:**
+
+      - **`"once"` changes the answer.** On a loop whose fixed point is 20, `"every-sweep"` settles at
+        20 and `"once"` at **10**, both reporting `converged`. A step inside a cycle feeds it back by
+        definition, so latching always freezes a coupling. Reported as `side-effect-latched`, with
+        the structural fix in the message: keep the loop pure, put the effect after it.
+      - **The loader executed files it was only reading.** Importing a file runs its top-level code,
+        so a bare `pipeline.run(...)` ran the whole study every time the file was *analysed* — two
+        `validate_pipeline` calls fired a side effect twice, and `run_pipeline` ran such a file twice
+        per run. That broke the first invariant and predates this phase. Fixed by suspending `run()`
+        while a file is imported.
+      - **A missing second file in `compare_runs`** used to cost a full run of the first. Both are
+        now loaded before either executes.
+
+- [x] **5.3 — A notebook, and the tool descriptions.** Shipped with 5.2, because the notebook
+      coverage guard requires every export — `SideEffectError` included — to be taught somewhere.
+      [`notebooks/15-side-effects.ipynb`](../notebooks/15-side-effects.ipynb) counts messages rather
+      than asserting behaviour, and shows the split that fixes the latch. The `run_pipeline` tool
+      description called its child process **"sandboxed"** — the exact overclaim Phase 3 records —
+      and now says it is not; `compare_runs` says both files really execute.
+
+**Exit criterion met.** A step that touches the world is declared, reported before anything runs,
+refused where repeating it was not asked for, and executed once where once was asked for — with the
+cost of that choice reported rather than hidden.
 
 ---
 

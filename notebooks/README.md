@@ -22,7 +22,8 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 | 12 | [Rule-backed disciplines](12-rule-backed-disciplines.ipynb) | An ASP program as a discipline — introduces ASP and clingo from scratch |
 | 13 | [Execution and comparison](13-execution-and-comparison.ipynb) | The cost ladder, and proving a translation kept the answer |
 | 14 | [Discovery and MCP](14-pipeline-discovery-and-mcp.ipynb) | Finding a pipeline in a file, and the connector |
-| 15 | [Pitfalls](15-pitfalls.ipynb) | Mistakes that produce a wrong answer rather than an error |
+| 15 | [Side effects](15-side-effects.ipynb) | Steps that write files, launch processes or call APIs — declared, refused, latched |
+| 16 | [Pitfalls](16-pitfalls.ipynb) | Mistakes that produce a wrong answer rather than an error |
 
 ## Reading order
 
@@ -30,7 +31,7 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 there on, every notebook draws the pipeline it is describing, so you can see whether it is linear or
 cyclic instead of reconstructing that from parameter names.
 
-6–14 are independent and can be read as needed. **15 is the one to read twice** — everything in it
+6–15 are independent and can be read as needed. **16 is the one to read twice** — everything in it
 runs, converges, and is wrong.
 
 ## Regenerating

@@ -27,6 +27,7 @@ from .graph import (
     weakly_connected_components,
 )
 from .discretisation import effective_steps
+from .effects import repeating_step_names
 from .models import Step
 from .solvers import (
     DAGSolver,
@@ -574,47 +575,32 @@ def _check_decisions_in_cycles(
     return findings
 
 
-def _repeating_steps(pipeline, analysis: PipelineAnalysis, steps: List[Step]) -> Set[str]:
+def _check_side_effects(pipeline, steps: List[Step], input_keys: Set[str]) -> List[Finding]:
     """
-    The steps that would run more than once, which is **not** the same question
-    as which steps are in a cycle.
-
-    `IterativeSolver` sweeps every registered step, cyclic or not, so a
-    side-effecting step anywhere in one repeats. Everything else follows the
-    graph and repeats only inside a cyclic block. Asking the graph alone would
-    give the wrong answer for half the solvers - the same finding Phase 2 made
-    about seeding.
-    """
-    if isinstance(pipeline.solver, IterativeSolver):
-        return {step.name for step in steps}
-
-    return {name for cycle in analysis.cycles for name in cycle.steps}
-
-
-def _check_side_effects(
-    pipeline, analysis: PipelineAnalysis, steps: List[Step]
-) -> List[Finding]:
-    """
-    Declared side effects on steps that would run more than once.
+    A step that declares side effects without saying what should happen when it
+    repeats, on a pipeline where it would.
 
     A numeric discipline re-running is how convergence works. A step that writes
     a file, launches a subprocess or posts to an API re-running thirty times is
     something else, and unlike every other finding in this module the
-    consequence is **not recoverable** - see docs/design/005.
+    consequence is **not recoverable** - see docs/design/005. So this is also
+    the one situation `run()` refuses outright; the finding exists so it is
+    known before anything is run.
 
-    Reported here, statically. The run-time half (refusing, and the `"once"`
-    latch) is Phase 5.2; until it lands, `"once"` is a statement of intent that
-    nothing enforces, and this says so rather than implying protection.
+    `effects=True` is reported as `side-effect-in-cycle`; `run()` refuses it.
+    `"once"` is reported as `side-effect-latched`, because the latch freezes a
+    coupling the loop depends on and can change the answer while still
+    reporting convergence. `"every-sweep"` is a stated intent and is silent.
+    Which steps repeat is decided by
+    `effects.repeating_step_names`, the same function `run()` asks - one
+    planner, not two.
     """
-    repeating = _repeating_steps(pipeline, analysis, steps)
-    if not repeating:
-        return []
-
+    repeating = repeating_step_names(pipeline.solver, steps, input_keys)
     solver = type(pipeline.solver).__name__
     findings = []
 
     for step in steps:
-        if not step.has_effects or step.name not in repeating:
+        if step.name not in repeating or step.effects not in (True, "once"):
             continue
 
         where = (
@@ -623,30 +609,41 @@ def _check_side_effects(
             else f"it sits inside a feedback loop, which {solver} iterates"
         )
 
-        if step.effects == "every-sweep":
-            continue
-
         if step.effects == "once":
-            detail = (
-                "It declares effects=\"once\", but the latch that would honour "
-                "that is not implemented yet, so today it still runs on every "
-                "sweep. Treat the declaration as intent, not protection."
+            # Measured, not argued: on a two-step loop whose fixed point is
+            # 20, latching one step made it settle at 10 - and report
+            # CONVERGED. A step inside a cyclic block feeds the loop back by
+            # definition, so latching it always freezes a coupling.
+            findings.append(
+                Finding(
+                    code="side-effect-latched",
+                    severity=WARNING,
+                    message=(
+                        f"'{step.name}' is effects=\"once\" and would otherwise "
+                        f"repeat, because {where}. Its output is frozen after the "
+                        f"first sweep, so everything downstream in the loop reads "
+                        f"the first-sweep value - the loop converges against that, "
+                        f"not against its own fixed point, and still reports "
+                        f"success. If the effect should happen once but the "
+                        f"computation should iterate, split them: a pure step "
+                        f"inside the loop, and the side effect on the linear part "
+                        f"after it."
+                    ),
+                    step=step.name,
+                )
             )
-        else:
-            detail = (
-                "It declares effects=True without saying what should happen in "
-                "a loop. Say which you mean: effects=\"once\" to run on the "
-                "first sweep only, or effects=\"every-sweep\" if repeating is "
-                "intended."
-            )
+            continue
 
         findings.append(
             Finding(
                 code="side-effect-in-cycle",
                 severity=WARNING,
                 message=(
-                    f"'{step.name}' declares side effects and will run more "
-                    f"than once, because {where}. {detail}"
+                    f"'{step.name}' declares side effects (effects=True) and "
+                    f"would run more than once, because {where}. run() will "
+                    f"refuse it before executing anything. Say which you mean: "
+                    f"effects=\"once\" to run on the first sweep and reuse the "
+                    f"result, or effects=\"every-sweep\" if repeating is intended."
                 ),
                 step=step.name,
             )
@@ -910,7 +907,7 @@ def validate(
     findings.extend(_check_discretisation(pipeline, steps))
     findings.extend(_check_decisions_in_cycles(analysis, steps))
     findings.extend(_check_rule_programs(steps))
-    findings.extend(_check_side_effects(pipeline, analysis, steps))
+    findings.extend(_check_side_effects(pipeline, steps, input_keys))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])

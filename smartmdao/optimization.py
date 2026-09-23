@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple, Type, Union
 
 from .core import Pipeline
+from .discretisation import effective_steps
+from .effects import refuse_declared_effects
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +16,30 @@ class PipelineEvaluator:
     It caches the last evaluation to prevent redundant pipeline runs when optimizers
     request objectives and constraints independently for the same state.
     """
-    def __init__(self, 
-                 pipeline: Pipeline, 
-                 design_vars: List[str], 
-                 constants: Dict[str, Any] = None):
+    def __init__(self,
+                 pipeline: Pipeline,
+                 design_vars: List[str],
+                 constants: Dict[str, Any] = None,
+                 allow_effects: bool = False):
         """
         :param pipeline: The instantiated smartmdao.
         :param design_vars: Ordered list of variable names corresponding to the optimizer's input array `x`.
         :param constants: Optional dictionary of variables that remain fixed during optimization.
+        :param allow_effects: Refuse, by default, a pipeline in which any step
+            declares side effects. An optimizer runs the pipeline once per
+            evaluation - typically hundreds of times - and `effects="once"` is
+            scoped to a single run, so it cannot help. Pass True if every one of
+            those runs is meant to touch the world. See docs/design/005.
         """
+        if not allow_effects:
+            refuse_declared_effects(
+                effective_steps(pipeline),
+                runs_many_times_because=(
+                    "An optimizer runs the pipeline once per evaluation, "
+                    "typically hundreds of times"
+                ),
+            )
+        self.allow_effects = allow_effects
         self.pipeline = pipeline
         self.design_vars = design_vars
         self.constants = constants or {}

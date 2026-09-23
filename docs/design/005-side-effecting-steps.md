@@ -203,3 +203,45 @@ and the record should not be read as a guarantee.
 - [004](004-rule-backed-disciplines.md) — the static-warning / runtime-enforcement split reused here.
 - [../known-issues.md](../known-issues.md) — *a step returning `None` stores nothing*, which is how
   side-effect-only steps are expressed today.
+
+---
+
+## Findings added after Phase 5.2 (2026-09-23)
+
+**Risk 1 and the `compare_runs` question are settled**, both the same way: anything that multiplies
+runs refuses a pipeline with *any* declared effect unless the caller passes `allow_effects=True`.
+`PipelineEvaluator` refuses at construction; `compare_runs` returns a typed refusal. Every
+declaration counts there, `"every-sweep"` included — both it and `"once"` are scoped to a single
+`run()`, and the caller's whole purpose is to make many of them.
+
+**`"once"` changes the answer, and this record understated it.** Decision 3 said the latch "freezes
+the output while the rest of the loop keeps iterating" and called that a semantic change. Measuring
+it made the consequence concrete: on a two-step loop whose fixed point is 20, `"every-sweep"`
+settles at 20 and `"once"` settles at **10 — and both report `converged`**.
+
+That is not an edge case. A step inside a cyclic block is in the cycle *because* its output feeds
+back, so latching any in-cycle step freezes a coupling the loop depends on. The latch honours the
+declaration exactly and the answer is still wrong. `validate()` therefore reports `"once"` as
+`side-effect-latched` rather than treating it as a settled answer, and the message names the real
+fix: **split the step** — a pure step inside the loop, the side effect on the linear part after it,
+where it runs once on the converged result. That is 002's *decide → evaluate completely → act*
+shape, arrived at from a different direction.
+
+**The loader executed files it was only meant to read.** Not anticipated here, found while
+building the `compare_runs` check. `load_pipeline` imports a file to find its pipeline, and
+importing runs top-level code — so a bare `pipeline.run(...)` at module level executed the whole
+study every time the file was *analysed*. Measured: two calls to `validate_pipeline` fired a
+declared side effect twice, and `run_pipeline` fired it twice per run (once at import, once for
+real). That broke the first invariant in [handoff.md](../handoff.md) — *introspection never requires
+execution* — for a very common shape of script, and it predates this record; side effects only
+made it visible.
+
+Fixed by suspending `Pipeline.run()` on the loading thread for the duration of the import. A
+module that only *calls* `run()` at top level loads normally; one that goes on to *use* the result
+is told plainly that nothing executed and to guard the run with `if __name__ == "__main__":`,
+rather than being handed an empty result it would misread as an answer.
+
+**`effects` in `explain()` is settled** (1.22.0): it lists what a pipeline touches, because a
+reviewer wants it stated and it costs nothing to say. **Reporting safe effects is settled too:**
+an effect that runs once — outside any loop, under `DAGSolver` — gets no finding. `explain()` is
+where it is visible; a finding would fire on every correct pipeline that writes its results out.

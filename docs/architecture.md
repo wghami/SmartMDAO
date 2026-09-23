@@ -20,6 +20,7 @@ The whole library is ~1800 lines across 12 modules. Read it in this order:
 | `solvers.py` | `DAGSolver`, `IterativeSolver`, `HybridSolver`, convergence checking. |
 | `discretisation.py` | `Bands` / `Discretisation` — declared thresholds turning a number into a symbolic fact. Each band becomes an ordinary `Step`. |
 | `rules.py` | `RuleDiscipline` — an ASP program as a discipline. Lazy `clingo` import; also registers as an ordinary `Step`. |
+| `effects.py` | Side effects at run time: `SideEffectError`, the refusal of an unstated effect that would repeat, the per-run `"once"` latch, and `repeating_step_names` — shared by `Pipeline.run` and `analysis` so they cannot disagree. |
 | `core.py` | `Pipeline` — the user-facing façade that wires the above together. |
 | `optimization.py` | Bridge to external optimizers; backend registry. |
 | `cache.py` | `@cached` and its four storage backends. |
