@@ -629,73 +629,138 @@ and [design/002](design/002-agent-as-discipline.md).
 ## side-effects
 
 A step inside a cyclic block runs **once per sweep**. For a numeric discipline that is the point;
-for one that writes a file, launches a subprocess or posts to an API it is something else entirely.
+for one that writes a file, launches a subprocess or posts to an API it is something else — and
+unlike every other mistake here, you cannot undo it. So declare it:
 
-Declare it, and `validate()` will tell you before it happens:
+```python
+from smartmdao import Pipeline, HybridSolver, SideEffectError, validate
+
+def loop(effects):
+    sent = []
+    pipeline = Pipeline(solver=HybridSolver(max_iterations=80))
+
+    @pipeline.step(outputs=["notified"], effects=effects)
+    def notify(mass: float) -> float:
+        sent.append(mass)                    # imagine: email.send(...)
+        return mass
+
+    @pipeline.step(outputs=["mass"])
+    def size(notified: float) -> float:
+        return notified * 0.5 + 10.0
+
+    return pipeline, sent
+
+pipeline, sent = loop(effects=True)
+assert "side-effect-in-cycle" in [f.code for f in validate(pipeline)]
+
+try:
+    pipeline.run(mass=0.0)                   # refused BEFORE anything runs
+except SideEffectError:
+    pass
+assert sent == []
+```
+
+| Value | Meaning | In a loop |
+|---|---|---|
+| *absent* | Undeclared; assumed pure | runs every sweep, silently |
+| `effects=True` | Touches the world, loop behaviour **not stated** | **refused** (`SideEffectError`) |
+| `effects="once"` | Run on the first sweep of a `run()`, reuse the result | latched — see below |
+| `effects="every-sweep"` | Run every sweep — you meant it | runs every sweep |
+
+**`"once"` changes the answer.** A step inside a cyclic block feeds the loop back — that is what
+being in the cycle means — so freezing its output freezes a coupling. The loop converges against
+the first-sweep value, not its own fixed point, **and still reports `converged`**. `validate()`
+reports it as `side-effect-latched`.
 
 ```python
 from smartmdao import Pipeline, HybridSolver, validate
 
-pipeline = Pipeline(solver=HybridSolver())
+def loop(effects):                           # each snippet here runs on its own
+    sent = []
+    pipeline = Pipeline(solver=HybridSolver(max_iterations=80))
 
-@pipeline.step(outputs=["ticket_id"], effects=True)
-def raise_ticket(mass: float) -> float:
-    # imagine: jira.create_issue(...)
-    return mass
+    @pipeline.step(outputs=["notified"], effects=effects)
+    def notify(mass: float) -> float:
+        sent.append(mass)
+        return mass
 
-@pipeline.step(outputs=["mass"])
-def size_airframe(ticket_id: float) -> float:
-    return ticket_id * 0.5 + 10.0
+    @pipeline.step(outputs=["mass"])
+    def size(notified: float) -> float:
+        return notified * 0.5 + 10.0
 
-reported = [f for f in validate(pipeline, inputs=["ticket_id"])
-            if f.code == "side-effect-in-cycle"]
-assert len(reported) == 1
-assert "Say which you mean" in reported[0].message
+    return pipeline, sent
+
+every, _ = loop(effects="every-sweep")
+once, sent = loop(effects="once")
+
+assert abs(every.run(mass=0.0)["mass"] - 20.0) < 1e-5   # the real fixed point
+assert once.run(mass=0.0)["mass"] == 10.0           # latched: different, and "converged"
+assert len(sent) == 1
+assert "side-effect-latched" in [f.code for f in validate(once)]
 ```
 
-| Value | Meaning |
-|---|---|
-| *absent* | Undeclared; assumed pure, nothing reported |
-| `effects=True` | Touches the world — **what should happen in a loop is not stated** |
-| `effects="once"` | Run on the first sweep of a `run()`, reuse the result after |
-| `effects="every-sweep"` | Run every sweep. You meant it |
-
-**`True` is refused in a loop and the others are not**, because `True` is the case where the author
-marked their function honestly without having thought about loops yet — exactly when the library
-should stop and ask. Declaring `"every-sweep"` silences it: you keep the choice, you just have to
-make it.
-
-**It is declared, never inferred.** A step returning `None` looks like a free signal and is not — a
-step can write a file *and* return a float.
-
-**A typo raises**, unlike every other judgement call here. `effects="sometimes"` would silently
-declare a destructive step pure, and there is no defensible reading of it to hand back.
-
-**The check is solver-aware.** `IterativeSolver` sweeps every step whether or not there is a cycle,
-so an acyclic pipeline still repeats — and is still reported.
-
-`explain()` lists what a pipeline touches outside itself:
+**The fix is structural: keep the loop pure, put the effect after it.** Split the step — the pure
+part iterates, the side effect sits on the linear part and runs once on the converged result:
 
 ```python
-from smartmdao import Pipeline, explain
+from smartmdao import Pipeline, HybridSolver, validate
+
+sent = []
+split = Pipeline(solver=HybridSolver(max_iterations=80))
+
+@split.step(outputs=["relayed"])
+def relay(mass: float) -> float:
+    return mass
+
+@split.step(outputs=["mass"])
+def size(relayed: float) -> float:
+    return relayed * 0.5 + 10.0
+
+@split.step(outputs=["receipt"], effects=True)      # after the loop: runs once
+def notify(mass: float) -> str:
+    sent.append(mass)
+    return "sent"
+
+assert abs(split.run(mass=0.0)["mass"] - 20.0) < 1e-5 and len(sent) == 1
+assert validate(split, inputs=["mass"]) == ()
+```
+
+**Anything that multiplies runs refuses any declared effect** unless you pass `allow_effects=True`:
+`PipelineEvaluator` (an optimizer runs the pipeline once per evaluation, and `"once"` is scoped to a
+single run) and `compare_runs` (it executes both files, so everything would run twice).
+
+```python
+from smartmdao import Pipeline, PipelineEvaluator, SideEffectError
 
 pipeline = Pipeline()
 
-@pipeline.step(outputs=["summary"])
-def summarise(data: float) -> str:
-    return str(data)
+@pipeline.step(outputs=["y"], effects="every-sweep")
+def post_result(x: float) -> float:
+    return x
 
-@pipeline.step(outputs=["path"], effects="once")
-def write_report(summary: str) -> str:
-    return "out.pdf"
+try:
+    PipelineEvaluator(pipeline, design_vars=["x"])
+except SideEffectError as error:
+    assert "allow_effects=True" in str(error)
 
-assert "Touches the world (1):" in explain(pipeline, inputs=["data"])
-assert "write_report: once" in explain(pipeline, inputs=["data"])
+PipelineEvaluator(pipeline, design_vars=["x"], allow_effects=True)      # the explicit yes
 ```
 
-**Not yet enforced.** `"once"` currently states intent; the latch that honours it, and the run-time
-refusal, are Phase 5.2. `validate()` says so rather than implying protection. Full reasoning in
-[design/005](design/005-side-effecting-steps.md).
+Four more things worth knowing:
+
+- **The check is solver-aware.** `IterativeSolver` sweeps every step whether or not there is a
+  cycle, so an acyclic pipeline still repeats — and is still refused.
+- **It is declared, never inferred.** A step returning `None` looks like a free signal and is not:
+  a step can write a file *and* return a float.
+- **A typo raises** rather than being reported: `effects="sometimes"` would silently declare a
+  destructive step pure.
+- **Analysing a file does not run it.** The MCP tools import the file to find the pipeline; a bare
+  `pipeline.run(...)` at module level is suspended during that import. Put real runs under
+  `if __name__ == "__main__":` anyway — it is what keeps importing a file free.
+
+`explain()` lists what a pipeline touches outside itself. Full reasoning:
+[design/005](design/005-side-effecting-steps.md); worked through with diagrams in
+[`notebooks/15-side-effects.ipynb`](../notebooks/15-side-effects.ipynb).
 
 ---
 

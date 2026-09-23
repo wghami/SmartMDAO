@@ -117,6 +117,7 @@ def test_effects_true_in_a_loop_asks_which_behaviour_is_meant():
     assert findings[0].severity == "warning"
     assert findings[0].step == "notify"
     assert "Say which you mean" in findings[0].message
+    assert "run() will refuse it" in findings[0].message
 
 
 def test_every_sweep_is_an_answer_and_silences_it():
@@ -126,20 +127,24 @@ def test_every_sweep_is_an_answer_and_silences_it():
     )
 
 
-def test_once_is_still_reported_because_nothing_enforces_it_yet():
+def test_once_in_a_loop_is_reported_because_latching_changes_the_answer():
     """
-    5.1 ships the declaration, not the latch. Treating `"once"` as solved here
-    would be the library implying a protection it does not provide - the exact
-    drift Phase 3 records about the subprocess.
+    In 1.22.0 `"once"` was reported because nothing honoured it yet. 1.23.0
+    ships the latch - and measuring it showed the latch has a real cost: a step
+    inside a cyclic block feeds the loop back by definition, so freezing its
+    output makes the loop converge somewhere other than its fixed point while
+    reporting success. So it is still reported, for a different reason.
     """
-    findings = [
+    found = [
         f for f in validate(loop(HybridSolver(), "once"), inputs=["notified"])
-        if f.code == "side-effect-in-cycle"
+        if f.code == "side-effect-latched"
     ]
 
-    assert len(findings) == 1
-    assert "not implemented yet" in findings[0].message
-    assert "intent, not protection" in findings[0].message
+    assert len(found) == 1
+    assert found[0].severity == "warning"
+    assert "not against its own fixed point" in found[0].message
+    assert "split them" in found[0].message
+    assert "side-effect-in-cycle" not in codes(loop(HybridSolver(), "once"), ["notified"])
 
 
 def test_a_side_effecting_step_outside_any_loop_is_not_reported():

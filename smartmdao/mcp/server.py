@@ -168,13 +168,17 @@ def create_server(name: str = "smartmdao"):
 
     @server.tool(
         description=(
-            "RUN a SmartMDAO pipeline in a sandboxed child process under a wall "
-            "clock. Choose a cost rung: 'smoke' (default - one sweep per "
+            "RUN a SmartMDAO pipeline in a child process under a wall clock. "
+            "The child process buys a hard kill, typed results and crash "
+            "isolation - it is NOT a sandbox: the pipeline really executes, and "
+            "any step that writes files, launches processes or calls APIs does "
+            "so for real. Choose a cost rung: 'smoke' (default - one sweep per "
             "discipline; proves the code executes AND measures the unit cost so "
             "you can quote a number before committing to more), 'budgeted' "
             "(capped sweeps), or 'full'. ALWAYS tell the user the estimated "
             "cost from a smoke run before choosing 'full' on anything "
-            "non-trivial. Analyse and validate first - they are free."
+            "non-trivial. Analyse and validate first - they are free, and "
+            "validate reports steps that declare side effects."
         )
     )
     def run_pipeline(
@@ -196,7 +200,10 @@ def create_server(name: str = "smartmdao"):
             "refactored a pipeline and need to show the behaviour is unchanged "
             "- a conversion that quietly returns a different number is worse "
             "than none, because it looks cleaner and gets trusted. Defaults to "
-            "rung='full', since comparing two single sweeps says little."
+            "rung='full', since comparing two single sweeps says little. BOTH "
+            "files really execute, so every side effect would run twice: a "
+            "pipeline in which any step declares effects is refused unless "
+            "allow_effects=true. Do not pass it without asking the user."
         )
     )
     def compare_runs(
@@ -208,10 +215,11 @@ def create_server(name: str = "smartmdao"):
         rung: str = "full",
         budget_sweeps: int = 25,
         timeout_seconds: float = 60.0,
+        allow_effects: bool = False,
     ) -> dict:
         return handlers.compare_runs(
             path_a, path_b, inputs, variable_a, variable_b,
-            rung, budget_sweeps, timeout_seconds,
+            rung, budget_sweeps, timeout_seconds, allow_effects,
         )
 
     # ----- Resources ---------------------------------------------------------

@@ -51,7 +51,7 @@ and measures the unit cost — quote that to the engineer before asking for a fu
 curated examples and `run_all.py` executes every file in it, so a model dropped there joins the
 project's test surface.
 
-### Five traps that produce a wrong answer rather than an error
+### Six traps that produce a wrong answer rather than an error
 
 1. **Duplicate output names overwrite silently.** Last registered wins; the earlier step still runs
    and its result is discarded.
@@ -64,6 +64,11 @@ project's test surface.
 5. **A discipline wired to nothing still converges.** If the graph falls into separate pieces, part
    of the pipeline cannot affect the answer and nothing fails. `validate()` reports it as
    `disconnected-graph` — the most expensive mistake here, because everything looks fine.
+6. **A step that touches the world runs once per sweep inside a loop.** Declare it:
+   `@pipeline.step(outputs=[...], effects=...)`. `run()` refuses `effects=True` in a loop;
+   `effects="once"` freezes a coupling, so the loop converges somewhere else while reporting
+   success. **Keep loops pure and put side effects after them.** Put real runs under
+   `if __name__ == "__main__":` so importing a file never executes it.
 
 Full list with detail: [`docs/known-issues.md`](docs/known-issues.md).
 
@@ -77,8 +82,9 @@ satisfying three is unfinished, not nearly finished:
 1. **`docs/` is updated** — roadmap ticked, known-issues amended, a numbered design record if the
    decision had alternatives worth remembering. Record what did *not* work too.
 2. **100% test coverage.** Not "high". It has already caught genuinely dead code.
-3. **A didactic script** in `scripts/` that teaches rather than exercises — and **run it before
-   writing its narration.** Several demos here shipped claims that were untrue until executed.
+3. **Didactic material** that teaches rather than exercises — a notebook in `notebooks/` for a new
+   concept, a script in `scripts/` for a single failure mode — and **run it before writing its
+   narration.** Several demos here shipped claims that were untrue until executed.
 4. **`run_all.py` is green.**
 
 The full contract, with rationale, is [`docs/handoff.md`](docs/handoff.md). The *why* behind the

@@ -247,6 +247,7 @@ def compare_runs(
     rung: str = "full",
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    allow_effects: bool = False,
 ) -> Dict[str, Any]:
     """
     Runs two pipelines on the same inputs and reports where they disagree.
@@ -265,4 +266,5 @@ def compare_runs(
         rung=rung,
         budget_sweeps=budget_sweeps,
         timeout_seconds=timeout_seconds,
+        allow_effects=allow_effects,
     )

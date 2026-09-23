@@ -196,13 +196,18 @@ def test_a_different_destination_counts_as_a_difference(tmp_path, faithful):
     assert result["runs"]["b"]["statuses"] == ["max_iterations"]
 
 
-def test_a_side_that_will_not_load_is_reported_rather_than_compared(faithful, tmp_path):
+def test_a_missing_second_file_fails_before_the_first_one_runs(faithful, tmp_path):
+    """
+    Changed in 1.23.0. Both files are loaded before either executes, so a
+    missing second file no longer costs a full run of the first - which, with
+    side effects declared, would have touched the world for a comparison that
+    could never happen.
+    """
     result = compare_runs(str(faithful), str(tmp_path / "absent.py"))
 
     assert result["ok"] is False
-    assert "b did not run" in result["error"]
-    assert "needs both sides" in result["error"]
-    assert result["runs"]["a"]["ok"] is True
+    assert "No such file" in result["error"]
+    assert "runs" not in result          # nothing was executed
 
 
 def test_a_missing_first_file_fails_before_running_anything(tmp_path, faithful):

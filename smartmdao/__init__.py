@@ -27,6 +27,7 @@ from .optimization import (
     optimize,
 )
 from .discretisation import Bands, Discretisation, DiscretisationError
+from .effects import SideEffectError
 from .rules import (
     INFEASIBLE,
     AmbiguousProgramError,
@@ -82,6 +83,7 @@ __all__ = [
     "Bands",
     "Discretisation",
     "DiscretisationError",
+    "SideEffectError",
     "RuleDiscipline",
     "RuleProgramError",
     "AmbiguousProgramError",

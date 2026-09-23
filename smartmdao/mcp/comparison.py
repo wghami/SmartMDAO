@@ -131,9 +131,16 @@ def compare_runs(
     rung: str = FULL,
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    allow_effects: bool = False,
 ) -> Dict[str, Any]:
     """
     Runs both pipelines on the **same** inputs and reports where they disagree.
+
+    **Both files really execute**, so every declared side effect would run
+    twice - once per file. "Compare two translations" should not quietly mean
+    "send every notification twice", so a pipeline declaring effects is refused
+    unless `allow_effects=True`. The check loads each file statically, which
+    registers steps without evaluating any of them.
 
     The rung defaults to `full` here, unlike `run_pipeline`: a comparison of two
     single sweeps says almost nothing, since the interesting divergence is in
@@ -150,14 +157,35 @@ def compare_runs(
 
     from .loader import _UNRESOLVED, PipelineLoadError, declared_input_map, load_pipeline
 
+    from ..discretisation import effective_steps
+    from ..effects import effects_refusal_message
+
     supplied = dict(inputs or {})
     recovered: Dict[str, Any] = {}
 
-    if not supplied:
+    loaded = {}
+    for label, path, variable in (("a", path_a, variable_a), ("b", path_b, variable_b)):
         try:
-            loaded_a = load_pipeline(path_a, variable_a)
+            loaded[label] = load_pipeline(path, variable)
         except PipelineLoadError as error:
             return {"ok": False, "error": str(error)}
+
+    if not allow_effects:
+        for label, path in (("a", path_a), ("b", path_b)):
+            declared = [s for s in effective_steps(loaded[label].pipeline) if s.has_effects]
+            if declared:
+                return {
+                    "ok": False,
+                    "error": f"{path}: " + effects_refusal_message(
+                        declared,
+                        "compare_runs executes BOTH files, so every side effect "
+                        "would run twice, once per file",
+                    ),
+                    "refused": "side-effects",
+                }
+
+    if not supplied:
+        loaded_a = loaded["a"]
         recovered = {
             name: value
             for name, value in declared_input_map(loaded_a.path).items()

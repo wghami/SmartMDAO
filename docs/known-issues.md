@@ -354,27 +354,60 @@ optimal-model enumeration loop, which needs a per-model wait rather than one bud
 
 ---
 
-## 🔴 A declared side effect in a loop is reported, not prevented
+## ✅ RESOLVED in 1.23.0 — a declared side effect in a loop was reported, not prevented
 
-`validate()` reports `side-effect-in-cycle` as of 1.22.0, and that is **all** it does. The run-time
-refusal and the `"once"` latch are Phase 5.2, so today a step declared `effects="once"` still
-executes on every sweep.
+In 1.22.0 `validate()` reported `side-effect-in-cycle` and nothing else, and `effects="once"` was a
+statement of intent nothing enforced. As of 1.23.0:
 
-The finding says so in as many words rather than going quiet, because a declaration the library
-appears to honour and does not is worse than no declaration at all — the same drift Phase 3 records
-about the subprocess being described as a safety mechanism.
+- **`effects=True` that would repeat is refused by `run()`** with `SideEffectError`, before
+  anything executes — measured with a counter, not inferred.
+- **`effects="once"` is latched**: it executes on the first sweep of a `run()` and reuses the result.
+- **Anything that multiplies runs refuses any declared effect** unless `allow_effects=True`:
+  `PipelineEvaluator`, because an optimizer runs the pipeline once per evaluation and a per-run
+  latch cannot help; and `compare_runs`, because it executes both files.
 
-**Two cases are worse than the loop and are not addressed at all:**
+This is the one place SmartMDAO refuses rather than warns, deliberately — see
+[005](design/005-side-effecting-steps.md). Every other failure here is recoverable; a sent message
+is not.
 
-- **`optimize()`** calls `run()` hundreds of times. `"once"` is scoped per run, so a declared step
-  fires once *per evaluation* — a thousand tickets rather than thirty. Left open in
-  [005](design/005-side-effecting-steps.md), risk 1; `PipelineEvaluator` refusing is the likely
-  shape but it is undesigned.
-- **`compare_runs`** executes both files, so it runs every side effect **twice**. "Compare two
-  translations" does not sound like "send every notification twice", and the tool description does
-  not currently say it.
+---
 
-*Fix direction:* 5.2 for the loop case; the two above want deciding first.
+## 🟡 `effects="once"` inside a loop makes the loop converge somewhere else
+
+Found by measuring the latch rather than reasoning about it. On a two-step loop whose fixed point
+is 20, `effects="every-sweep"` settles at 20 and `effects="once"` settles at **10** — and **both
+report `converged`**.
+
+It is not an edge case. A step inside a cyclic block is there *because* its output feeds back, so
+latching it always freezes a coupling the loop depends on. The loop then converges against the
+first-sweep value rather than its own fixed point.
+
+*Reported* as `side-effect-latched` (warning). *Fixed* structurally, by the engineer: split the
+step into a pure part that stays in the loop and a side-effecting part on the linear part after it,
+where it runs once on the converged result. Demonstrated in
+[`notebooks/15-side-effects.ipynb`](../notebooks/15-side-effects.ipynb).
+
+---
+
+## ✅ RESOLVED in 1.23.0 — analysing a file executed its module-level `run()`
+
+`load_pipeline` imports a file to find its pipeline, and importing runs top-level code. A bare
+`pipeline.run(...)` at module level — the way a great many scripts are written — therefore
+**executed the whole study every time the file was analysed**. Measured: two calls to
+`validate_pipeline` fired a declared side effect twice, and `run_pipeline` executed such a file
+**twice** per run, once at import and once for real.
+
+That broke the analysis layer's first invariant — *introspection never requires execution* — and
+it predates Phase 5; side effects only made it visible. A pipeline with no declared effects was
+equally affected, just less noticeably.
+
+**Fixed** by suspending `Pipeline.run()` on the loading thread for the duration of the import.
+Calling `run()` at top level now loads normally and executes nothing; *using* its result raises an
+explanation pointing at `if __name__ == "__main__":` rather than returning an empty dict that would
+be misread as an answer. Thread-local, so a real solve elsewhere is unaffected.
+
+**Behaviour change:** a file whose top-level code reads the result of a module-level `run()` no
+longer loads. That is the honest outcome — it only ever loaded by running the study.
 
 ---
 
