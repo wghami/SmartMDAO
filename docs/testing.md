@@ -82,12 +82,14 @@ fails the build. It also means any of them can be read *and executed* to check a
 uv run python run_notebooks.py
 ```
 
-**You should see** 16 notebooks, all `PASS`, in about 45 seconds.
+**You should see** 16 notebooks, all `PASS … unchanged`, in about 45 seconds — and `git status`
+still clean afterwards.
 
 **What it proves:** [`notebooks/`](../notebooks) is one concept per file, committed **with its
 outputs** so GitHub renders what each cell printed. Re-executing them is what stops them drifting
 from the library — a notebook whose code no longer matches fails the build rather than sitting
-there looking authoritative. CI runs this too.
+there looking authoritative. CI runs it with `--check`, which also fails a notebook whose
+committed outputs no longer match what its code prints.
 
 You do not have to run it to read them: open any notebook on GitHub and the outputs are already
 there, diagrams included.
@@ -556,14 +558,14 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 731 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 757 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
 | Typing `/` shows only two smartmdao entries | Correct — those are prompts. Tools are never slash commands; see Step 6a |
 | You changed the code but the agent behaves as before | Step 6b — start a new session; the old subprocess is still running |
 | A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read — declare the names with `Pipeline(inputs=[...])` instead |
-| A notebook shows stale output | Re-run `run_notebooks.py`; the committed outputs are regenerated, not hand-edited |
+| A notebook shows stale output | Re-run `run_notebooks.py`; it rewrites the notebooks whose outputs changed. Outputs are regenerated, never hand-edited |
 | A run is killed at 60s | That is the wall clock. Try `rung="smoke"` to see the unit cost, then raise `timeout_seconds` deliberately |
 | A diagram command hangs | You called `visualize()` directly in a headless shell; pass `view=False`. The MCP path forces this already |
 

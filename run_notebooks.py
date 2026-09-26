@@ -7,15 +7,28 @@ printed without installing anything. That only works if the outputs came from
 running the code rather than from someone typing what they expected - the same
 reason every snippet in `docs/cookbook.md` is executed by the test suite.
 
-    uv run python run_notebooks.py            # execute all, rewrite in place
+    uv run python run_notebooks.py            # execute all, rewrite what changed
     uv run python run_notebooks.py 09         # just the ones matching "09"
+    uv run python run_notebooks.py --check    # CI: fail if a committed output is stale
 
 A cell that raises stops the notebook and fails the run, with the traceback.
 `tests/test_notebooks.py` then guards the committed artifact: every code cell
 carries output, no cell carries an error, and every name exported from
 `smartmdao` appears somewhere.
+
+REPRODUCIBLE, NOT FROZEN. Some outputs are measurements - how long a sweep
+took, the clock in a log line, a temporary directory's name - and differ on
+every run by nature. Rewriting all sixteen files for those alone buried every
+real change in noise, so a notebook is compared with its committed copy after
+`fingerprint()` masks exactly those values, and is written back only when
+something else changed. The committed outputs therefore always come from a
+real run; they are just not replaced by an equivalent one. `--check` turns the
+same comparison into a failure, so an output that no longer matches its code
+is caught in CI instead of shipping.
 """
+import json
 import pathlib
+import re
 import sys
 import time
 
@@ -30,7 +43,57 @@ NOTEBOOKS = pathlib.Path(__file__).parent / "notebooks"
 CELL_TIMEOUT_SECONDS = 300
 
 
-def execute(path: pathlib.Path) -> tuple[bool, str]:
+#: What differs between two honest runs, and nothing else. Each is replaced by
+#: a placeholder before comparing; adding a pattern here is a claim that the
+#: value is a measurement, so keep it narrow.
+VOLATILE = [
+    (re.compile(r"\b\d{2}:\d{2}:\d{2}\b"), "<clock>"),                    # log timestamps
+    (re.compile(r"/tmp/(?:ipykernel_\d+/\d+\.py|tmp[\w-]+)"), "<tmp>"),   # temp dirs, cell files
+    (re.compile(r"\d+(?:\.\d+)?(?:e-?\d+)?\s?(?:s|ms)\b"), "<duration>"),    # "0.0293s", "12 ms"
+    (re.compile(r"('(?:\w+_)?seconds'|\w+_seconds)(['\"]?:\s*)[\d.e-]+"), r"\1\2<duration>"),
+    (re.compile(r"\b0x[0-9a-f]{6,}\b"), "<address>"),
+]
+
+
+def _mask(text: str) -> str:
+    for pattern, replacement in VOLATILE:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def fingerprint(notebook) -> str:
+    """
+    The notebook's sources and outputs, with measurements masked.
+
+    Consecutive stream outputs are joined first: when stdout and stderr
+    interleave, the kernel splits the same text into a different number of
+    chunks from run to run. Images are compared as they are - matplotlib's Agg
+    output is deterministic, and a changed picture is a real change.
+    """
+    cells = []
+    for cell in notebook.cells:
+        outputs = []
+        for output in cell.get("outputs", []):
+            if output.get("output_type") == "stream":
+                text = "".join(output.get("text", ""))
+                if outputs and outputs[-1][0] == ("stream", output.get("name")):
+                    outputs[-1] = (outputs[-1][0], outputs[-1][1] + text)
+                else:
+                    outputs.append((("stream", output.get("name")), text))
+            else:
+                data = {key: value for key, value in output.get("data", {}).items()}
+                outputs.append(((output.get("output_type"), None),
+                                json.dumps(data, sort_keys=True) + "".join(output.get("traceback", []))))
+        cells.append({"source": cell.source, "outputs": [(kind, _mask(text)) for kind, text in outputs]})
+    return json.dumps(cells, sort_keys=True)
+
+
+def execute(path: pathlib.Path, check: bool = False) -> tuple[bool, str]:
+    """
+    Runs one notebook. Returns (ok, detail); detail says what happened to the
+    file - "unchanged", "updated", or, under `check`, "stale".
+    """
+    committed = nbformat.read(path, as_version=4)
     notebook = nbformat.read(path, as_version=4)
 
     client = NotebookClient(
@@ -38,22 +101,32 @@ def execute(path: pathlib.Path) -> tuple[bool, str]:
         timeout=CELL_TIMEOUT_SECONDS,
         kernel_name="python3",
         resources={"metadata": {"path": str(path.parent)}},
+        # Per-cell start and end times are metadata, not output, and differed
+        # on every run of every cell.
+        record_timing=False,
     )
 
     try:
         client.execute()
     except CellExecutionError as error:
+        if not check:
+            # Write back whatever was produced, including a partial run. A
+            # notebook left half-executed is easier to debug than one reverted.
+            nbformat.write(notebook, path)
         return False, str(error).strip().splitlines()[-1]
-    finally:
-        # Write back whatever was produced, including a partial run. A notebook
-        # left half-executed is easier to debug than one silently reverted.
-        nbformat.write(notebook, path)
 
-    return True, ""
+    if fingerprint(notebook) == fingerprint(committed):
+        return True, "unchanged"
+    if check:
+        return False, "stale: its committed outputs differ from what its code prints now"
+    nbformat.write(notebook, path)
+    return True, "updated"
 
 
 def main(argv: list[str]) -> int:
-    pattern = argv[1] if len(argv) > 1 else ""
+    check = "--check" in argv
+    patterns = [arg for arg in argv[1:] if arg != "--check"]
+    pattern = patterns[0] if patterns else ""
     paths = sorted(p for p in NOTEBOOKS.glob("*.ipynb") if pattern in p.name)
 
     if not paths:
@@ -65,11 +138,11 @@ def main(argv: list[str]) -> int:
 
     for path in paths:
         started = time.perf_counter()
-        ok, detail = execute(path)
+        ok, detail = execute(path, check=check)
         elapsed = time.perf_counter() - started
 
         if ok:
-            print(f"  PASS  {path.name:44} {elapsed:6.1f}s")
+            print(f"  PASS  {path.name:44} {elapsed:6.1f}s  {detail}")
         else:
             print(f"  FAIL  {path.name:44} {elapsed:6.1f}s  {detail}")
             failures.append(path.name)

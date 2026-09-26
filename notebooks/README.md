@@ -37,11 +37,15 @@ runs, converges, and is wrong.
 ## Regenerating
 
 ```bash
-uv run python run_notebooks.py          # execute all, rewrite in place
+uv run python run_notebooks.py          # execute all, rewrite only what changed
 uv run python run_notebooks.py 09       # just the ones matching "09"
+uv run python run_notebooks.py --check  # CI: fail if a committed output is stale
 ```
 
-A cell that raises fails the run. `tests/test_notebooks.py` then guards the committed artifact:
+A cell that raises fails the run. Each notebook is compared with its committed copy after masking
+measurements — timings, log clocks, temp paths — and written back only when something else
+changed, so the committed outputs always come from a real run without every re-run rewriting all
+of them. `tests/test_notebooks.py` then guards the committed artifact:
 every notebook was executed, no cell carries an error, every name exported from `smartmdao` appears
 somewhere, and this index lists every file.
 
