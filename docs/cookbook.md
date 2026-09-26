@@ -376,10 +376,12 @@ contract = Pipeline(inputs=["speed", "span"])
 def lift(speed: float, span: float) -> float:
     raise NotImplementedError        # not written yet, and never called by analysis
 
-assert validate(contract) == ()                          # uses the declaration
+# Uses the declaration. The only findings say the step is a stub - see below.
+assert [f.code for f in validate(contract)] == ["stub-step"]
 
 # An explicit list still wins - even an empty one - for "what if only speed came in?"
-assert [f.variable for f in validate(contract, inputs=["speed"])] == ["span"]
+missing = [f.variable for f in validate(contract, inputs=["speed"]) if f.code == "missing-input"]
+assert missing == ["span"]
 
 # A declared name no step reads is reported: usually a typo, and when it
 # misspells a parameter with a default, the only signal you get.
@@ -394,6 +396,34 @@ assert [f.code for f in validate(typo)] == ["unconsumed-input"]
 
 `analyze`, `explain`, `visualize` and the MCP tools use the declaration the same way; the MCP
 reports where the list came from in `inputs_used` (`requested`, `declared`, `found_in_source`).
+
+**How much of it is written?** A step whose body — docstring aside — is only
+`raise NotImplementedError` is a **stub**. The check reads the source and never calls it; a step
+whose source cannot be read (a builtin, a function made by `exec`) is *unknown*, never a stub.
+
+```python
+from smartmdao import Pipeline, analyze, validate, explain
+
+draft = Pipeline(inputs=["a"])
+
+@draft.step(outputs=["b"])
+def double(a: float) -> float:
+    return a * 2
+
+@draft.step(outputs=["c"])
+def later(b: float) -> float:
+    """Waiting on the supplier's rates."""
+    raise NotImplementedError
+
+assert analyze(draft).stubs == ("later",)
+assert [(f.code, f.severity, f.step) for f in validate(draft)] == [("stub-step", "info", "later")]
+assert "Not written yet (1 of 2 steps" in explain(draft)
+```
+
+A stub is information, not a problem: the pipeline is still valid, and every other check still
+means something. Over MCP, `analyze_pipeline` lists `stubs`, and `run_pipeline` names them in its
+result — the run still happens, so the steps already written are exercised, and it stops at the
+first stub it reaches.
 
 `validate()` returns every finding at once, worst first. The full set:
 
@@ -415,6 +445,7 @@ reports where the list came from in `inputs_used` (`requested`, `declared`, `fou
 | `unpinned-program` | warning | An `.lp` program may not pin its own answer |
 | `side-effect-in-cycle` | warning | `effects=True` on a step that would repeat — `run()` refuses it |
 | `side-effect-latched` | warning | `effects="once"` in a loop freezes a coupling and moves the answer |
+| `stub-step` | info | A step that only raises `NotImplementedError` — declared, not yet written |
 | `no-target-var` | info | `IterativeSolver` judging convergence on every produced variable |
 | `discretisation-unused` | info | A band nothing consumes — an orphan, or read by the caller |
 

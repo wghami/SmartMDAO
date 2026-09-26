@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0 (the plan and the docs gate) and 6.1 (declared inputs) are done; 6.2 is next.
-**Baseline:** `v1.23.0` — 666 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+6.0 (the plan and the docs gate), 6.1 (declared inputs) and 6.2 (stubs) are done; 6.3 is next.
+**Baseline:** `v1.23.0` — 690 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -456,10 +456,19 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       factory's descriptor. No test named a factory *and* went through a handler. Fixed, and the
       loader's `declared_inputs` / `declared_input_map` became `inputs_in_source` /
       `input_map_in_source`, so "declared" means one thing.
-- [ ] **6.2 — Stubs (R2).** A static AST check: is the body, docstring aside, a single
+- [x] **6.2 — Stubs (R2).** A static AST check: is the body, docstring aside, a single
       `raise NotImplementedError`? A step with no readable source is *unknown*, never a stub
-      (invariant 2). Listed by `analyze` and `explain`, an info finding in `validate`, and named by
-      `run_pipeline` before it spends a run on a step that will raise.
+      (invariant 2). `analyze().stubs`, a summary line in `explain`, a `stub-step` info finding in
+      `validate`, `stubs` in `analyze_pipeline`, and `stubs` with a note in `run_pipeline`.
+      **What changed from the plan:** `run_pipeline` *names* stubs; it does not refuse. A stub
+      stops a run within its first sweep on any rung, so the most a run can waste is one partial
+      sweep — while refusing would block smoke-testing the steps already written upstream, which
+      is how a contract-first pipeline gets built. The executor reports the failure as a
+      `RuntimeError` naming the step, so before this the cause was only in stderr.
+      **Found on the way:** the cookbook harness compiled each snippet under a made-up filename,
+      so its functions had no readable source and every stub in a snippet read as *unknown* — a
+      snippet would have shown `stubs == ()` where a reader's copy shows the stub. Snippets now
+      run from a real file.
 - [ ] **6.3 — Package-relative imports (R5).** Walk the `__init__.py` chain and import as
       `pkg.module`; standalone files unchanged. Before R4, because R4 moves the loader.
 
