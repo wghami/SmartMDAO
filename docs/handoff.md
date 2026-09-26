@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.23.0:** `main` is clean. 690 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**State as of v1.23.0:** `main` is clean. 698 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
 ([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
 ([005](design/005-side-effecting-steps.md)). **Phase 6** — lessons from paper-repro, a downstream
@@ -50,7 +50,7 @@ changed, something under `docs/` changed too** — and four layers call it, so t
 | CI `docs-gate` job | every pull request | **fails the PR** |
 | `.githooks/pre-push` | before a push leaves the machine | blocks the push; also runs the prose and count guards |
 | Claude Code `PreToolUse` hook | on `gh pr create` | blocks the command, with the checklist |
-| Claude Code `Stop` hook | end of every turn | reminds once, including uncommitted and untracked files; also flags a version on `main` with no tag |
+| Claude Code `Stop` hook | end of every turn | reminds once, including uncommitted and untracked files; also flags a version on `main` whose tag has not appeared |
 
 When no document genuinely needs to change — a private rename, a test-only fix — say so in the PR
 body (or a commit message, for the pre-push hook):
@@ -136,7 +136,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 690 tests, 100% coverage
+uv run pytest                        # 698 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 16 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
@@ -145,6 +145,13 @@ MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 
 - **Branch, never commit to `main`.** PR, wait for CI, merge preserving history (`--merge`, not
   squash — the commits are written to be read individually).
+- **Releasing is bumping the version.** Change `version` in `pyproject.toml` in the PR. When it
+  merges and the tests pass on `main`, CI's `release` job ([`tools/release.py`](../tools/release.py))
+  tags that merge commit `v<version>` and creates the GitHub Release. Do not tag by hand. The
+  docs cite behaviour by release ("fixed in 1.12.0") and downstream projects pin by tag, so a
+  version that is not a release is a reference nobody can check. Until 1.24.0 this was manual,
+  and it drifted: the latest Release stayed at 1.14.0 through nine tagged versions, and
+  1.7.0–1.13.0 were never tagged. PyPI (still at 1.6.0) is not automated.
 - **Commit messages explain *why*.** Look at `git log` for the register: what changed, what it
   cost, what was found along the way that was not expected.
 - **Verify claims against the running code.** Every behavioural claim in `docs/` was checked by

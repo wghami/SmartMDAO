@@ -192,8 +192,10 @@ def run_claude_stop(payload: dict, base: str) -> int:
     version = untagged_release()
     if version:
         problems.append(
-            f"Version {version} on main has no v{version} tag. Tag the merge commit and "
-            f"push the tag: paper-repro pins by tag, and the docs cite releases by it."
+            f"Version {version} on main has no v{version} tag. CI's release job creates "
+            f"it after the tests pass on main - run `git fetch --tags`, and if it is still "
+            f"missing, check that job: downstream projects pin by tag, and the docs cite "
+            f"releases by it."
         )
     if not problems:
         return 0
