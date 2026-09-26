@@ -15,8 +15,10 @@ The planning itself is delegated to `graph.build_execution_plan`, the same
 function `HybridSolver` uses to drive a real solve. Reimplementing it here
 would let the analysis drift away from the behaviour it claims to describe.
 """
+import ast
 import inspect
 import logging
+import textwrap
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
@@ -91,6 +93,9 @@ class PipelineAnalysis:
     initial_guesses_required: Tuple[InitialGuess, ...]
     recommended_solver: str
     reason: str
+    #: Steps whose body only raises `NotImplementedError` - declared, not yet
+    #: written. A step whose source cannot be read is never listed here.
+    stubs: Tuple[str, ...] = ()
 
     @property
     def has_cycles(self) -> bool:
@@ -112,6 +117,53 @@ def _required_inputs(step: Step) -> Tuple[str, ...]:
         name
         for name, parameter in step.get_signature().parameters.items()
         if parameter.default is inspect.Parameter.empty
+    )
+
+
+def _is_not_implemented(node) -> bool:
+    """`NotImplementedError` or `NotImplementedError(...)`."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    return isinstance(node, ast.Name) and node.id == "NotImplementedError"
+
+
+def stub_status(step: Step) -> Optional[bool]:
+    """
+    Whether `step` is a stub: its body, docstring aside, is one
+    `raise NotImplementedError`.
+
+    `True` or `False` when the source can be read; `None` when it cannot - a
+    builtin, or a function made by `exec`. Unknown is never reported as a stub
+    (invariant 2), because the one thing worse than not knowing how much of a
+    pipeline is real is being told the wrong number.
+
+    Read from the source with `ast`; the function is never called.
+    """
+    fn = inspect.unwrap(step.fn)
+    if getattr(fn, "__name__", "") == "<lambda>":
+        return False                        # a lambda cannot hold a raise statement
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        return None
+
+    node = tree.body[0] if tree.body else None
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return None
+
+    body = node.body
+    if (
+        len(body) > 1
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
+        body = body[1:]
+
+    return (
+        len(body) == 1
+        and isinstance(body[0], ast.Raise)
+        and _is_not_implemented(body[0].exc)
     )
 
 
@@ -237,6 +289,7 @@ def analyze(pipeline, inputs: Optional[Sequence[str]] = None) -> PipelineAnalysi
         initial_guesses_required=initial_guesses_required,
         recommended_solver=solver,
         reason=reason,
+        stubs=tuple(step.name for step in steps if stub_status(step)),
     )
 
 
@@ -418,6 +471,29 @@ def _check_unconsumed_inputs(steps: List[Step], inputs: Sequence[str]) -> List[F
         )
         for name in inputs
         if name not in consumed
+    ]
+
+
+def _check_stubs(analysis: PipelineAnalysis) -> List[Finding]:
+    """
+    Steps that are declared but not written yet.
+
+    Information, not a warning: a contract-first pipeline is stubs on purpose,
+    and every other check still means something for it. Listed so progress is
+    read from the pipeline rather than from a list kept by hand - and so nobody
+    is surprised when a run stops at the first one.
+    """
+    return [
+        Finding(
+            code="stub-step",
+            severity=INFO,
+            message=(
+                f"'{name}' only raises NotImplementedError - declared, not yet "
+                f"written. Analysis is unaffected; a run will stop here."
+            ),
+            step=name,
+        )
+        for name in analysis.stubs
     ]
 
 
@@ -938,6 +1014,7 @@ def validate(
     findings.extend(_check_decisions_in_cycles(analysis, steps))
     findings.extend(_check_rule_programs(steps))
     findings.extend(_check_side_effects(pipeline, steps, input_keys))
+    findings.extend(_check_stubs(analysis))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])
@@ -994,6 +1071,13 @@ def explain(pipeline, inputs: Optional[Sequence[str]] = None) -> str:
 
     lines.append(f"Execution order: {' -> '.join(analysis.execution_order)}")
 
+    if analysis.stubs:
+        lines.append("")
+        lines.append(
+            f"Not written yet ({len(analysis.stubs)} of {len(analysis.steps)} steps "
+            f"only raise NotImplementedError): {', '.join(analysis.stubs)}"
+        )
+
     touching = [step for step in effective_steps(pipeline) if step.has_effects]
     if touching:
         lines.append("")
@@ -1014,6 +1098,8 @@ def explain(pipeline, inputs: Optional[Sequence[str]] = None) -> str:
                 f"(closed={band.closed!r})"
             )
 
+    # Stubs are summarised above; one line each here would bury the rest.
+    findings = [finding for finding in findings if finding.code != "stub-step"]
     if findings:
         lines.append("")
         lines.append(f"Findings ({len(findings)}):")

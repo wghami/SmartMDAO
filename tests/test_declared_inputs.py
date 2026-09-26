@@ -65,7 +65,7 @@ def test_a_name_that_is_not_a_string_is_refused():
 
 def test_validate_uses_the_declaration():
     """The false positive that motivated this: 35 missing-inputs on a clean file."""
-    assert validate(contract()) == ()
+    assert codes(validate(contract())) == ["stub-step", "stub-step"]     # and nothing else
 
 
 def test_analyze_uses_the_declaration():
@@ -158,7 +158,7 @@ def test_validate_pipeline_needs_no_input_list(contract_file):
     report = validate_pipeline(str(contract_file))
 
     assert report["valid"] is True
-    assert report["findings"] == []
+    assert {f["code"] for f in report["findings"]} == {"stub-step"}
     assert report["inputs_used"] == {
         "requested": [],
         "declared": ["z1", "x1", "y2"],

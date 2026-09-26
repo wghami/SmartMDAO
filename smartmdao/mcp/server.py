@@ -127,7 +127,8 @@ def create_server(name: str = "smartmdao"):
         description=(
             "Describe what running a SmartMDAO pipeline would do: execution "
             "order, detected feedback loops, which variables need an initial "
-            "guess, and which solver to use. Executes nothing."
+            "guess, which solver to use, and which steps are still stubs. "
+            "Executes nothing."
         )
     )
     def analyze_pipeline(

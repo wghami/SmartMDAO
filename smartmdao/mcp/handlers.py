@@ -9,7 +9,8 @@ import logging
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Sequence
 
-from ..analysis import analyze, explain, validate
+from ..analysis import analyze, explain, stub_status, validate
+from ..discretisation import effective_steps
 from ._runner import DEFAULT_BUDGET_SWEEPS, SMOKE
 from .loader import _UNRESOLVED
 from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, compare_runs as _compare_runs
@@ -96,6 +97,7 @@ def analyze_pipeline(
             asdict(guess) for guess in analysis.initial_guesses_required
         ],
         "inputs_used": provenance,
+        "stubs": _truncate(analysis.stubs),
         "recommended_solver": analysis.recommended_solver,
         "reason": analysis.reason,
     }
@@ -243,6 +245,19 @@ def run_pipeline(
     ]
     if not_supplied:
         result["inputs_used"]["declared_not_supplied"] = not_supplied
+
+    # Named, not refused. A stub stops a run within its first sweep whatever the
+    # rung, so the most a run can waste is one partial sweep - while refusing
+    # would block smoke-testing the steps already written upstream of it, which
+    # is how a contract-first pipeline gets built. The executor reports the
+    # failure as a RuntimeError, so without this the cause is only in stderr.
+    stubs = [step.name for step in effective_steps(loaded.pipeline) if stub_status(step)]
+    if stubs:
+        result["stubs"] = _truncate(stubs)
+        result["stubs_note"] = (
+            f"{len(stubs)} step(s) only raise NotImplementedError. A run stops at "
+            f"the first one it reaches, within the first sweep."
+        )
     if unresolved:
         result["inputs_used"]["unresolved_in_source"] = sorted(unresolved)
         result["inputs_used"]["note"] = (
