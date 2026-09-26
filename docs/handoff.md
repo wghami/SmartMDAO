@@ -4,10 +4,9 @@ For whoever picks this up next — a contributor, a maintainer returning after a
 agent. Read this before starting work.
 
 **State as of v1.27.0:** `main` is clean. 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
-Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
-([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
-([005](design/005-side-effecting-steps.md)). **Phase 6** — lessons from paper-repro, a downstream
-project using the MCP connector — is under way in the [roadmap](roadmap.md): Everything but the sweep has shipped, in 1.24.0–1.27.0; the sweep (006, 6.7) waits for paper-repro's first real runs.
+Roadmap **Phases 0–5 are complete**. **Phase 6** (lessons from paper-repro, a downstream project
+that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.27.0. **Work is paused
+on purpose, waiting for paper-repro's feedback**; see [Next](#next) for what to do when it arrives.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -285,16 +284,79 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-**Phases 0–5 are complete. Phase 6 is under way; every item but the sweep is done. The sweep (006, 6.7) waits for paper-repro's first real runs.** Phase 6 comes from
-[a brief](requests/2026-09-paper-repro.md) written by paper-repro, a downstream project that uses the
-MCP connector on a model outside aerospace. Every request was checked against the code before being
-planned, and the roadmap records where SmartMDAO pushed back: one declared-input mechanism rather
-than two, group ordering only *between* independent blocks, and units checked for consistency but
-**never converted**. The sweep (R3) and the project interpreter (R4) share one worker and are
-designed together in 006 and 007; the sweep's final shape waits for paper-repro's first real runs.
+**Phases 0–5 are complete; Phase 6 is paused, waiting for paper-repro's feedback.** Phase 6 came
+from [a brief](requests/2026-09-paper-repro.md) by paper-repro, a downstream project that uses the
+MCP connector on a model outside aerospace. Six of its seven requests shipped in 1.24.0–1.27.0. A
+note describing those releases was prepared for them on 2026-09-26. It asks them to upgrade to
+1.27.0 and to report on their first real campaign. The seventh request, the sweep, is deliberately
+waiting for that report.
 
-[roadmap.md](roadmap.md) has the history, including what each phase cost; its deferred list holds
-the remaining ideas with no commitment.
+### When paper-repro's feedback arrives
+
+1. **Keep it as evidence** in `docs/requests/` next to the first brief, edited down to what bears
+   on SmartMDAO, and link it from the roadmap. Decisions go in the roadmap and the design records,
+   not in the brief.
+2. **Check every claim against the code before planning.** That is how the first brief was
+   handled, and it is where SmartMDAO pushed back: one input mechanism rather than two, no
+   reordering inside a loop, and never converting units. Reproduce each reported problem first.
+3. **Write design record 006, the sweep, from their real campaign.** It must settle:
+   - the design of a campaign: a grid, explicit points, or both;
+   - seeds as ordinary inputs;
+   - a smoke run that quotes the whole campaign's cost first;
+   - points run in parallel and isolated, on [007](design/007-project-interpreter.md)'s worker;
+   - a resumable store keyed by the model's hash, the SmartMDAO version the worker reports, and the
+     inputs;
+   - failed points recorded, never dropped;
+   - means and confidence intervals over seeds;
+   - refusing declared side effects unless `allow_effects=True`;
+   - how it is exposed over MCP.
+
+   The roadmap's 6.5 and 6.7 have the detail.
+4. **Build 6.7 and move `compare_runs` onto the worker with it.** `compare_runs` is the one tool
+   still using the server's environment ([known-issues](known-issues.md)). The sweep needs the
+   same per-point path, so build it once. Then check Phase 6's exit criterion. Its last clause, a
+   seeded, resumable campaign in the project's own environment with the cost quoted first, is
+   what the sweep delivers.
+5. **Anything else they raise** becomes a Phase 6 item if it finishes their workflow, or opens
+   Phase 7 if it does not.
+
+### Any time, independent of paper-repro
+
+- **Queued:** the diagram draws a parameter with a default as a missing input, while `validate()`
+  treats it as optional. See the roadmap's *Queued* section and known-issues. Small.
+- The other 🟡 entries in [known-issues.md](known-issues.md), each with a fix direction.
+- **A staleness sweep before each release.** The guards catch counts, links, statuses and source
+  line references, but not a sentence that has quietly become untrue. The sweep after 1.27.0
+  found 11 of 16 source references pointing at the wrong line, and a testing guide still
+  expecting version 1.14.0.
+
+### Deliberately not scheduled
+
+- **A persistent worker per environment** ([007](design/007-project-interpreter.md)). A foreign
+  environment costs 0.8–0.9 s a call. Build it only if a real session shows that cost dominating.
+- **Converting units.** Never. [008](design/008-units.md) checks consistency, and a `UnitChecker`
+  answers yes or no, by design.
+
+### How a release happens now
+
+Bump `version` in `pyproject.toml` in the PR. When it merges and the tests pass on Linux and
+Windows, CI tags the merge commit and creates the GitHub Release. The PyPI upload waits for the
+maintainer's approval in the `pypi` environment. Nobody tags by hand. Locally, run
+`git fetch --tags` after a release before trusting the Stop hook's tag reminder: the tag appears
+only once CI has run.
+
+### Lessons from Phase 6 worth keeping
+
+- **Most bugs were found at seams, and were older than the work that found them.** Examples: a
+  named factory crashed every MCP tool (since 1.12.0); `print()` broke `run_pipeline` and the MCP
+  stream (since 1.13.0); an edited sibling module was analysed stale; cookbook snippets were run
+  without readable source. Each needed two parts combined that no test combined. Test the seams.
+- **Do not break a downstream project on the day the server is upgraded.** A discovered
+  environment below the version floor falls back to the server's, with a note, instead of being
+  refused. Refuse only what the caller named explicitly.
+- **Say only what can be proven.** A group split is reported with the dependency cycle that forces
+  it, never as "this could not have been arranged better", because minimising splits is a hard
+  scheduling problem.
 
 Phase 5 is the one to read before extending the engine toward workflows. Three of its lessons will
 recur:

@@ -4,7 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. What remains is 006 and the sweep (6.7), which wait for paper-repro's first real runs.
+6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. **Paused, waiting for paper-repro's feedback**
+on their first real campaign; then 006 and the sweep (6.7). See [handoff](handoff.md#next).
 **Baseline:** `v1.27.0` — 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
