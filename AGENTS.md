@@ -101,6 +101,12 @@ uv run python run_all.py         # every script, must be green
 Branch, PR, wait for CI, merge with `--merge` rather than squash — the commits are written to be
 read individually. Never commit to `main`.
 
+**Item 1 is enforced.** A PR that changes `smartmdao/` without touching `docs/` fails CI's
+`docs-gate` job, and the Claude Code hooks in `.claude/settings.json` stop `gh pr create` and
+remind at the end of a turn. If no document genuinely needs to change, put
+`Docs: not needed — <reason>` in the PR body. Details: the *How this is enforced* section of
+[`docs/handoff.md`](docs/handoff.md).
+
 ### Three invariants worth protecting
 
 1. **Introspection never requires execution.** Order, cycles, types and outputs come from

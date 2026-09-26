@@ -25,6 +25,15 @@ optional extras (`openturns`, `mcp`) so the full suite can run.
 **What it proves:** nothing yet — but note what is *not* there. A base install pulls only h5py,
 matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
 
+
+**If you will push changes**, enable the repository's git hooks once per clone:
+
+``` bash
+git config core.hooksPath .githooks
+```
+
+The pre-push hook refuses a push that changes `smartmdao/` without touching `docs/`, and runs the
+documentation guards — the same checks CI runs, a few minutes earlier.
 ---
 
 ## Step 1 — Run the test suite
@@ -539,7 +548,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 611 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 645 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

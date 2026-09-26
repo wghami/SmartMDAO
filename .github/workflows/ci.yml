@@ -46,3 +46,21 @@ jobs:
         env:
           MPLBACKEND: Agg
         run: uv run python run_notebooks.py
+
+  # Definition of Done item 1, enforced: a PR that changes smartmdao/ must
+  # change docs/ too, or say why not with "Docs: not needed — <reason>" in its
+  # body. The same script backs the pre-push and Claude Code hooks.
+  docs-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the merge base with main has to be reachable
+
+      - name: Docs updated, or waived with a reason
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
+        run: python3 tools/docs_gate.py --ci --base "origin/$BASE_REF"
