@@ -81,6 +81,13 @@ editing the decision. Only the status line moves.
 | 004 | [Rule-backed disciplines](design/004-rule-backed-disciplines.md) — naming, and pinning answer-set multiplicity | implemented (1.15.0–1.19.0) |
 | 005 | [Steps that touch the world](design/005-side-effecting-steps.md) — declaring side effects, and refusing what would repeat | implemented (1.22.0–1.23.0) |
 
+## Requests
+
+[requests/](requests/) keeps briefs from people using SmartMDAO, as evidence for the plans they
+produced. Decisions live in the roadmap and the design records, not there.
+
+- [2026-09 — paper-repro](requests/2026-09-paper-repro.md) → roadmap Phase 6
+
 ## Conventions
 
 - Links between docs are relative, so they resolve on GitHub and on disk.

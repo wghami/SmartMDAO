@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is planned**:
 6.0 — the plan, and hooks that catch stale documentation — is in place; 6.1 is next.
-**Baseline:** `v1.23.0` — 611 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Baseline:** `v1.23.0` — 645 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -439,7 +439,7 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       Claude Code session hooks — and new test guards catch prose that contradicts the roadmap.
       See [handoff.md](handoff.md), *How this is enforced*.
 
-**v1.24.0 — needed now, all small:**
+**1.24.0 — needed now, all small:**
 
 - [ ] **6.1 — Declared inputs (R1).** `Pipeline(inputs=[...])`; analyze / validate / explain /
       render use it when a call passes none, and an explicit argument still wins.
@@ -454,7 +454,7 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 - [ ] **6.3 — Package-relative imports (R5).** Walk the `__init__.py` chain and import as
       `pkg.module`; standalone files unchanged. Before R4, because R4 moves the loader.
 
-**v1.25.0:**
+**1.25.0:**
 
 - [ ] **6.4 — Grouped XDSM (R6).** First fold `visualization.compute_diagonal_order` into the
       shared planner — it is a second implementation of the ordering that agrees today. Then

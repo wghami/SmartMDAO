@@ -3,10 +3,11 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.23.0:** `main` is clean. 611 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**State as of v1.23.0:** `main` is clean. 645 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
 ([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
-([005](design/005-side-effecting-steps.md)). Nothing is scheduled.
+([005](design/005-side-effecting-steps.md)). **Phase 6** — lessons from paper-repro, a downstream
+project using the MCP connector — is planned in the [roadmap](roadmap.md); 6.1 is next.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -37,6 +38,36 @@ the same commit:
 **Record what did not work, too.** The most valuable paragraphs in `docs/` are the ones admitting
 a hypothesis was wrong ([002](design/002-agent-as-discipline.md) revised its own recommendation
 after Phase 1 evidence). A doc that only records successes is marketing.
+
+### How this is enforced
+
+Item 1 was the one most often forgotten, so it is no longer left to memory. One script,
+[`tools/docs_gate.py`](../tools/docs_gate.py), holds the rule — **if anything under `smartmdao/`
+changed, something under `docs/` changed too** — and four layers call it, so they cannot disagree:
+
+| Layer | When | Effect |
+|---|---|---|
+| CI `docs-gate` job | every pull request | **fails the PR** |
+| `.githooks/pre-push` | before a push leaves the machine | blocks the push; also runs the prose and count guards |
+| Claude Code `PreToolUse` hook | on `gh pr create` | blocks the command, with the checklist |
+| Claude Code `Stop` hook | end of every turn | reminds once, including uncommitted and untracked files; also flags a version on `main` with no tag |
+
+When no document genuinely needs to change — a private rename, a test-only fix — say so in the PR
+body (or a commit message, for the pre-push hook):
+
+```text
+Docs: not needed — <a reason of at least ten characters>
+```
+
+The reason is required because an empty waiver is the same as no gate. The git hook is opt-in per
+clone: `git config core.hooksPath .githooks`. The Claude Code hooks live in the committed
+`.claude/settings.json`.
+
+The gate only sees *whether* docs moved. Whether they are *right* is guarded by
+`tests/test_docs.py` — relative links resolve, the roadmap's current position matches its phase
+headers and agrees with this file, no finished phase hides an unexplained open box, and each design
+record's status agrees with the index — and by the count and coverage guards in
+`tests/test_cookbook.py`.
 
 ### 2. 100% test coverage
 
@@ -105,7 +136,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 611 tests, 100% coverage
+uv run pytest                        # 645 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 16 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
@@ -241,8 +272,16 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-**Phases 0–5 are complete and nothing is scheduled.** [roadmap.md](roadmap.md) has the history,
-including what each phase cost; its deferred list holds the remaining ideas with no commitment.
+**Phases 0–5 are complete. Phase 6 is planned; start at 6.1.** Phase 6 comes from
+[a brief](requests/2026-09-paper-repro.md) written by paper-repro, a downstream project that uses the
+MCP connector on a model outside aerospace. Every request was checked against the code before being
+planned, and the roadmap records where SmartMDAO pushed back: one declared-input mechanism rather
+than two, group ordering only *between* independent blocks, and units checked for consistency but
+**never converted**. The sweep (R3) and the project interpreter (R4) share one worker and are
+designed together in 006 and 007; the sweep's final shape waits for paper-repro's first real runs.
+
+[roadmap.md](roadmap.md) has the history, including what each phase cost; its deferred list holds
+the remaining ideas with no commitment.
 
 Phase 5 is the one to read before extending the engine toward workflows. Three of its lessons will
 recur:
