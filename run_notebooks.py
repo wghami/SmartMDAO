@@ -52,6 +52,8 @@ VOLATILE = [
     (re.compile(r"\d+(?:\.\d+)?(?:e-?\d+)?\s?(?:s|ms)\b"), "<duration>"),    # "0.0293s", "12 ms"
     (re.compile(r"('(?:\w+_)?seconds'|\w+_seconds)(['\"]?:\s*)[\d.e-]+"), r"\1\2<duration>"),
     (re.compile(r"\b0x[0-9a-f]{6,}\b"), "<address>"),
+    # Where the checkout lives: /home/<you>/... here, /home/runner/work/... in CI.
+    (re.compile(r"(?:/[^\s\"'/]+)+?/(?=(?:smartmdao|notebooks|scripts|\.venv)/)"), "<checkout>/"),
 ]
 
 
