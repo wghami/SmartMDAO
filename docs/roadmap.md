@@ -3,8 +3,8 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–5 complete. Nothing is scheduled; the deferred list below holds
-what remains, with no commitment.
+**Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is planned**:
+6.0 — the plan, and hooks that catch stale documentation — is in place; 6.1 is next.
 **Baseline:** `v1.23.0` — 611 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -177,7 +177,7 @@ thing to ask someone to consent to blindly.
 - [x] [`scripts/cost_ladder_demo.py`](../scripts/cost_ladder_demo.py)
 - [x] **`compare_runs`** — same inputs, two pipelines, diff the state. The thing that makes a
       translation from hand-written code trustworthy
-- [ ] `optimize` / `sweep` — deferred until someone asks for them
+- [ ] `optimize` / `sweep` — deferred until someone asks for them *(`sweep` was asked for in 2026-09 — Phase 6.7. `optimize` over MCP stays deferred.)*
 
 **Exit criterion met.** An engineer is told what a run will cost before it starts, a non-converging
 pipeline is killed by timeout and reported as such, and a translation can be checked against its
@@ -197,7 +197,7 @@ a wing model simply ran `python` when the connector could not.
 
 ---
 
-## Phase 4 — Rule-backed disciplines ⬜
+## Phase 4 — Rule-backed disciplines ✅
 
 Direction set by [003](design/003-determinism-and-the-engineer-in-the-loop.md); the last two design
 questions settled in [004](design/004-rule-backed-disciplines.md).
@@ -419,6 +419,87 @@ choice and is simply required to make it explicitly.
 **Exit criterion met.** A step that touches the world is declared, reported before anything runs,
 refused where repeating it was not asked for, and executed once where once was asked for — with the
 cost of that choice reported rather than hidden.
+
+---
+
+## Phase 6 — Lessons from paper-repro ⬜
+
+paper-repro is a downstream project that uses SmartMDAO through its MCP connector. It logged every
+point where the connector could not do what it needed, and the resulting brief is kept as evidence
+in [requests/2026-09-paper-repro.md](requests/2026-09-paper-repro.md). Its model is deliberately
+not aerospace MDO, which makes it the first real test of SmartMDAO outgrowing MDAO.
+
+Every request was checked against the code before being planned: R5's error reproduces verbatim,
+the runner uses `sys.executable`, and the loader reads only literal `run()` calls.
+
+- [x] **6.0 — The plan, and hooks that catch stale documentation.** Documentation went stale
+      repeatedly during Phases 4–5, in three distinct ways: counts, prose that stopped being true,
+      and changes that never touched the docs at all. One gate script
+      (`tools/docs_gate.py`) now backs four layers — the CI docs gate, a git pre-push hook, and two
+      Claude Code session hooks — and new test guards catch prose that contradicts the roadmap.
+      See [handoff.md](handoff.md), *How this is enforced*.
+
+**v1.24.0 — needed now, all small:**
+
+- [ ] **6.1 — Declared inputs (R1).** `Pipeline(inputs=[...])`; analyze / validate / explain /
+      render use it when a call passes none, and an explicit argument still wins.
+      `inputs_used` reports the source (`requested` / `declared` / `found_in_source`). A declared
+      name no step consumes is reported, since it is probably a typo. *Pushback taken:* one
+      mechanism on the pipeline object rather than a module-level constant as well — it travels
+      with factories and needs no naming convention.
+- [ ] **6.2 — Stubs (R2).** A static AST check: is the body, docstring aside, a single
+      `raise NotImplementedError`? A step with no readable source is *unknown*, never a stub
+      (invariant 2). Listed by `analyze` and `explain`, an info finding in `validate`, and named by
+      `run_pipeline` before it spends a run on a step that will raise.
+- [ ] **6.3 — Package-relative imports (R5).** Walk the `__init__.py` chain and import as
+      `pkg.module`; standalone files unchanged. Before R4, because R4 moves the loader.
+
+**v1.25.0:**
+
+- [ ] **6.4 — Grouped XDSM (R6).** First fold `visualization.compute_diagonal_order` into the
+      shared planner — it is a second implementation of the ordering that agrees today. Then
+      `group=` on steps, keeping groups contiguous by choosing the order **between** independent
+      blocks only. **Never inside a cyclic block:** the order there is alphabetical and decides
+      which variable needs a seed, so reordering it would silently change what `run()` requires.
+      Where a cross-group dependency forces interleaving, the diagram says so.
+
+**Design first, then build:**
+
+- [ ] **6.5 — Design records 006 (sweep) and 007 (project interpreter), written together.**
+      They share one substrate: a worker process whose interpreter is a parameter (the server's
+      own by default), speaking a versioned protocol. Building the sweep on `sys.executable` first
+      would mean rebuilding it for R4. To settle there: the protocol's minimum version and the
+      refusal below it — a project pinned to 1.22.0 would load files with the loader that
+      executes top-level `run()`, a bug fixed in 1.23.0; **parallel execution** of points (approved);
+      and a resumable store keyed by the model's hash and SmartMDAO version as well as the inputs,
+      so a resumed campaign never mixes two versions of a model.
+      **Note: R3's final shape is settled only after paper-repro's first real runs.** The
+      record can start now; the sweep's details wait for that evidence.
+- [ ] **6.6 — Run in the project's interpreter (R4)**, on the 6.5 worker. Timeouts and crash
+      isolation unchanged; version skew refused with a clear message, never guessed around.
+- [ ] **6.7 — Sweep / Monte Carlo driver (R3)**, on the same worker, in the library and over
+      MCP. Seeds are ordinary pipeline inputs; one point is smoked first and the campaign's cost
+      quoted; points run isolated, in parallel, under a wall clock; completed points are skipped
+      on re-run; failures are recorded, never dropped; aggregation gives means and confidence
+      intervals over seeds. A sweep multiplies runs, so it refuses declared side effects unless
+      `allow_effects=True`, like the optimizer.
+
+**Later:**
+
+- [ ] **6.8 — Units (R7), design record 008 first.** **Consistency checking only — SmartMDAO will
+      never convert units.** A producer declaring dB wired to a consumer expecting linear is
+      reported; nothing is rescaled, because a silent conversion is a default that changes the
+      answer, which [003](design/003-determinism-and-the-engineer-in-the-loop.md) forbids. A
+      missing unit is *unchecked*, never an error (invariant 2); units are read from annotations,
+      never by executing (invariant 1).
+
+**Release discipline:** each release is tagged on its merge commit and pushed — paper-repro pins
+SmartMDAO by tag and bumps deliberately.
+
+**Exit criterion:** paper-repro can analyse, validate and render a contract-first pipeline with no
+repeated input lists; see how much of it is still stubbed; run a seeded, resumable campaign in its
+own environment with the cost quoted first; and read a diagram that keeps each part of the model
+together.
 
 ---
 
