@@ -33,8 +33,15 @@ class Step:
     fn: Callable
     manual_outputs: Optional[List[str]] = None
     effects: Optional[Union[bool, str]] = None
+    #: A label for steps that belong together - one part of a model, one stage
+    #: of a workflow. It changes nothing about what is computed: the planner
+    #: uses it only to choose between blocks that are independent anyway, so
+    #: a group's steps run, and are drawn, next to each other.
+    group: Optional[str] = None
 
     def __post_init__(self):
+        if self.group is not None and (not isinstance(self.group, str) or not self.group):
+            raise TypeError(f"group must be a non-empty string, got {self.group!r}")
         if self.effects not in EFFECT_VALUES:
             raise ValueError(
                 f"effects must be one of {list(EFFECT_VALUES)}, got "

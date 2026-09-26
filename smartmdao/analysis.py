@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 from .graph import (
     ExecutionBlock,
     build_execution_plan,
+    group_conflicts,
     map_producers,
     weakly_connected_components,
 )
@@ -472,6 +473,35 @@ def _check_unconsumed_inputs(steps: List[Step], inputs: Sequence[str]) -> List[F
         for name in inputs
         if name not in consumed
     ]
+
+
+def _check_groups(steps: List[Step], input_keys: Set[str]) -> List[Finding]:
+    """
+    Groups the planner could not keep together, with the dependencies that
+    prove it could not. Information: nothing computed is affected, only where
+    steps sit in the run and on the diagram.
+    """
+    findings = []
+    for conflict in group_conflicts(steps, input_keys):
+        names = " and ".join(repr(group) for group in conflict.groups)
+        if conflict.in_loop:
+            message = (
+                f"Groups {names} share a feedback loop ({', '.join(conflict.steps)}), "
+                f"so their steps are interleaved there. A loop runs in alphabetical "
+                f"order, which decides which variable needs a seed, so it is never "
+                f"reordered for grouping."
+            )
+        else:
+            shown = ", ".join(f"{producer} -> {consumer}" for producer, consumer in conflict.edges[:4])
+            more = f" and {len(conflict.edges) - 4} more" if len(conflict.edges) > 4 else ""
+            message = (
+                f"{'Group' if len(conflict.groups) == 1 else 'Groups'} {names} cannot "
+                f"{'' if len(conflict.groups) == 1 else 'all '}be kept together: "
+                f"dependencies leave and re-enter them "
+                f"({shown}{more}). Those steps are placed in plain execution order."
+            )
+        findings.append(Finding(code="groups-interleaved", severity=INFO, message=message))
+    return findings
 
 
 def _check_stubs(analysis: PipelineAnalysis) -> List[Finding]:
@@ -1015,6 +1045,7 @@ def validate(
     findings.extend(_check_rule_programs(steps))
     findings.extend(_check_side_effects(pipeline, steps, input_keys))
     findings.extend(_check_stubs(analysis))
+    findings.extend(_check_groups(steps, input_keys))
 
     rank = {ERROR: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda finding: rank[finding.severity])

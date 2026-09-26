@@ -128,7 +128,7 @@ class Pipeline:
     def __post_init__(self):
         self.inputs = declared_names(self.inputs)
 
-    def add(self, fn: Callable, outputs: list[str] = None, effects=None):
+    def add(self, fn: Callable, outputs: list[str] = None, effects=None, group: Optional[str] = None):
         """
         Add a step to the pipeline.
         :param fn: The function to execute, or any object exposing `as_step()`
@@ -143,28 +143,36 @@ class Pipeline:
             pipeline - see `Step`. A step inside a cyclic block runs once per
             sweep, which is a different proposition for a function that writes a
             file than for one that computes a number.
+        :param group: Labels steps that belong together. The planner keeps a
+            group's steps next to each other wherever the dependencies allow -
+            in the run and on the diagram - and never reorders inside a
+            feedback loop. It changes nothing about what is computed.
         """
         builder = getattr(fn, "as_step", None)
         if callable(builder):
             step = builder()
+            if group is not None:
+                step.group = group
+                step.__post_init__()
         else:
-            step = Step(fn, outputs, effects=effects)
+            step = Step(fn, outputs, effects=effects, group=group)
 
         self.steps.append(step)
         self._structure_validated = False
         logger.debug(f"Added step '{step.name}' to pipeline.")
         return self
 
-    def step(self, fn: Callable = None, *, outputs: List[str] = None, effects=None):
+    def step(self, fn: Callable = None, *, outputs: List[str] = None, effects=None,
+             group: Optional[str] = None):
         """
-        Decorator to register a step. See `add` for `effects`.
+        Decorator to register a step. See `add` for `effects` and `group`.
         """
         if fn is not None and callable(fn):
-            self.add(fn, outputs=outputs, effects=effects)
+            self.add(fn, outputs=outputs, effects=effects, group=group)
             return fn
 
         def wrapper(func):
-            self.add(func, outputs=outputs, effects=effects)
+            self.add(func, outputs=outputs, effects=effects, group=group)
             return func
         
         return wrapper
