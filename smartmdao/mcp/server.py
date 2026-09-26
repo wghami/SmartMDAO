@@ -27,7 +27,7 @@ README covers a fraction of the API, so writing from recollection produces
 plausible code against functions that do not exist. The cookbook is generated
 from the installed version and every snippet in it is executed by the test
 suite. Pass a topic (solvers, feedback-loops, convergence, non-numeric, types,
-caching, optimization, analysis, discretisation, rules, side-effects,
+units, caching, optimization, analysis, discretisation, rules, side-effects,
 visualization, pitfalls) for detail.
 
 AFTER WRITING IT, verify before presenting it:
