@@ -69,7 +69,8 @@ def fake_gh(tmp_path, released: bool):
 
 
 def run(repo, bin_dir, *flags):
-    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+           "GITHUB_OUTPUT": str(repo / "github_output")}
     return subprocess.run(
         [sys.executable, str(SCRIPT), "--sha", "abc123", *flags],
         cwd=repo, env=env, capture_output=True, text=True,
@@ -112,3 +113,33 @@ def test_a_dry_run_creates_nothing(repo, tmp_path):
 
     assert "tag-and-release" in result.stdout
     assert not any("create" in line for line in log.read_text().splitlines())
+
+
+# ==============================================================================
+# What the publish job is told
+# ==============================================================================
+
+def said(repo):
+    return (repo / "github_output").read_text().strip()
+
+
+def test_a_new_release_tells_the_publish_job(repo, tmp_path):
+    bin_dir, _ = fake_gh(tmp_path, released=False)
+    run(repo, bin_dir)
+    assert said(repo) == "released=true"
+
+
+@pytest.mark.parametrize("released, flags", [(True, ()), (False, ("--dry-run",))])
+def test_nothing_new_publishes_nothing(repo, tmp_path, released, flags):
+    subprocess.run(["git", "tag", "v2.0.0"], cwd=repo, check=True)
+    bin_dir, _ = fake_gh(tmp_path, released=released)
+    run(repo, bin_dir, *flags)
+    assert said(repo) == "released=false"
+
+
+def test_a_failed_release_publishes_nothing(repo, tmp_path):
+    bin_dir, _ = fake_gh(tmp_path, released=False)
+    gh = bin_dir / "gh"
+    gh.write_text(gh.read_text().replace("exit 0\n", "exit 1\n"))
+    assert run(repo, bin_dir).returncode == 1
+    assert said(repo) == "released=false"

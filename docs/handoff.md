@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.23.0:** `main` is clean. 698 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**State as of v1.23.0:** `main` is clean. 702 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
 ([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
 ([005](design/005-side-effecting-steps.md)). **Phase 6** — lessons from paper-repro, a downstream
@@ -136,7 +136,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 698 tests, 100% coverage
+uv run pytest                        # 702 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 16 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
@@ -151,7 +151,10 @@ MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
   docs cite behaviour by release ("fixed in 1.12.0") and downstream projects pin by tag, so a
   version that is not a release is a reference nobody can check. Until 1.24.0 this was manual,
   and it drifted: the latest Release stayed at 1.14.0 through nine tagged versions, and
-  1.7.0–1.13.0 were never tagged. PyPI (still at 1.6.0) is not automated.
+  1.7.0–1.13.0 were never tagged. The `publish` job then uploads the new version to PyPI by
+  trusted publishing — no token exists to leak — and **waits for approval** in the `pypi`
+  environment: an upload is the one step that cannot be taken back. PyPI skips 1.7.0–1.23.0 by
+  choice; the first automated upload is 1.24.0.
 - **Commit messages explain *why*.** Look at `git log` for the register: what changed, what it
   cost, what was found along the way that was not expected.
 - **Verify claims against the running code.** Every behavioural claim in `docs/` was checked by
