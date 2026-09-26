@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.27.0:** `main` is clean. 842 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+**State as of v1.27.0:** `main` is clean. 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
 ([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
 ([005](design/005-side-effecting-steps.md)). **Phase 6** — lessons from paper-repro, a downstream
@@ -139,7 +139,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 842 tests, 100% coverage
+uv run pytest                        # 843 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 17 notebooks; rewrites only the ones that changed
 uv build                             # wheel + sdist

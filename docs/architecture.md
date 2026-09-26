@@ -49,7 +49,7 @@ copy of input recovery or cost estimation.
 
 ## The execution path
 
-`Pipeline.run(**inputs)` ([core.py:133](../smartmdao/core.py:133)) does, in order:
+`Pipeline.run(**inputs)` ([core.py:185](../smartmdao/core.py:185)) does, in order:
 
 0. **Nothing at all, if execution is suspended.** The MCP loader imports a file to find its
    pipeline, and importing runs top-level code — so a bare `pipeline.run(...)` at module level
@@ -81,7 +81,7 @@ else is derived on demand.
 
 ## `Step`: how a function becomes a node
 
-A `Step` ([models.py:6](../smartmdao/models.py:6)) wraps a callable and nothing else. It is
+A `Step` ([models.py:12](../smartmdao/models.py:12)) wraps a callable and nothing else. It is
 `@dataclass(eq=False)` so identity-based hashing works — the graph algorithms use `Step` objects
 as dict keys, and two steps wrapping identical functions must stay distinct.
 
@@ -153,7 +153,7 @@ variables. It breaks when `diff != inf and diff < tolerance`.
 Two consequences worth internalising:
 
 - Because the residual is a `max()` over *all* produced variables
-  ([solvers.py:161](../smartmdao/solvers.py:161)), one noisy variable holds the whole system
+  ([solvers.py:387](../smartmdao/solvers.py:387)), one noisy variable holds the whole system
   hostage. `target_var` is the escape hatch — set it and convergence is judged on that variable
   alone.
 - The `inf` guard means a non-numeric variable that is still changing can never accidentally
@@ -188,7 +188,8 @@ stops cleanly with status `ABANDONED` and the reason recorded.
 
 ### `StandardConvergenceChecker`
 
-The piece that makes non-numeric MDA possible ([solvers.py:37](../smartmdao/solvers.py:37)):
+The piece that makes non-numeric MDA possible, `StandardConvergenceChecker.distance`
+([solvers.py:110](../smartmdao/solvers.py:110)):
 
 ```python
 if isinstance(previous, (int, float)) and isinstance(current, (int, float)):
@@ -212,7 +213,7 @@ The interesting one. It decomposes rather than brute-forcing:
 3. Build the condensation graph (a DAG whose nodes are SCCs).
 4. Topologically sort that DAG — keeping each declared `group` together where dependencies allow.
 5. Walk the plan: a single step with no self-loop runs **exactly once**; any larger group is
-   handed to a nested `IterativeSolver` ([solvers.py:232](../smartmdao/solvers.py:232)).
+   handed to a nested `IterativeSolver` ([solvers.py:457](../smartmdao/solvers.py:457)).
 
 So only genuinely cyclic blocks iterate. Steps downstream of a feedback loop are evaluated once,
 after it has converged. Within a cyclic block, steps are sorted alphabetically by name to keep
@@ -257,7 +258,7 @@ function carries no return annotation.
 
 ## The optimizer bridge
 
-`PipelineEvaluator` ([optimization.py:9](../smartmdao/optimization.py:9)) adapts a `Pipeline` to
+`PipelineEvaluator` ([optimization.py:11](../smartmdao/optimization.py:11)) adapts a `Pipeline` to
 the array-in/scalar-out interface optimizers expect. It maps an ordered `design_vars` list onto
 the array `x`, merges in fixed `constants`, and runs the pipeline.
 
