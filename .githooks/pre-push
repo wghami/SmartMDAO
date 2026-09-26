@@ -1,0 +1,17 @@
+#!/bin/sh
+# The documentation gate, before a push leaves the machine.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Skip in an emergency:    git push --no-verify   (CI runs the same gate anyway)
+#
+# The rule lives in tools/docs_gate.py, shared with CI and the Claude Code
+# hooks, so the three cannot disagree about what "docs updated" means.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+python3 tools/docs_gate.py --pre-push
+
+# The prose and count guards take a few seconds; worth it before CI does it.
+if command -v uv >/dev/null 2>&1; then
+    uv run --quiet pytest tests/test_docs.py tests/test_cookbook.py -q --no-cov -p no:cacheprovider
+fi
