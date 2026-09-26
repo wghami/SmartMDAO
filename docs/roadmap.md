@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.3 made 1.24.0 and 6.4 (grouped XDSM) makes 1.25.0; 6.5 — design records 006 and 007 — is next.
-**Baseline:** `v1.25.0` — 759 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+6.0–6.4 shipped in 1.24.0–1.25.0; 007 is written and 6.6 builds it in 1.26.0. 006 and the sweep (6.7) wait for paper-repro's first real runs.
+**Baseline:** `v1.26.0` — 806 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -523,8 +523,17 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       so a resumed campaign never mixes two versions of a model.
       **Note: R3's final shape is settled only after paper-repro's first real runs.** The
       record can start now; the sweep's details wait for that evidence.
-- [ ] **6.6 — Run in the project's interpreter (R4)**, on the 6.5 worker. Timeouts and crash
-      isolation unchanged; version skew refused with a clear message, never guessed around.
+- [x] **6.6 — Run in the project's interpreter (R4)**, as designed in
+      [007](design/007-project-interpreter.md), in 1.26.0. Every tool resolves the file's
+      environment and reports it as `interpreter`; the server's own runs in-process, any other
+      through the versioned worker. Verified end to end against a second environment holding a
+      library the server lacks. A Windows CI job covers the path rules, and releases wait for it.
+      **What changed from the design:** a *discovered* environment below the version floor falls
+      back instead of being refused, or every project pinned before 1.26.0 would have broken on
+      the day the server was upgraded. **Found on the way:** two stdout bugs older than 007. Any
+      `print()` in a discipline broke `run_pipeline` (since 1.13.0), and a file printing while
+      loaded wrote into the MCP protocol stream. **Not done:** `compare_runs` still uses the
+      server's environment ([known-issues](known-issues.md)).
 - [ ] **6.7 — Sweep / Monte Carlo driver (R3)**, on the same worker, in the library and over
       MCP. Seeds are ordinary pipeline inputs; one point is smoked first and the campaign's cost
       quoted; points run isolated, in parallel, under a wall clock; completed points are skipped

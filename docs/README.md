@@ -80,7 +80,7 @@ editing the decision. Only the status line moves.
 | 003 | [Determinism, traceability, and the engineer in the loop](design/003-determinism-and-the-engineer-in-the-loop.md) — the governing principle, and rule-backed disciplines | implemented (Phase 4) |
 | 004 | [Rule-backed disciplines](design/004-rule-backed-disciplines.md) — naming, and pinning answer-set multiplicity | implemented (1.15.0–1.19.0) |
 | 005 | [Steps that touch the world](design/005-side-effecting-steps.md) — declaring side effects, and refusing what would repeat | implemented (1.22.0–1.23.0) |
-| 007 | [Running each pipeline with its own project's Python](design/007-project-interpreter.md) — interpreter discovery, one versioned worker, version floors | proposed (Phase 6.6) |
+| 007 | [Running each pipeline with its own project's Python](design/007-project-interpreter.md) — interpreter discovery, one versioned worker, version floors | implemented (1.26.0) |
 
 ## Requests
 

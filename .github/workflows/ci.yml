@@ -48,6 +48,33 @@ jobs:
           MPLBACKEND: Agg
         run: uv run python run_notebooks.py --check
 
+  # Finding and using a project's own environment is the one place where the
+  # platform changes the behaviour (.venv/Scripts/python.exe, Lib/site-packages),
+  # so those tests - the resolver, the worker, a real second environment, and
+  # the loader - also run on Windows. The rest of the suite does not depend on
+  # the platform and runs on Linux only. See docs/design/007.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Environment and loader tests
+        env:
+          MPLBACKEND: Agg
+        run: uv run pytest tests/test_environment.py tests/test_loader_packages.py -q --no-cov
+
   # Definition of Done item 1, enforced: a PR that changes smartmdao/ must
   # change docs/ too, or say why not with "Docs: not needed — <reason>" in its
   # body. The same script backs the pre-push and Claude Code hooks.
@@ -73,7 +100,7 @@ jobs:
   # tools/release.py for why this stopped being left to memory.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
+    needs: [test, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

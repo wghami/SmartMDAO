@@ -17,6 +17,7 @@ stdio-only tool operating on files the user already has on disk, which the
 coding agent driving it could equally well have run itself.
 """
 import ast
+import contextlib
 import importlib.util
 import inspect
 import sys
@@ -219,9 +220,25 @@ def _pipeline_factories(module) -> List[Factory]:
     return factories
 
 
+def user_output_to_stderr():
+    """
+    Sends whatever the user's code prints to stderr while it runs.
+
+    The MCP server speaks JSON-RPC on stdout, and the run and worker processes
+    answer in JSON on stdout. A file that prints while it is imported - a
+    progress line, a banner - wrote into those channels: over MCP the client
+    logged "Failed to parse JSONRPC message" (measured with the Python client,
+    which recovered; others need not), and in run_pipeline any print() in a
+    discipline turned a successful run into "not valid JSON". What is printed
+    is not lost; it is simply not allowed where a protocol is being spoken.
+    """
+    return contextlib.redirect_stdout(sys.stderr)
+
+
 def _call_factory(function, name: str, path: Path) -> Pipeline:
     try:
-        produced = function()
+        with user_output_to_stderr():
+            produced = function()
     except Exception as error:
         raise PipelineLoadError(
             f"Calling {name}() in {path.name} failed: "
@@ -330,7 +347,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
     from ..core import suspend_execution
 
     try:
-        with suspend_execution():
+        with suspend_execution(), user_output_to_stderr():
             spec.loader.exec_module(module)
     except Exception as error:
         raise PipelineLoadError(

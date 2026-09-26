@@ -7,6 +7,37 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ✅ RESOLVED in 1.26.0 — a pipeline could only be handled by a server that had its libraries
+
+Reported from real use. The server imported pipeline files in its own process and ran them with
+its own interpreter. A model importing networkx, cvxpy or a GeoTIFF reader could not even be
+analysed unless the server's environment held them, and two models pinning different versions of
+a library needed two servers. **Fixed** by [007](design/007-project-interpreter.md): each file is
+handled in its own project's environment, reported on every response.
+
+---
+
+## ✅ RESOLVED in 1.26.0 — a print() in a discipline broke run_pipeline
+
+From 1.13.0, the run process answered in JSON on the same stdout a discipline's `print()` wrote
+to. Any printing discipline turned a successful run into "The run process returned output that was
+not valid JSON". A file that printed while being *loaded* also wrote into the MCP server's JSON-RPC
+stream. The Python client logged "Failed to parse JSONRPC message from server" and recovered;
+other clients need not. **Fixed**: user code prints to stderr while it is loaded, run or worked
+on, and that text comes back in `stderr`.
+
+---
+
+## 🟡 compare_runs uses the server's environment
+
+Every other tool handles a file in its own project's environment (1.26.0). `compare_runs` still
+loads both files in the server's process before running them, so it has the pre-1.26.0 limit: both
+files' imports must be installed where the server runs. **Fix direction:** run each side through
+the worker's `run` op, resolved separately, and move the side-effect check into the worker. Record
+006 needs the same per-point path, so do it with the sweep.
+
+---
+
 ## ✅ RESOLVED — a notebook's outputs could go stale without failing anything, and every re-run rewrote all sixteen
 
 CI re-executed the notebooks but only failed on an exception, so a notebook whose committed output

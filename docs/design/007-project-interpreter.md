@@ -1,7 +1,7 @@
 # 007 — Running each pipeline with its own project's Python
 
-**Status:** proposed — not implemented; roadmap 6.6 builds it, and 6.7 (the sweep, record 006)
-builds on the same worker
+**Status:** implemented — 1.26.0 (roadmap 6.6), amended by the findings at the end; 6.7 (the
+sweep, record 006) builds on the same worker
 **Date:** 2026-09-26
 **Relates to:** [001](001-mcp-connector.md) (what the subprocess buys, and what it does not);
 [003](003-determinism-and-the-engineer-in-the-loop.md) (report, do not guess); request R4 in
@@ -110,9 +110,9 @@ server, and nothing depends on the two agreeing.
 | Project's SmartMDAO | What happens |
 |---|---|
 | Not installed | `discovered`: fall back to `server`, reported. `explicit` / `project`: refused, with the install command. |
-| Older than the worker (no `smartmdao.mcp._worker` module) | Refused. A second, cheap spawn reads the project's version so the message states it: "project pins 1.24.0; the worker needs ≥ 1.26.0". |
+| Older than the worker (no `smartmdao.mcp._worker` module) | `discovered`: fall back to `server`, reported. `explicit` / `project`: refused, stating the version: "has SmartMDAO 1.24.0; this server needs >= 1.26.0". The version is read from the environment's `dist-info` directory, so no spawn is needed to say it. |
 | Has the worker, no common protocol version | Refused, naming both ranges. |
-| **Below the correctness floor** | Refused even if the protocol matches. See below. |
+| **Below the correctness floor** | As above: refused when named, fallback when discovered, even if the protocol matches. See below. |
 | Newer than the server | Fine, if a protocol version is shared. The response says which version answered. |
 
 **The correctness floor.** A protocol match says the two processes can *talk*. It does not say the
@@ -162,12 +162,11 @@ separately; two sides in two environments are allowed and both are reported.
   and to importable classes on both sides. JSON is what `_runner` already uses and has not been
   the limit.
 
-## Open questions for the maintainer
+## Open questions for the maintainer — answered 2026-09-26
 
-1. **Discovery on by default** (above), or opt-in?
-2. **Falling back** to the server when a discovered `.venv` lacks SmartMDAO, or refusing there too?
-3. **Windows**: the path rule covers it, but CI runs only on Linux. Add a Windows job when this
-   ships, or state it as untested?
+1. **Discovery on by default:** yes.
+2. **Falling back** to the server when a discovered `.venv` lacks SmartMDAO: yes, reported.
+3. **Windows:** a CI job running the environment and loader tests; releases wait for it.
 
 ## Exit criterion for 6.6
 
@@ -175,3 +174,29 @@ A pipeline importing a library absent from the server's environment is analysed,
 rendered and run through the MCP, with `interpreter` reported on each response. A project pinned
 below the floor is refused with its version and the fix it lacks. The verify loop against the
 server's own environment is no slower than today. Timeouts and crash isolation are unchanged.
+
+---
+
+## Findings from building it (6.6)
+
+- **A discovered project below the floor falls back instead of being refused.** As first written,
+  the table above refused it, which would have broken every project pinned before 1.26.0, the
+  requester's included, on the day the server was upgraded. That is the same argument this record
+  already accepted for a discovered `.venv` without SmartMDAO. Refusal stays for environments the
+  caller *named*.
+- **The worker's `run` op calls the `run_pipeline` handler**, which still starts `_runner` with the
+  project's interpreter. Section 2 said `_runner` would be folded in. Calling the handler costs
+  one more process start per run, and means input recovery, stub naming and the cost estimate
+  exist once rather than twice.
+- **Two stdout bugs were found on the way**, both older than this record. Since 1.13.0, any
+  `print()` in a discipline made `run_pipeline` fail with "not valid JSON", because the runner
+  answered on the stdout the discipline wrote to. And a file printing while it was loaded wrote
+  into the MCP server's JSON-RPC stream: the Python client logged "Failed to parse JSONRPC
+  message" and recovered. The worker would have inherited both. User code now prints to stderr
+  while it is loaded, run or worked on.
+- **`compare_runs` still uses the server's environment.** It loads both files in-process before
+  running them. Moving it onto the worker is recorded in known-issues rather than done here.
+- **The version is read statically.** It comes from `smartmdao-<version>.dist-info` in the
+  environment's `site-packages`, so the version checks cost no spawn. A metadata-only query of
+  the interpreter is used for an explicit interpreter outside a venv, where there is no such
+  directory.
