@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0 (the plan and the docs gate), 6.1 (declared inputs) and 6.2 (stubs) are done; 6.3 is next.
-**Baseline:** `v1.23.0` — 702 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+6.0–6.3 are done and make 1.24.0; 6.4 (grouped XDSM) is next.
+**Baseline:** `v1.24.0` — 711 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -476,8 +476,18 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       so its functions had no readable source and every stub in a snippet read as *unknown* — a
       snippet would have shown `stubs == ()` where a reader's copy shows the stub. Snippets now
       run from a real file.
-- [ ] **6.3 — Package-relative imports (R5).** Walk the `__init__.py` chain and import as
-      `pkg.module`; standalone files unchanged. Before R4, because R4 moves the loader.
+- [x] **6.3 — Package-relative imports (R5).** Walk the `__init__.py` chain and import as
+      `pkg.module`, with the package's parent on `sys.path`; standalone files unchanged, and a
+      relative import in a standalone file still fails, since there is no parent to guess.
+      **Found on the way:** the loader never forgot the user's own modules. The MCP server is one
+      long-lived process, so a sibling `physics.py` imported by the first analysis was cached,
+      and every later call saw its first version until the server restarted — an edited
+      discipline analysed as the old one. Each load now drops the modules it imported from the
+      user's project; installed libraries stay cached, since some extension modules cannot be
+      imported twice.
+
+**1.24.0** (2026-09-26) is the first version that CI tags, releases and — after approval in the
+`pypi` environment — uploads to PyPI; nothing about it was done by hand.
 
 **1.25.0:**
 

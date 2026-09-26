@@ -7,6 +7,32 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ✅ RESOLVED in 1.24.0 — an entry file inside a package could not be loaded
+
+`analyze_pipeline(pkg/pipeline.py)` with `from .physics import lift` failed with "attempted
+relative import with no known parent package": the loader imported every file under a generated
+module name with its own directory on `sys.path`. Reported from real use; the workaround was to
+keep entry files beside the package.
+
+**Fixed** by importing a file inside an `__init__.py` chain as `pkg.module`, with the package's
+parent on `sys.path` — what `python -m pkg.module` does.
+
+---
+
+## ✅ RESOLVED in 1.24.0 — an edited sibling module was analysed as its first version
+
+Found while fixing the entry above. The MCP server is one long-lived process, and the loader
+dropped only the pipeline file's own module after a load. A module the file imported from the
+user's project — `physics.py` beside it — stayed cached, so after editing it every analysis
+still saw the old signature until the server was restarted. Nothing failed; the answer was
+simply about code that no longer existed.
+
+**Fixed** by dropping, after each load, every module it imported from the user's project.
+Installed libraries stay cached: re-importing them is slow, and some extension modules cannot be
+imported twice.
+
+---
+
 ## ✅ RESOLVED in 1.24.0 — every analysis call had to repeat the input list
 
 Reported from real use on a contract-first pipeline: 23 disciplines, 91 external inputs, and no

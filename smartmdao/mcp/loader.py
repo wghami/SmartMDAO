@@ -236,6 +236,36 @@ def _call_factory(function, name: str, path: Path) -> Pipeline:
     return produced
 
 
+def _package_root(directory: Path) -> Optional[Path]:
+    """The top of the `__init__.py` chain `directory` sits in, if it is in one."""
+    root = None
+    while (directory / "__init__.py").is_file():
+        root = directory
+        directory = directory.parent
+    return root
+
+
+def _forget_user_modules(names, search_dir: Path) -> None:
+    """
+    Drop the user's own modules this load imported, so the next load reads them
+    again.
+
+    The MCP server is one long-lived process. Without this, a sibling module -
+    `physics.py` next to the pipeline - was imported once and cached, and an
+    edit to it was invisible to every later analysis until the server
+    restarted: the pipeline file was re-read, the discipline it imported was
+    not. Installed libraries are left alone; re-importing those is slow at
+    best, and some extension modules cannot be imported twice.
+    """
+    for name in names:
+        location = getattr(sys.modules.get(name), "__file__", None)
+        if not location:
+            continue
+        path = Path(location).resolve()
+        if path.is_relative_to(search_dir) and not {"site-packages", "dist-packages"} & set(path.parts):
+            sys.modules.pop(name, None)
+
+
 def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
     """
     Imports `path` and returns the Pipeline defined in it.
@@ -265,19 +295,30 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
     if resolved.suffix != ".py":
         raise PipelineLoadError(f"Not a Python file: {resolved}")
 
-    # A unique module name keeps repeated loads of the same path from colliding
-    # in sys.modules and silently returning a stale object.
-    module_name = f"_smartmdao_loaded_{uuid.uuid4().hex}"
+    # A file inside a package is imported as what it is - `pkg.module`, with
+    # the package's parent on sys.path - so its relative imports resolve the
+    # way `python -m pkg.module` would resolve them. A standalone file gets a
+    # unique name instead, so repeated loads of one path cannot collide.
+    package_root = _package_root(resolved.parent)
+    if package_root is None:
+        module_name = f"_smartmdao_loaded_{uuid.uuid4().hex}"
+        search_dir = resolved.parent
+    else:
+        parts = resolved.relative_to(package_root.parent).with_suffix("").parts
+        module_name = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+        search_dir = package_root.parent
+
     spec = importlib.util.spec_from_file_location(module_name, resolved)
     if spec is None or spec.loader is None:            # pragma: no cover
         raise PipelineLoadError(f"Could not load {resolved} as a Python module.")
 
     module = importlib.util.module_from_spec(spec)
+    already_loaded = set(sys.modules)
     sys.modules[module_name] = module
 
-    # The file's own directory goes on sys.path so sibling imports resolve the
-    # way they would if the user ran the script directly.
-    parent = str(resolved.parent)
+    # The search directory goes on sys.path so sibling imports resolve the way
+    # they would if the user ran the script directly.
+    parent = str(search_dir)
     added_to_path = parent not in sys.path
     if added_to_path:
         sys.path.insert(0, parent)
@@ -299,6 +340,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
         if added_to_path:
             sys.path.remove(parent)
         sys.modules.pop(module_name, None)
+        _forget_user_modules(set(sys.modules) - already_loaded, search_dir)
 
     instances = _pipeline_variables(module)
     factories = _pipeline_factories(module)
