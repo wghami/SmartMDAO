@@ -110,9 +110,9 @@ server, and nothing depends on the two agreeing.
 | Project's SmartMDAO | What happens |
 |---|---|
 | Not installed | `discovered`: fall back to `server`, reported. `explicit` / `project`: refused, with the install command. |
-| Older than the worker (no `smartmdao.mcp._worker` module) | Refused. A second, cheap spawn reads the project's version so the message states it: "project pins 1.24.0; the worker needs ≥ 1.26.0". |
+| Older than the worker (no `smartmdao.mcp._worker` module) | `discovered`: fall back to `server`, reported. `explicit` / `project`: refused, stating the version: "has SmartMDAO 1.24.0; this server needs >= 1.26.0". The version is read from the environment's `dist-info` directory, so no spawn is needed to say it. |
 | Has the worker, no common protocol version | Refused, naming both ranges. |
-| **Below the correctness floor** | Refused even if the protocol matches. See below. |
+| **Below the correctness floor** | As above: refused when named, fallback when discovered, even if the protocol matches. See below. |
 | Newer than the server | Fine, if a protocol version is shared. The response says which version answered. |
 
 **The correctness floor.** A protocol match says the two processes can *talk*. It does not say the
@@ -175,3 +175,17 @@ A pipeline importing a library absent from the server's environment is analysed,
 rendered and run through the MCP, with `interpreter` reported on each response. A project pinned
 below the floor is refused with its version and the fix it lacks. The verify loop against the
 server's own environment is no slower than today. Timeouts and crash isolation are unchanged.
+
+---
+
+## Findings from building it (6.6)
+
+- **A discovered project below the floor falls back instead of being refused.** As first written,
+  the table above refused it, which would have broken every project pinned before 1.26.0, the
+  requester's included, on the day the server was upgraded. That is the same argument this record
+  already accepted for a discovered `.venv` without SmartMDAO. Refusal stays for environments the
+  caller *named*.
+- **The version is read statically.** It comes from `smartmdao-<version>.dist-info` in the
+  environment's `site-packages`, so the version checks cost no spawn. A metadata-only query of
+  the interpreter is used for an explicit interpreter outside a venv, where there is no such
+  directory.

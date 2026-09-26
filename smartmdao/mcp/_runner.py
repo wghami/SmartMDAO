@@ -211,7 +211,15 @@ def main() -> None:  # pragma: no cover - exercised as a subprocess
     except Exception as error:
         json.dump({"ok": False, "error": f"Malformed request: {error}"}, sys.stdout)
         return
-    json.dump(run(request), sys.stdout)
+    # stdout is this process's answer. A discipline that prints writes to
+    # stderr instead, which the parent returns alongside the result.
+    answer = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        result = run(request)
+    finally:
+        sys.stdout = answer
+    json.dump(result, answer)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -6,7 +6,7 @@ over these, so the behaviour can be tested directly instead of through a live
 protocol session. Every one of them returns JSON-serialisable data.
 """
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..analysis import analyze, explain, stub_status, validate
@@ -17,6 +17,8 @@ from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, compare_runs as _compare_run
 from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
 from .loader import PipelineLoadError, input_map_in_source, load_pipeline
 from .rendering import render_xdsm
+from . import worker
+from .environment import resolve
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,7 @@ def _effective_inputs(loaded, requested: Optional[Sequence[str]]):
     }
 
 
-def analyze_pipeline(
+def _analyze(
     path: str,
     variable: Optional[str] = None,
     inputs: Optional[Sequence[str]] = None,
@@ -103,7 +105,7 @@ def analyze_pipeline(
     }
 
 
-def validate_pipeline(
+def _validate(
     path: str,
     variable: Optional[str] = None,
     inputs: Optional[Sequence[str]] = None,
@@ -131,7 +133,7 @@ def validate_pipeline(
     }
 
 
-def explain_pipeline(
+def _explain(
     path: str,
     variable: Optional[str] = None,
     inputs: Optional[Sequence[str]] = None,
@@ -153,7 +155,7 @@ def explain_pipeline(
     }
 
 
-def render_pipeline_diagram(
+def _render(
     path: str,
     output_path: str,
     variable: Optional[str] = None,
@@ -187,7 +189,7 @@ def render_pipeline_diagram(
     return result
 
 
-def run_pipeline(
+def _run(
     path: str,
     inputs: Optional[Dict[str, Any]] = None,
     variable: Optional[str] = None,
@@ -272,6 +274,96 @@ def run_pipeline(
             "if the run failed for want of them."
         )
     return result
+
+
+
+# ==============================================================================
+# The tools: resolve the environment, then run the op here or in its worker
+# ==============================================================================
+
+#: What the worker can be asked to do. The worker calls these same functions,
+#: so a project's environment and the server's run one implementation.
+LOCAL_OPS = {
+    "analyze": _analyze,
+    "validate": _validate,
+    "explain": _explain,
+    "render": _render,
+    "run": _run,
+}
+
+
+def _dispatch(op: str, path: str, python: Optional[str], project: Optional[str],
+              timeout: float, **args) -> Dict[str, Any]:
+    """
+    Runs `op` for `path` in the environment it belongs to, and says which.
+
+    In-process when that is the server's own environment - a fresh interpreter
+    costs 0.8-0.9 s, against 7 ms for an analysis here (docs/design/007) - and
+    in a worker process otherwise.
+    """
+    interpreter, refusal = resolve(path, python, project)
+    if refusal:
+        return refusal
+
+    if interpreter.is_server:
+        result = LOCAL_OPS[op](path=path, **args)
+    else:
+        result, answered_by = worker.call(interpreter, op, {"path": path, **args}, timeout)
+        if answered_by:
+            interpreter = replace(interpreter, smartmdao=answered_by)
+
+    result["interpreter"] = interpreter.describe()
+    return result
+
+
+def analyze_pipeline(path: str, variable: Optional[str] = None,
+                     inputs: Optional[Sequence[str]] = None,
+                     python: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
+    """What a solve would do: order, loops, seeds, recommended solver, stubs."""
+    return _dispatch("analyze", path, python, project, worker.ANALYSIS_TIMEOUT_SECONDS,
+                     variable=variable, inputs=inputs)
+
+
+def validate_pipeline(path: str, variable: Optional[str] = None,
+                      inputs: Optional[Sequence[str]] = None,
+                      python: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
+    """Everything statically wrong with the pipeline, worst first."""
+    return _dispatch("validate", path, python, project, worker.ANALYSIS_TIMEOUT_SECONDS,
+                     variable=variable, inputs=inputs)
+
+
+def explain_pipeline(path: str, variable: Optional[str] = None,
+                     inputs: Optional[Sequence[str]] = None,
+                     python: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
+    """A prose description of the pipeline, for review or documentation."""
+    return _dispatch("explain", path, python, project, worker.ANALYSIS_TIMEOUT_SECONDS,
+                     variable=variable, inputs=inputs)
+
+
+def render_pipeline_diagram(path: str, output_path: str, variable: Optional[str] = None,
+                            inputs: Optional[Sequence[str]] = None,
+                            python: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
+    """Writes an XDSM diagram to disk and reports where it went."""
+    return _dispatch("render", path, python, project, worker.ANALYSIS_TIMEOUT_SECONDS,
+                     output_path=output_path, variable=variable, inputs=inputs)
+
+
+def run_pipeline(path: str, inputs: Optional[Dict[str, Any]] = None,
+                 variable: Optional[str] = None, rung: str = SMOKE,
+                 budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
+                 timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+                 python: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Executes a pipeline in a child process, under a wall clock. See `_run`.
+
+    In another environment the worker runs this same handler there, which
+    starts the run process with that environment's interpreter - so the run's
+    own wall clock still applies, and the worker's allows for startup on top.
+    """
+    return _dispatch("run", path, python, project,
+                     timeout_seconds + worker.STARTUP_ALLOWANCE_SECONDS,
+                     inputs=inputs, variable=variable, rung=rung,
+                     budget_sweeps=budget_sweeps, timeout_seconds=timeout_seconds)
 
 
 def compare_runs(

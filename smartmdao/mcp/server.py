@@ -41,6 +41,13 @@ Those four read signatures, annotations and the dependency graph. No discipline
 is called and no pipeline is run, so they are free and fast - and cannot tell
 you whether the physics is right.
 
+EACH FILE IS HANDLED IN ITS OWN PROJECT'S ENVIRONMENT: the nearest folder with
+a pyproject.toml and a .venv, so a pipeline's libraries and its pinned
+SmartMDAO are the ones used. Every response says which in `interpreter`. Pass
+python= (an interpreter) or project= (a folder with a .venv) to choose; a
+project whose SmartMDAO is missing or too old is refused when named, and
+handled in the server's own environment, with a note, when merely found.
+
 WHEN YOU WRITE A PIPELINE, declare its external inputs once:
 Pipeline(inputs=[...]). Every tool above then uses that list, and you need not
 repeat it in each call. A list passed as `inputs` replaces the declaration;
@@ -135,8 +142,10 @@ def create_server(name: str = "smartmdao"):
         path: str,
         variable: Optional[str] = None,
         inputs: Optional[List[str]] = None,
+        python: Optional[str] = None,
+        project: Optional[str] = None,
     ) -> dict:
-        return handlers.analyze_pipeline(path, variable, inputs)
+        return handlers.analyze_pipeline(path, variable, inputs, python, project)
 
     @server.tool(
         description=(
@@ -149,8 +158,10 @@ def create_server(name: str = "smartmdao"):
         path: str,
         variable: Optional[str] = None,
         inputs: Optional[List[str]] = None,
+        python: Optional[str] = None,
+        project: Optional[str] = None,
     ) -> dict:
-        return handlers.validate_pipeline(path, variable, inputs)
+        return handlers.validate_pipeline(path, variable, inputs, python, project)
 
     @server.tool(
         description=(
@@ -162,8 +173,10 @@ def create_server(name: str = "smartmdao"):
         path: str,
         variable: Optional[str] = None,
         inputs: Optional[List[str]] = None,
+        python: Optional[str] = None,
+        project: Optional[str] = None,
     ) -> dict:
-        return handlers.explain_pipeline(path, variable, inputs)
+        return handlers.explain_pipeline(path, variable, inputs, python, project)
 
     @server.tool(
         description=(
@@ -178,9 +191,11 @@ def create_server(name: str = "smartmdao"):
         output_path: str,
         variable: Optional[str] = None,
         inputs: Optional[List[str]] = None,
+        python: Optional[str] = None,
+        project: Optional[str] = None,
     ) -> dict:
         return handlers.render_pipeline_diagram(
-            path, output_path, variable, inputs
+            path, output_path, variable, inputs, python, project
         )
 
     @server.tool(
@@ -205,9 +220,11 @@ def create_server(name: str = "smartmdao"):
         rung: str = "smoke",
         budget_sweeps: int = 25,
         timeout_seconds: float = 60.0,
+        python: Optional[str] = None,
+        project: Optional[str] = None,
     ) -> dict:
         return handlers.run_pipeline(
-            path, inputs, variable, rung, budget_sweeps, timeout_seconds
+            path, inputs, variable, rung, budget_sweeps, timeout_seconds, python, project
         )
 
     @server.tool(
