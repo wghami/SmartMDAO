@@ -1,6 +1,6 @@
 [project]
 name = "SmartMDAO"
-version = "1.26.0"
+version = "1.27.0"
 description = "Coupled pipelines of plain Python functions - converged, and checked before they run."
 readme = "README.md"
 requires-python = ">=3.11"

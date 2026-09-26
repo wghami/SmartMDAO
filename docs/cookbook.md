@@ -15,6 +15,7 @@ Each section names the scripts in [`scripts/`](../scripts) that go deeper. Those
 | [`convergence`](#convergence) | Controlling or inspecting how a loop settles |
 | [`non-numeric`](#non-numeric) | Coupling on sets, dataclasses or decisions instead of floats |
 | [`types`](#types) | Catching wiring mistakes before you run |
+| [`units`](#units) | Catching dB wired into linear — checked, never converted |
 | [`caching`](#caching) | Expensive disciplines, repeated evaluations |
 | [`optimization`](#optimization) | Driving a pipeline with an optimizer |
 | [`analysis`](#analysis) | Inspecting a pipeline without running it |
@@ -252,6 +253,60 @@ also check actual values on every call.
 
 ---
 
+## units
+
+Declare a unit with a `Unit` marker in the annotation. `validate()` then reports a connection
+whose two ends disagree. **SmartMDAO never converts units**: a mismatch is reported and the value
+is left exactly as it is.
+
+```python
+from typing import Annotated
+from smartmdao import Pipeline, StandardUnitChecker, Unit, UnitChecker, validate
+
+dB = Annotated[float, Unit("dB")]              # aliases keep signatures readable
+linear = Annotated[float, Unit("linear")]
+
+link = Pipeline(inputs=["power"])
+
+@link.step(outputs=["gain"])
+def antenna(power: Annotated[float, Unit("W")]) -> dB:
+    return 10.0
+
+@link.step(outputs=["margin"])
+def budget(gain: linear) -> float:             # expects linear, gets dB
+    return gain - 3.0
+
+[finding] = validate(link)
+assert finding.code == "unit-mismatch" and finding.severity == "error"
+assert "produces gain in dB, but 'budget' expects it in linear" in finding.message
+
+# Nothing is converted: the run gives the number it would give without units.
+assert link.run(power=1.0)["margin"] == 7.0
+
+# Consistency is the same unit, exactly. A checker of your own can say more -
+# aliases, or a unit library's dimensional analysis - but only yes or no.
+class Aliases:
+    def consistent(self, produced: str, expected: str) -> bool:
+        return produced == expected or {produced, expected} == {"m", "meter"}
+
+assert isinstance(StandardUnitChecker(), UnitChecker)
+assert Pipeline(unit_checker=Aliases()).unit_checker.consistent("meter", "m")
+```
+
+- **Where units are read:** parameters, return values, dataclass fields and tuple elements, from
+  the annotations, without calling anything.
+- **A bare string in `Annotated` is not a unit.** That space is shared with pydantic, Typer and
+  plain descriptions, so only a `Unit` marker counts.
+- **Checked only when both ends declare one.** Everything else is unchecked, never an error.
+  `explain()` says how many connections were checked.
+- **Two consumers of one external input** declaring different units are reported too. So are two
+  declaring types no single value satisfies (`float` and `str`).
+- **The diagram** shows units (`gain [dB]`) and draws a mismatched connection like a missing input.
+
+Why it is built this way: [design record 008](design/008-units.md).
+
+---
+
 ## caching
 
 `@cached` keys on a discipline's **inputs**, so a converging loop that revisits a state pays once.
@@ -430,7 +485,8 @@ first stub it reaches.
 | Code | Severity | Means |
 |---|---|---|
 | `duplicate-output` | error | Two steps declare the same output; the last registered silently wins |
-| `type-mismatch` | error | A producer's declared type does not satisfy its consumer's |
+| `type-mismatch` | error | A producer's declared type does not satisfy its consumer's, or two consumers of one external input declare types no value satisfies |
+| `unit-mismatch` | error | Two ends of a connection declare different units — nothing is converted |
 | `missing-input` | error | A step needs a variable nothing produces and nobody supplies |
 | `initial-guess-required` | error | A feedback loop reads a variable before producing it — seed it |
 | `solver-mismatch` | error | The pipeline has a feedback loop the configured solver cannot iterate |

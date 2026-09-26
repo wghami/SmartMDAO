@@ -1,6 +1,6 @@
 # 008 — Units, checked for consistency and never converted
 
-**Status:** proposed — not implemented; roadmap 6.8 builds it
+**Status:** implemented — 1.27.0 (roadmap 6.8), as proposed; findings at the end
 **Date:** 2026-09-26
 **Relates to:** [003](003-determinism-and-the-engineer-in-the-loop.md) (a default must not decide
 the answer); invariants 1 and 2 in [architecture.md](../architecture.md); request R7 in
@@ -140,14 +140,10 @@ code path, as a `type-mismatch` on the external input.
 - **Warning instead of error.** A declared mismatch is not a possible problem; the declarations
   contradict each other. `type-mismatch` sets the precedent.
 
-## Open questions for the maintainer
+## Open questions for the maintainer — answered 2026-09-26
 
-1. **A `Unit("dB")` marker**, bare strings ignored (proposed), or bare strings accepted as units?
-2. **Exact match plus a pluggable checker** (proposed), or a small built-in list of equivalent
-   spellings (`m` = `meter`)?
-3. **Severity: error** (proposed), or warning?
-4. **Units on the diagram:** with the check in 6.8 (proposed), or later?
-5. **The external-input type gap:** fix it in 6.8 (proposed), or on its own first?
+All five as proposed: a `Unit` marker, exact match with a pluggable checker, error, units on the
+diagram now, and the external-input type gap fixed in 6.8.
 
 ## Exit criterion for 6.8
 
@@ -155,3 +151,19 @@ A `dB` output wired into a `linear` parameter, and one external input declared i
 and `m` by another, are both reported by `validate()` without executing anything. A pipeline with
 no `Unit` anywhere validates exactly as before. `explain()` states how many connections were
 checked. No value is ever changed.
+
+---
+
+## Findings from building it (6.8)
+
+- **"Two consumers disagree about a type" means that no single value could satisfy both, not that
+  the annotations differ.** `float` and `Optional[float]` differ, and a float satisfies both. So
+  two types conflict only when neither is accepted for the other by the pipeline's type checker,
+  and no class in one is related to a class in the other. A custom `TypeChecker` that accepts
+  `int` for `float` therefore silences the finding, as it should.
+- **`B` is not treated as logarithmic.** It is a bel in acoustics, but a byte in every data
+  workflow, and the hint would mislead far more often than it would help.
+- **Coverage counts connections between steps only.** An external input has no producer to
+  compare with, so "checked" means something different there. Disagreements between its
+  consumers are reported, but not counted.
+

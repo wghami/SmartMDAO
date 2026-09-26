@@ -8,6 +8,7 @@ from .discretisation import Discretisation, effective_steps
 from .effects import SideEffectError, latch_once, refuse_unstated_effects
 from .models import Step
 from .solvers import Solver, DAGSolver
+from .units import StandardUnitChecker, UnitChecker
 from .visualization import visualize_pipeline
 from .validation import TypeChecker, StandardTypeChecker, validate_structure, validate_external_inputs
 
@@ -123,6 +124,10 @@ class Pipeline:
     # told the list every time, and a name missed once came back as a false
     # `missing-input`. An explicit `inputs=` on any of those calls still wins.
     inputs: Sequence[str] = ()
+    # Decides whether two declared units are consistent (docs/design/008).
+    # Consulted by validate() and the diagram only: values are never touched,
+    # so there is nothing here that could convert one.
+    unit_checker: UnitChecker = field(default_factory=StandardUnitChecker)
     _structure_validated: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -238,5 +243,6 @@ class Pipeline:
             steps=effective_steps(self),
             inputs=input_set,
             output_path=output_path,
-            view=view
+            view=view,
+            unit_checker=self.unit_checker,
         )

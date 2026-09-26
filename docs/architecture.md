@@ -16,6 +16,7 @@ The whole library is ~1800 lines across 12 modules. Read it in this order:
 | `models.py` | `Step` — one node, wrapping a callable. All function introspection lives here. |
 | `graph.py` | Pure graph algorithms: producer mapping, adjacency building, Tarjan SCC. |
 | `validation.py` | `TypeChecker` protocol, static edge validation, per-call input validation. |
+| `units.py` | `Unit` marker, `UnitChecker` protocol, reading units from annotations. Consistency only — nothing in it can change a value ([008](design/008-units.md)). |
 | `executor.py` | `StepExecutor` — argument binding, invocation, memory updates. |
 | `solvers.py` | `DAGSolver`, `IterativeSolver`, `HybridSolver`, convergence checking. |
 | `discretisation.py` | `Bands` / `Discretisation` — declared thresholds turning a number into a symbolic fact. Each band becomes an ordinary `Step`. |

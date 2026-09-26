@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.4 shipped in 1.24.0–1.25.0; 007 is written and 6.6 builds it in 1.26.0. 006 and the sweep (6.7) wait for paper-repro's first real runs.
-**Baseline:** `v1.26.0` — 806 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. What remains is 006 and the sweep (6.7), which wait for paper-repro's first real runs.
+**Baseline:** `v1.27.0` — 842 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -543,15 +543,16 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 
 **Later:**
 
-- [ ] **6.8 — Units (R7), design record 008 first.** *008 written 2026-09-26*
-      ([design/008](design/008-units.md)), with five questions for the maintainer; it also records
-      a gap found while writing it — two consumers of one external input can disagree about its
-      *type* and `validate()` says nothing. **Consistency checking only — SmartMDAO will
-      never convert units.** A producer declaring dB wired to a consumer expecting linear is
-      reported; nothing is rescaled, because a silent conversion is a default that changes the
-      answer, which [003](design/003-determinism-and-the-engineer-in-the-loop.md) forbids. A
-      missing unit is *unchecked*, never an error (invariant 2); units are read from annotations,
-      never by executing (invariant 1).
+- [x] **6.8 — Units (R7)**, as designed in [008](design/008-units.md), in 1.27.0.
+      `Annotated[float, Unit("dB")]`, read from parameters, returns, dataclass fields and tuple
+      elements. The default checker demands the same unit exactly; a project can supply its own,
+      which answers yes or no only. A declared mismatch on a connection, or between two consumers
+      of one external input, is a `unit-mismatch` **error**. An undeclared end is unchecked, and
+      `explain()` counts how many connections were checked. The diagram shows units and draws a
+      mismatched connection like a missing input. **Consistency checking only — SmartMDAO never
+      converts units**: a test runs the same pipeline with and without them and gets the same
+      numbers. **Found while designing it, fixed in it:** two consumers of one external input
+      declaring incompatible *types* passed `validate()` and failed only at `run()`.
 
 **Release discipline:** each release is tagged on its merge commit — paper-repro pins SmartMDAO
 by tag and bumps deliberately. Since 6.0 CI does it: the `release` job tags a new version and

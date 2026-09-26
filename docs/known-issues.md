@@ -7,6 +7,23 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ✅ RESOLVED in 1.27.0 — units lived only in variable names
+
+dB wired into linear, km into m: nothing read the `_db` or `_km` in a name, so a slip produced a
+number, and the number converged. **Fixed** by [008](design/008-units.md): declared units, checked
+for consistency and never converted.
+
+---
+
+## ✅ RESOLVED in 1.27.0 — two consumers could declare incompatible types for one input
+
+Found while designing units. `distance: float` in one step and `distance: str` in another, both
+reading the same external input, passed `validate()`. The conflict surfaced only at `run()`, as a
+`TypeMismatchError`, once a value was passed. It is now a `type-mismatch` from `validate()`, and it
+is reported only when no single value could satisfy both annotations.
+
+---
+
 ## ✅ RESOLVED in 1.26.0 — a pipeline could only be handled by a server that had its libraries
 
 Reported from real use. The server imported pipeline files in its own process and ran them with

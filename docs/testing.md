@@ -82,7 +82,7 @@ fails the build. It also means any of them can be read *and executed* to check a
 uv run python run_notebooks.py
 ```
 
-**You should see** 16 notebooks, all `PASS … unchanged`, in about 45 seconds — and `git status`
+**You should see** 17 notebooks, all `PASS … unchanged`, in about 45 seconds — and `git status`
 still clean afterwards.
 
 **What it proves:** [`notebooks/`](../notebooks) is one concept per file, committed **with its
@@ -564,7 +564,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 806 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 842 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

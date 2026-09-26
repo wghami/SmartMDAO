@@ -33,6 +33,7 @@ from .core import inputs_for
 from .discretisation import effective_steps
 from .effects import repeating_step_names
 from .models import Step
+from .units import StandardUnitChecker, input_units, mismatch_hint, output_units
 from .solvers import (
     DAGSolver,
     HybridSolver,
@@ -42,6 +43,7 @@ from .solvers import (
 from .validation import (
     StandardTypeChecker,
     TypeChecker,
+    _concrete_classes,
     _format_type,
 )
 
@@ -364,6 +366,124 @@ def _check_type_edges(steps: List[Step], checker: TypeChecker) -> List[Finding]:
                 )
 
     return findings
+
+
+def _types_can_meet(first, second, checker: TypeChecker) -> bool:
+    """
+    Whether one value could satisfy both annotations.
+
+    Not "are they equal": `float` and `Optional[float]` differ and a float
+    satisfies both. They can meet if the checker accepts either one for the
+    other, or if some class in one is related to some class in the other. An
+    annotation the checker cannot read is unchecked, so it meets anything.
+    """
+    left, right = _concrete_classes(first), _concrete_classes(second)
+    if not left or not right:
+        return True
+    if checker.check_types(first, second) or checker.check_types(second, first):
+        return True
+    return any(issubclass(a, b) or issubclass(b, a) for a in left for b in right)
+
+
+def _check_shared_input_types(steps: List[Step], checker: TypeChecker) -> List[Finding]:
+    """
+    One external input, declared as incompatible types by two of its consumers.
+
+    Until 1.27.0 this passed validate() and surfaced only at run(), as a
+    TypeMismatchError, once a value was passed - although nothing about it
+    needs a value to see.
+    """
+    produced = set(map_producers(steps))
+    declared: Dict[str, List[Tuple[str, object]]] = {}
+    for step in steps:
+        for name, annotation in step.resolve_input_types().items():
+            if name not in produced:
+                declared.setdefault(name, []).append((step.name, annotation))
+
+    findings = []
+    for name, uses in declared.items():
+        first_step, first = uses[0]
+        for other_step, other in uses[1:]:
+            if not _types_can_meet(first, other, checker):
+                findings.append(Finding(
+                    code="type-mismatch",
+                    severity=ERROR,
+                    message=(
+                        f"External input '{name}' is declared {_format_type(first)} by "
+                        f"'{first_step}' and {_format_type(other)} by '{other_step}': no "
+                        f"single value can satisfy both, so run() will refuse whatever is passed."
+                    ),
+                    variable=name,
+                ))
+                break
+    return findings
+
+
+def _check_units(steps: List[Step], checker) -> List[Finding]:
+    """
+    Connections whose two ends declare different units (docs/design/008).
+
+    Checked only where both ends declare one; everything else is unchecked,
+    never an error. Nothing is converted - a mismatch is reported and the
+    values are left exactly as they are.
+    """
+    producers = map_producers(steps)
+    findings = []
+    external: Dict[str, List[Tuple[str, str]]] = {}
+
+    for consumer in steps:
+        for name, expected in input_units(consumer).items():
+            producer = producers.get(name)
+            if producer is None:
+                external.setdefault(name, []).append((consumer.name, expected))
+                continue
+            produced = output_units(producer).get(name)
+            if produced is not None and not checker.consistent(produced, expected):
+                findings.append(Finding(
+                    code="unit-mismatch",
+                    severity=ERROR,
+                    message=(
+                        f"'{producer.name}' produces {name} in {produced}, but "
+                        f"'{consumer.name}' expects it in {expected}. Nothing is "
+                        f"converted, so the value would be read in the wrong unit."
+                        f"{mismatch_hint(produced, expected)}"
+                    ),
+                    step=consumer.name,
+                    variable=name,
+                ))
+
+    for name, uses in external.items():
+        first_step, first = uses[0]
+        for other_step, other in uses[1:]:
+            if not checker.consistent(first, other):
+                findings.append(Finding(
+                    code="unit-mismatch",
+                    severity=ERROR,
+                    message=(
+                        f"External input '{name}' is expected in {first} by '{first_step}' "
+                        f"and in {other} by '{other_step}'. One value cannot be both."
+                        f"{mismatch_hint(first, other)}"
+                    ),
+                    variable=name,
+                ))
+                break
+    return findings
+
+
+def unit_coverage(steps: List[Step]) -> Tuple[int, int]:
+    """(connections with a unit on both ends, connections between steps)."""
+    producers = map_producers(steps)
+    checked = total = 0
+    for consumer in steps:
+        declared = input_units(consumer)
+        for name in consumer.get_signature().parameters:
+            producer = producers.get(name)
+            if producer is None:
+                continue
+            total += 1
+            if name in declared and name in output_units(producer):
+                checked += 1
+    return checked, total
 
 
 def _check_connectivity(steps: List[Step]) -> List[Finding]:
@@ -1034,6 +1154,8 @@ def validate(
     findings.extend(_check_duplicate_outputs(steps))
     findings.extend(_check_connectivity(steps))
     findings.extend(_check_type_edges(steps, checker))
+    findings.extend(_check_shared_input_types(steps, checker))
+    findings.extend(_check_units(steps, getattr(pipeline, "unit_checker", None) or StandardUnitChecker()))
     findings.extend(_check_missing_inputs(steps, input_keys))
     findings.extend(_check_unconsumed_inputs(steps, inputs))
     findings.extend(
@@ -1101,6 +1223,10 @@ def explain(pipeline, inputs: Optional[Sequence[str]] = None) -> str:
         lines.append("")
 
     lines.append(f"Execution order: {' -> '.join(analysis.execution_order)}")
+
+    checked, total = unit_coverage(effective_steps(pipeline))
+    if checked:
+        lines.append(f"Units: {checked} of {total} connections between steps checked.")
 
     if analysis.stubs:
         lines.append("")

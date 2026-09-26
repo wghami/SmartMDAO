@@ -11,6 +11,7 @@ from matplotlib.textpath import TextPath
 
 from .models import Step
 from .graph import build_execution_plan
+from .units import StandardUnitChecker, UnitChecker, input_units, output_units
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)
@@ -77,9 +78,11 @@ class PipelineVisualizer:
     DATA_FONTSIZE = 9.0
     DATA_BOX_PAD = 0.32
 
-    def __init__(self, steps: List[Step], input_keys: Set[str]):
+    def __init__(self, steps: List[Step], input_keys: Set[str],
+                 unit_checker: Optional[UnitChecker] = None):
         self.input_keys = input_keys
         self.steps = compute_diagonal_order(steps, input_keys)
+        self.unit_checker = unit_checker or StandardUnitChecker()
         self.fig = None
         self.ax = None
 
@@ -183,7 +186,8 @@ class PipelineVisualizer:
             missing_params = sorted(p for p in sig.parameters if p in missing)
 
             if valid_params:
-                label = "\n".join(valid_params)
+                units = input_units(step)
+                label = "\n".join(self._with_unit(p, units.get(p)) for p in valid_params)
                 w, h = self._label_size(label)
                 cells[f"input_{i}"] = dict(
                     col=self.INPUT_COL, row=i, w=w, h=h, shape="rect", style=self.STYLE_INPUT,
@@ -209,24 +213,33 @@ class PipelineVisualizer:
                 label=label, fontsize=9, bold=False,
             )
 
-        # Off-diagonal data cells: one per (consumer, producer) pair
+        # Off-diagonal data cells: one per (consumer, producer) pair. A cell
+        # shows the producer's unit; one whose two ends declare different units
+        # is drawn like a missing input, because the value arriving is wrong.
         data_vars: Dict[Tuple[int, int], List[str]] = defaultdict(list)
+        mismatched: Set[Tuple[int, int]] = set()
         for i, step in enumerate(self.steps):
             sig = step.get_signature()
             for param in sig.parameters:
                 if param in producers:
                     j = step_indices[producers[param]]
                     data_vars[(i, j)].append(param)
+                    produced = output_units(producers[param]).get(param)
+                    expected = input_units(step).get(param)
+                    if produced and expected and not self.unit_checker.consistent(produced, expected):
+                        mismatched.add((i, j))
 
         for (i, j), params in data_vars.items():
-            label = "\n".join(sorted(params))
+            units = output_units(self.steps[j])
+            label = "\n".join(self._with_unit(p, units.get(p)) for p in sorted(params))
             w, h = self._label_size(label)
             # A self-loop (a step feeding its own output back into itself, e.g. an
             # iterative fixed-point seed) would otherwise land on col=j, row=i = the
             # diagonal box's own slot. Nudge it to a dedicated half-column instead.
             col = j + 0.5 if i == j else j
             cells[f"data_{i}_{j}"] = dict(
-                col=col, row=i, w=w, h=h, shape="rect", style=self._data_style(),
+                col=col, row=i, w=w, h=h, shape="rect",
+                style=self.STYLE_MISSING if (i, j) in mismatched else self._data_style(),
                 label=label, fontsize=9, bold=False,
             )
 
@@ -295,6 +308,8 @@ class PipelineVisualizer:
         for (i, j) in data_vars:
             is_feedback = j >= i
             style = self.STYLE_FEEDBACK_EDGE if is_feedback else self.STYLE_FORWARD_EDGE
+            if (i, j) in mismatched:
+                style = self.STYLE_MISSING_EDGE
             data_key = f"data_{i}_{j}"
             if i == j:
                 # A self-loop's two segments (step->cell, cell->step) share both
@@ -319,6 +334,10 @@ class PipelineVisualizer:
 
         self.ax.set_xlim(-self.PAD, total_width + self.PAD)
         self.ax.set_ylim(-total_height - self.PAD, self.PAD)
+
+    @staticmethod
+    def _with_unit(name: str, unit: Optional[str]) -> str:
+        return f"{name} [{unit}]" if unit else name
 
     def group_runs(self) -> List[Tuple[str, int, int]]:
         """(group, first index, last index) for each contiguous run on the diagonal."""
@@ -482,6 +501,7 @@ def visualize_pipeline(
     steps: List[Step],
     inputs: Set[str],
     output_path: Optional[str] = None,
-    view: bool = True
+    view: bool = True,
+    unit_checker: Optional[UnitChecker] = None,
 ):
-    PipelineVisualizer(steps, inputs).build().render(output_path, view=view)
+    PipelineVisualizer(steps, inputs, unit_checker).build().render(output_path, view=view)

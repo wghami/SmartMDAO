@@ -38,6 +38,7 @@ from .rules import (
     RuleProgramError,
 )
 from .validation import TypeChecker, StandardTypeChecker, TypeMismatchError
+from .units import Unit, UnitChecker, StandardUnitChecker
 from .analysis import (
     analyze,
     validate,
@@ -94,6 +95,10 @@ __all__ = [
     "TypeChecker",
     "StandardTypeChecker",
     "TypeMismatchError",
+    # Units, checked for consistency and never converted (docs/design/008)
+    "Unit",
+    "UnitChecker",
+    "StandardUnitChecker",
     "analyze",
     "validate",
     "explain",

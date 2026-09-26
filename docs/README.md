@@ -29,7 +29,7 @@ see, and what it proves. About 20 minutes.
 
 ## Want to see it work before installing anything?
 
-**[`notebooks/`](../notebooks)** — sixteen of them, one concept each, committed **with their
+**[`notebooks/`](../notebooks)** — seventeen of them, one concept each, committed **with their
 outputs** so GitHub renders what every cell printed, diagrams included. CI re-executes them, so they
 cannot drift from the library.
 
@@ -81,7 +81,7 @@ editing the decision. Only the status line moves.
 | 004 | [Rule-backed disciplines](design/004-rule-backed-disciplines.md) — naming, and pinning answer-set multiplicity | implemented (1.15.0–1.19.0) |
 | 005 | [Steps that touch the world](design/005-side-effecting-steps.md) — declaring side effects, and refusing what would repeat | implemented (1.22.0–1.23.0) |
 | 007 | [Running each pipeline with its own project's Python](design/007-project-interpreter.md) — interpreter discovery, one versioned worker, version floors | implemented (1.26.0) |
-| 008 | [Units, checked for consistency and never converted](design/008-units.md) — a `Unit` marker, exact match with a pluggable checker, where mismatches are found | proposed (Phase 6.8) |
+| 008 | [Units, checked for consistency and never converted](design/008-units.md) — a `Unit` marker, exact match with a pluggable checker, where mismatches are found | implemented (1.27.0) |
 
 ## Requests
 
