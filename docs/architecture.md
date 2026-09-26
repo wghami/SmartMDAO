@@ -26,10 +26,23 @@ The whole library is ~1800 lines across 12 modules. Read it in this order:
 | `cache.py` | `@cached` and its four storage backends. |
 | `visualization.py` | Pure-matplotlib XDSM diagram rendering. |
 | `logging_config.py` | `configure_logging` helper. |
+| `mcp/` | The MCP server. `handlers.py` holds one local function per tool; `environment.py` decides which environment a file belongs to; `worker.py` / `_worker.py` run a tool in another environment over a versioned JSON protocol ([007](design/007-project-interpreter.md)); `loader.py` imports a file with execution suspended and the user's prints sent to stderr; `_runner.py` is the run process. |
 
-No module imports `core`, except `optimization` (for the `Pipeline` type). The dependency
-direction is strictly one-way, which is why solvers and validation can be swapped without
-touching the façade.
+Only three modules import `core`: `optimization` (for the `Pipeline` type), `analysis` (for
+`inputs_for`, the one rule deciding which input list an analysis uses), and the MCP loader. The
+dependency direction is otherwise one-way, which is why solvers and validation can be swapped
+without touching the façade.
+
+### Which environment a tool runs in
+
+Every MCP tool resolves the file's environment first (`environment.resolve`): `python=`, then
+`project=`, then the nearest ancestor with a `pyproject.toml` and a `.venv`, then the server's own.
+If that is the server's environment, compared by directory rather than by resolving the symlinked
+interpreter, the handler runs in-process. Otherwise `python -m smartmdao.mcp._worker` runs the
+same handler there, under a wall clock. One implementation, two transports. The worker's `run`
+op calls the same `run_pipeline` handler, which starts `_runner` with that environment's
+interpreter, so a run in another environment costs one extra process start and has no second
+copy of input recovery or cost estimation.
 
 ---
 

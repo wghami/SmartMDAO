@@ -92,7 +92,8 @@ Diagrams are drawn with matplotlib; no system packages are needed.
 `smartmdao-mcp` is an MCP server. It lets an agent check the pipelines it writes instead of guessing:
 `analyze_pipeline`, `validate_pipeline`, `explain_pipeline` and `render_pipeline_diagram` read the
 code without executing it. `run_pipeline` runs it in a child process under a wall clock, one sweep
-by default. `compare_runs` proves a refactor did not change the answer. `smartmdao_cookbook` gives
+by default. `compare_runs` proves a refactor did not change the answer. Each file is handled in its own
+project's environment, so one server serves projects with different dependencies. `smartmdao_cookbook` gives
 the agent the real API before it writes a line. Setup:
 [testing guide, step 6](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md).
 
