@@ -24,6 +24,7 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 | 14 | [Discovery and MCP](14-pipeline-discovery-and-mcp.ipynb) | Finding a pipeline in a file, and the connector |
 | 15 | [Side effects](15-side-effects.ipynb) | Steps that write files, launch processes or call APIs — declared, refused, latched |
 | 16 | [Pitfalls](16-pitfalls.ipynb) | Mistakes that produce a wrong answer rather than an error |
+| 17 | [Units](17-units.ipynb) | Declaring units, and catching dB wired into linear — checked, never converted |
 
 ## Reading order
 
