@@ -363,6 +363,38 @@ assert validate(pipeline, inputs=["a"]) == ()
 assert "Recommended solver" in explain(pipeline, inputs=["a"])
 ```
 
+**Declare the inputs once** instead of passing `inputs=` to every call. Which names come from
+outside is a property of the pipeline, and a contract-first pipeline — signatures now, bodies later
+— has no `run()` call to read them from:
+
+```python
+from smartmdao import Pipeline, validate
+
+contract = Pipeline(inputs=["speed", "span"])
+
+@contract.step(outputs=["lift"])
+def lift(speed: float, span: float) -> float:
+    raise NotImplementedError        # not written yet, and never called by analysis
+
+assert validate(contract) == ()                          # uses the declaration
+
+# An explicit list still wins - even an empty one - for "what if only speed came in?"
+assert [f.variable for f in validate(contract, inputs=["speed"])] == ["span"]
+
+# A declared name no step reads is reported: usually a typo, and when it
+# misspells a parameter with a default, the only signal you get.
+typo = Pipeline(inputs=["speed", "spn"])
+
+@typo.step(outputs=["lift"])
+def lift_with_default(speed: float, span: float = 10.0) -> float:
+    return speed * span
+
+assert [f.code for f in validate(typo)] == ["unconsumed-input"]
+```
+
+`analyze`, `explain`, `visualize` and the MCP tools use the declaration the same way; the MCP
+reports where the list came from in `inputs_used` (`requested`, `declared`, `found_in_source`).
+
 `validate()` returns every finding at once, worst first. The full set:
 
 | Code | Severity | Means |
@@ -372,6 +404,7 @@ assert "Recommended solver" in explain(pipeline, inputs=["a"])
 | `missing-input` | error | A step needs a variable nothing produces and nobody supplies |
 | `initial-guess-required` | error | A feedback loop reads a variable before producing it — seed it |
 | `solver-mismatch` | error | The pipeline has a feedback loop the configured solver cannot iterate |
+| `unconsumed-input` | warning | An input name no step reads — usually a typo, or a removed step |
 | `disconnected-graph` | warning | The graph falls into separate pieces; part of it cannot affect the answer |
 | `avoidable-iteration` | warning | An acyclic pipeline under `IterativeSolver`, which sweeps it for nothing |
 | `checker-needs-target-var` | warning | A custom convergence checker without `target_var` |

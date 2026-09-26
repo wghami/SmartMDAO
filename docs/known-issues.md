@@ -7,6 +7,29 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ✅ RESOLVED in 1.24.0 — every analysis call had to repeat the input list
+
+Reported from real use on a contract-first pipeline: 23 disciplines, 91 external inputs, and no
+`run()` call for the tools to read them from. Every `analyze` / `validate` / `render` call needed
+the full list — 91 names pasted into 18 calls — and a first skeleton validated as broken, with 35
+false `missing-input` findings, until the list was supplied.
+
+**Fixed** by `Pipeline(inputs=[...])`: declared once, used by every analysis and MCP tool when a
+call passes none. An explicit list still wins. A declared name no step reads is reported as
+`unconsumed-input`, which is also the only signal when a typo hits a parameter that has a default.
+
+---
+
+## ✅ RESOLVED in 1.24.0 — naming a factory explicitly crashed every MCP handler
+
+`analyze_pipeline(path, variable="build")`, where `build` is annotated `-> Pipeline`, failed with
+`TypeError: 'Factory' object is not iterable` from 1.12.0 on. The loader reused the variable that
+held the inputs read from source for the factory it had found, so every handler iterated a
+descriptor. Discovered factories and named plain callables were unaffected, which is why it went
+unnoticed: the tests named factories, and went through handlers, but never both at once.
+
+---
+
 ## ✅ RESOLVED in 1.21.0 — `visualize()` ignored `orientation` and `graph_type`
 
 Both parameters sat in the public signature, typed `Literal['TB', 'LR']` and
