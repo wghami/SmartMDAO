@@ -14,12 +14,18 @@ nine tagged versions, and v1.7.0 to v1.13.0 were never tagged at all. The docs
 cite behaviour by release ("fixed in 1.12.0"), and downstream projects pin by
 tag, so a version that is not a release is a reference nobody can check.
 
+When it creates a Release it says so in $GITHUB_OUTPUT (`released=true`), and
+the CI `publish` job uploads that version to PyPI - behind the `pypi`
+environment, whose required reviewer approves each upload, because an upload is
+the one step here that cannot be taken back.
+
 Standard library plus the `gh` CLI, which every GitHub runner has.
 
     tools/release.py --sha <commit>            act
     tools/release.py --sha <commit> --dry-run  say what it would do
 """
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -45,6 +51,14 @@ def version_in(pyproject: Path) -> str:
     return match.group(1)
 
 
+def _report(released: bool) -> None:
+    """Tell the next CI job whether there is something new to publish."""
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"released={'true' if released else 'false'}\n")
+
+
 def _succeeds(*command: str) -> bool:
     return subprocess.run(command, capture_output=True).returncode == 0
 
@@ -63,6 +77,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if action == NOTHING:
         print(f"{tag} is already tagged and released; nothing to do.")
+        _report(False)
         return 0
 
     # `gh release create` makes the tag on GitHub when it does not exist yet,
@@ -72,8 +87,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     print(f"{tag}: {action} -> {' '.join(command)}")
     if args.dry_run:
+        _report(False)
         return 0
-    return subprocess.run(command).returncode
+    code = subprocess.run(command).returncode
+    _report(code == 0)
+    return code
 
 
 if __name__ == "__main__":

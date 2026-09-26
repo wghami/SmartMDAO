@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0 (the plan and the docs gate), 6.1 (declared inputs) and 6.2 (stubs) are done; 6.3 is next.
-**Baseline:** `v1.23.0` — 698 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Baseline:** `v1.23.0` — 702 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -442,8 +442,9 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       still 1.14.0 at 1.23.0, and 1.7.0–1.13.0 were never tagged; PyPI is at 1.6.0. CI's new
       `release` job ([`tools/release.py`](../tools/release.py)) now tags and releases a new version
       once the tests pass on `main`, so bumping the version is the only manual step. Releases for
-      the nine tagged versions 1.15.0–1.23.0 were backfilled; 1.7.0–1.13.0 stay untagged, and
-      PyPI stays manual.
+      the nine tagged versions 1.15.0–1.23.0 were backfilled; 1.7.0–1.13.0 stay untagged. A
+      `publish` job then uploads each new version to PyPI by trusted publishing, after approval in
+      the `pypi` environment; PyPI goes from 1.6.0 straight to 1.24.0, by choice.
 
 **1.24.0 — needed now, all small:**
 
