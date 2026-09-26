@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0 (the plan and the docs gate), 6.1 (declared inputs) and 6.2 (stubs) are done; 6.3 is next.
-**Baseline:** `v1.23.0` — 690 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Baseline:** `v1.23.0` — 698 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -438,6 +438,12 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       (`tools/docs_gate.py`) now backs four layers — the CI docs gate, a git pre-push hook, and two
       Claude Code session hooks — and new test guards catch prose that contradicts the roadmap.
       See [handoff.md](handoff.md), *How this is enforced*.
+      **Added after 6.2:** the same drift had happened to releases. GitHub's latest Release was
+      still 1.14.0 at 1.23.0, and 1.7.0–1.13.0 were never tagged; PyPI is at 1.6.0. CI's new
+      `release` job ([`tools/release.py`](../tools/release.py)) now tags and releases a new version
+      once the tests pass on `main`, so bumping the version is the only manual step. Releases for
+      the nine tagged versions 1.15.0–1.23.0 were backfilled; 1.7.0–1.13.0 stay untagged, and
+      PyPI stays manual.
 
 **1.24.0 — needed now, all small:**
 
@@ -511,8 +517,10 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       missing unit is *unchecked*, never an error (invariant 2); units are read from annotations,
       never by executing (invariant 1).
 
-**Release discipline:** each release is tagged on its merge commit and pushed — paper-repro pins
-SmartMDAO by tag and bumps deliberately.
+**Release discipline:** each release is tagged on its merge commit — paper-repro pins SmartMDAO
+by tag and bumps deliberately. Since 6.0 CI does it: the `release` job tags a new version and
+creates its GitHub Release once the tests pass on `main`
+([handoff](handoff.md#working-conventions)).
 
 **Exit criterion:** paper-repro can analyse, validate and render a contract-first pipeline with no
 repeated input lists; see how much of it is still stubbed; run a seeded, resumable campaign in its
