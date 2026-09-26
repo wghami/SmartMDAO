@@ -20,7 +20,7 @@ uv sync
 This creates `.venv/` and installs the project plus its development dependencies, including both
 optional extras (`openturns`, `mcp`) so the full suite can run.
 
-**You should see** a list of installed packages ending with `smartmdao==1.14.0`.
+**You should see** a list of installed packages including `smartmdao==` the version in `pyproject.toml`.
 
 **What it proves:** nothing yet — but note what is *not* there. A base install pulls only h5py,
 matplotlib, numpy and scipy. No Jupyter kernel, no OpenTURNS, no MCP SDK.
@@ -42,7 +42,7 @@ documentation guards — the same checks CI runs, a few minutes earlier.
 uv run pytest
 ```
 
-**You should see** `388 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `843 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -564,7 +564,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 842 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 843 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

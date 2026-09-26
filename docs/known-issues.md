@@ -7,6 +7,17 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## 🟡 The diagram draws a parameter with a default as a missing input
+
+`PipelineVisualizer` classifies a variable as missing when it is consumed, not produced and not
+passed, without asking whether the parameter has a default. `latency(distance, note=0.0)` therefore
+gets a red `note (?)` hexagon, while `validate()`, which uses only required parameters, correctly
+reports nothing. The two views of one pipeline disagree. **Fix direction:** classify with the
+analysis' `_required_inputs`, and decide whether a defaulted, unsupplied parameter is drawn at all.
+Queued in the [roadmap](roadmap.md).
+
+---
+
 ## ✅ RESOLVED in 1.27.0 — units lived only in variable names
 
 dB wired into linear, km into m: nothing read the `_db` or `_km` in a name, so a slip produced a
@@ -147,8 +158,8 @@ which hashed the output of all three combinations rather than asserting they dif
 
 ## 🟡 `visualize()` hangs in a headless process
 
-`PipelineVisualizer.render()` defaults to `view=True`, which calls `plt.show()`
-([visualization.py:151](../smartmdao/visualization.py:151)). With an interactive matplotlib
+`PipelineVisualizer.render()` ([visualization.py:94](../smartmdao/visualization.py:94)) defaults to
+`view=True`, which calls `plt.show()`. With an interactive matplotlib
 backend and no display, this blocks.
 
 CI works around it by setting `MPLBACKEND: Agg` in the workflow environment. **The library itself
@@ -648,7 +659,7 @@ graph — it is specific to hand-ordered `IterativeSolver` use.
 
 `OscillationAwareConvergenceChecker` is stateful and needs `distance()` called exactly once per
 iteration. That only holds when a `target_var` is set; otherwise the residual is a `max()` across
-every produced variable ([solvers.py:161](../smartmdao/solvers.py:161)), iterating a `set` in
+every produced variable ([solvers.py:387](../smartmdao/solvers.py:387)), iterating a `set` in
 arbitrary order, and one history cannot separate those interleaved calls.
 
 `HybridSolver` used to build its sub-solvers without forwarding `target_var`, so a pipeline could
@@ -673,8 +684,8 @@ on almost every correct pipeline.
 
 ## 🟡 Which variable needs an initial guess depends on step *names*
 
-`HybridSolver` sorts the steps inside a cyclic block alphabetically for deterministic execution
-([solvers.py:241](../smartmdao/solvers.py:241)). The alphabetically-first step therefore runs
+Inside a cyclic block the shared planner, which `HybridSolver` runs, puts the steps in `sorted`
+alphabetical order for deterministic execution ([graph.py:306](../smartmdao/graph.py:306)). The alphabetically-first step therefore runs
 first, and whichever of its inputs the cycle has not produced yet must be supplied to `run()` as
 an initial guess.
 
@@ -740,7 +751,7 @@ at the call rather than at import.
 
 ## 🟡 Duplicate output names silently overwrite
 
-`map_producers` ([graph.py:48](../smartmdao/graph.py:48)) builds a `{name: Step}` dict, so if two
+`map_producers` ([graph.py:50](../smartmdao/graph.py:50)) builds a `{name: Step}` dict, so if two
 steps declare the same output name the last one registered wins — with no warning. The first
 step still executes; its output is simply unreachable, and the dependency graph wires consumers to
 the wrong producer.
@@ -771,7 +782,7 @@ kwargs before hashing — the key must stay order-independent.
 
 ## 🟡 `tarjan_scc` is recursive
 
-`strongconnect` ([graph.py:16](../smartmdao/graph.py:16)) recurses per node, so a pipeline with a
+`strongconnect` ([graph.py:18](../smartmdao/graph.py:18)) recurses per node, so a pipeline with a
 chain longer than Python's recursion limit (~1000 by default) raises `RecursionError`.
 
 Not reachable for any realistic MDO problem, but it is a hard ceiling rather than a soft one, and

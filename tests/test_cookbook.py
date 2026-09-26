@@ -235,6 +235,7 @@ def test_the_documented_counts_match_reality(request):
     # `expected`, and the regex must match at least once.
     checks = [
         ("roadmap.md", r"\*\*Baseline:\*\* `v[\d.]+` — (\d+) tests", tests),
+        ("testing.md", r"\*\*You should see\*\* `(\d+) passed`", tests),
         ("roadmap.md", r"100% coverage, (\d+)/(\d+) scripts", scripts),
         ("roadmap.md", r"scripts, (\d+) notebooks", notebooks),
         ("handoff.md", r"\*\*State as of v[\d.]+:\*\*.*?(\d+) tests", tests),

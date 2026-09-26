@@ -32,7 +32,7 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 there on, every notebook draws the pipeline it is describing, so you can see whether it is linear or
 cyclic instead of reconstructing that from parameter names.
 
-6–15 are independent and can be read as needed. **16 is the one to read twice** — everything in it
+6–15 and 17 are independent and can be read as needed. **16 is the one to read twice** — everything in it
 runs, converges, and is wrong.
 
 ## Regenerating

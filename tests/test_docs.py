@@ -137,3 +137,53 @@ def test_each_design_record_status_agrees_with_the_index():
             )
 
     assert not disagreements, "\n".join(disagreements)
+
+
+# ==============================================================================
+# `file.py:N` references still point at what they name
+# ==============================================================================
+
+SOURCE_REF = re.compile(r"\[[^\]]+\]\((?:\.\./)*(smartmdao/[\w/]+\.py):(\d+)\)")
+CODE_SPAN = re.compile(r"`([^`]+)`")
+KEYWORDS = {"def", "class", "return", "self", "None", "True", "False", "with", "from", "import"}
+
+
+def named(span: str) -> str:
+    """
+    The one name a code span is about: the called name in `Pipeline.run(**inputs)`,
+    else the last name in `graph.build_execution_plan`. Any word in the span would
+    be too loose - `inputs` is on half the lines in core.py.
+    """
+    called = re.search(r"([A-Za-z_]\w*)\s*\(", span)
+    if called:
+        return called.group(1)
+    words = [w for w in re.findall(r"[A-Za-z_]\w*", span) if w not in KEYWORDS] or [span]
+    return words[-1]
+
+
+def test_every_source_line_reference_lands_on_what_it_names():
+    """
+    A link like [solvers.py:387](../smartmdao/solvers.py:387) is written next to
+    the thing it points at - "`max()`", "`run_step`". Line numbers drift every
+    time code above them moves: in September 2026, 11 of 16 had drifted, and
+    one described sorting that had moved to another file. The code span just
+    before the link must name something within two lines of its target.
+    """
+    wrong = []
+    for doc in sorted(DOCS.glob("*.md")):
+        lines = doc.read_text().splitlines()
+        for number, line in enumerate(lines):
+            for match in SOURCE_REF.finditer(line):
+                before = (lines[number - 1] + " " if number else "") + line[: match.start()]
+                spans = CODE_SPAN.findall(before)
+                if not spans:
+                    wrong.append(f"{doc.name}:{number + 1} has no `name` before its source link")
+                    continue
+                name = named(spans[-1])
+                source = (REPO / match.group(1)).read_text().splitlines()
+                target = int(match.group(2))
+                window = "\n".join(source[max(0, target - 3): target + 2])
+                if name not in window:
+                    wrong.append(f"{doc.name}:{number + 1} -> {match.group(1)}:{target} does not mention {name!r}")
+
+    assert not wrong, "source references that drifted:\n  " + "\n  ".join(wrong)

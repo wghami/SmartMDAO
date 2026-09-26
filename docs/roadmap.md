@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. What remains is 006 and the sweep (6.7), which wait for paper-repro's first real runs.
-**Baseline:** `v1.27.0` — 842 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+**Baseline:** `v1.27.0` — 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -563,6 +563,15 @@ creates its GitHub Release once the tests pass on `main`
 repeated input lists; see how much of it is still stubbed; run a seeded, resumable campaign in its
 own environment with the cost quoted first; and read a diagram that keeps each part of the model
 together.
+
+---
+
+## Queued — small, not tied to a phase
+
+- [ ] **The diagram draws a defaulted parameter as a missing input.** A step `latency(distance,
+      note=0.0)` gets a red `note (?)` on the XDSM when nobody passes `note`, while `validate()`
+      rightly treats it as optional, so the diagram and the analysis disagree. Noticed while
+      checking the units diagram in 6.8. See [known-issues](known-issues.md).
 
 ---
 
