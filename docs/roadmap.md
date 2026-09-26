@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. Nothing is scheduled; the deferred list below holds
 what remains, with no commitment.
-**Baseline:** `v1.23.0` — 608 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Baseline:** `v1.23.0` — 611 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -217,7 +217,7 @@ that is where the hypotheses hide.
 discipline** (`RuleDiscipline`), named after what the engineer reviews rather than the engine; and
 multiplicity is pinned in two halves — a static `unpinned-program` finding from `validate()`, which
 **never grounds**, plus an `ambiguous-optimum` finding from a new budgeted rung on the Phase 3 cost
-ladder, which does.
+ladder, which does. (Shipped differently in 1.16.0, and recorded in 004's findings: `RuleDiscipline.solve()` raises `AmbiguousProgramError` listing every tied model, and the budget is `budget_seconds` on the discipline. No `ambiguous-optimum` finding exists.)
 
 **This supersedes MCP sampling.** The library never calls a model.
 
@@ -385,6 +385,8 @@ choice and is simply required to make it explicitly.
       **`"once"` is still reported.** The latch is 5.2, so today `"once"` is a statement of intent
       that nothing enforces — and the finding says exactly that rather than implying protection.
       Letting it go quiet here would be the same drift Phase 3 records about the subprocess.
+      *(Superseded in 1.23.0: the latch shipped, and `"once"` is now reported as
+      `side-effect-latched` for a different reason — latching changes where the loop settles.)*
 - [x] **5.2 — Runtime refusal and the `"once"` latch.** Shipped in **1.23.0**. `run()` refuses
       `effects=True` that would repeat, with `SideEffectError`, **before anything executes**; `"once"`
       is latched per `run()`. The optimizer and `compare_runs` questions were decided rather than

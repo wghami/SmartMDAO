@@ -1,9 +1,8 @@
 """
 Steps that touch something outside the pipeline.
 
-Phase 5.1: the declaration and the static finding. The run-time half - refusing,
-and the `"once"` latch - is 5.2, and the finding says so rather than implying
-protection that does not exist yet.
+The declaration and the static findings (Phase 5.1). The run-time half -
+refusing, and the `"once"` latch - is in test_side_effects_runtime.py.
 
 What is tested here is mostly the *shape* of the rule rather than the mechanics:
 that it is solver-aware, that a declaration of intent is not mistaken for

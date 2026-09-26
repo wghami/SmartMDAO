@@ -1,6 +1,6 @@
 # 005 — Steps that touch the world outside the pipeline
 
-**Status:** accepted as direction; nothing implemented
+**Status:** accepted and implemented — 1.22.0–1.23.0; risk 1 settled in the findings appended below
 **Date:** 2026-09-20
 **Relates to:** [003](003-determinism-and-the-engineer-in-the-loop.md) — this is its principle
 applied to a failure mode 003 did not anticipate

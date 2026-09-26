@@ -27,7 +27,8 @@ README covers a fraction of the API, so writing from recollection produces
 plausible code against functions that do not exist. The cookbook is generated
 from the installed version and every snippet in it is executed by the test
 suite. Pass a topic (solvers, feedback-loops, convergence, non-numeric, types,
-caching, optimization, analysis, visualization, pitfalls) for detail.
+caching, optimization, analysis, discretisation, rules, side-effects,
+visualization, pitfalls) for detail.
 
 AFTER WRITING IT, verify before presenting it:
   1. analyze_pipeline  - execution order, feedback loops, and which variables
@@ -57,6 +58,14 @@ analysis is solver-aware (IterativeSolver ignores the dependency graph and
 sweeps in registration order, so its answers differ from HybridSolver's for the
 same steps), and which variable needs an initial guess depends on the
 alphabetical order of step names. Ask rather than guess.
+
+IF A STEP TOUCHES THE WORLD - writes a file, launches a process, calls an API -
+declare it with effects= on the step. Inside a loop it would run once per
+sweep: run() refuses effects=True there, and effects="once" freezes a coupling
+so the loop converges somewhere else. Keep loops pure and put side effects
+after them. run_pipeline really executes; compare_runs executes both files and
+refuses declared effects unless allow_effects=true - ask the user before
+passing it.
 """
 
 

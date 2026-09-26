@@ -268,3 +268,52 @@ def test_the_documented_counts_match_reality(request):
         # Historical references ("moved in 1.7.0") are prose, not claims about
         # now; only the `v`-prefixed baseline/state lines are checked.
         assert not stale, f"{name} claims version(s) {sorted(stale)}, installed is {installed}"
+
+
+# --- documentation that describes the code, which drifts when the code moves --
+
+def test_the_server_instructions_list_every_cookbook_topic():
+    """
+    The instructions are always in an agent's context, so a topic missing from
+    them is a topic no agent asks for. `discretisation`, `rules` and
+    `side-effects` were all missing from this list for several releases.
+    `quickstart` and `reference` are served without being asked for.
+    """
+    from smartmdao.mcp import authoring
+    from smartmdao.mcp.server import INSTRUCTIONS
+
+    listed = re.search(r"Pass a topic \((.*?)\)", INSTRUCTIONS, re.S).group(1)
+    listed = {topic.strip() for topic in listed.replace("\n", " ").split(",")}
+
+    expected = set(authoring.topics()) - {"quickstart", "reference"}
+    assert listed == expected, (
+        f"missing from INSTRUCTIONS: {sorted(expected - listed)}; "
+        f"not a cookbook topic: {sorted(listed - expected)}"
+    )
+
+
+def test_every_finding_code_is_in_the_cookbook_table():
+    """
+    The cookbook said validate() reports five kinds of problem while the code
+    emitted seventeen. Every code the analysis can emit must have a row.
+    """
+    source = (REPO / "smartmdao" / "analysis.py").read_text()
+    emitted = set(re.findall(r'code="([a-z-]+)"', source))
+    table = COOKBOOK.read_text()
+
+    assert emitted, "the extractor should find the finding codes"
+    missing = sorted(code for code in emitted if f"| `{code}` |" not in table)
+    assert not missing, f"finding codes with no row in the cookbook table: {missing}"
+
+
+def test_the_docs_index_lists_every_design_record():
+    """
+    docs/README.md listed three of five design records, and called an
+    implemented one "not implemented". The index must at least know they exist.
+    """
+    index = (REPO / "docs" / "README.md").read_text()
+    records = sorted(p.name for p in (REPO / "docs" / "design").glob("[0-9][0-9][0-9]-*.md"))
+
+    assert records, "there should be design records"
+    unlisted = [name for name in records if f"(design/{name})" not in index]
+    assert not unlisted, f"design records missing from docs/README.md: {unlisted}"

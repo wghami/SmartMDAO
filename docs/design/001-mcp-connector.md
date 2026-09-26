@@ -1,6 +1,6 @@
 # 001 — MCP connector
 
-**Status:** implemented (Phases 2 and 3); `compare_runs` and `optimize` deferred
+**Status:** implemented (Phases 2 and 3, `compare_runs` in 1.14.0); `optimize` and `sweep` over MCP not built
 **Date:** 2026-09-13 · implementation notes added after Phase 2
 **Supersedes:** nothing
 

@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.23.0:** `main` is clean. 608 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**State as of v1.23.0:** `main` is clean. 611 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
 ([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
 ([005](design/005-side-effecting-steps.md)). Nothing is scheduled.
@@ -105,7 +105,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 608 tests, 100% coverage
+uv run pytest                        # 611 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 16 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
@@ -207,8 +207,10 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 - ~~How answer-set multiplicity gets pinned~~ — **004**: in two halves. `validate()` reports
   `unpinned-program` statically and **never grounds**, because grounding is worst-case exponential
-  and an analysis that can hang is one nobody runs. Actual multiplicity is an `ambiguous-optimum`
-  finding from a new budgeted rung on the Phase 3 cost ladder. Verified against clingo 5.8.2 before
+  and an analysis that can hang is one nobody runs. Actual multiplicity is caught when solving:
+  `RuleDiscipline.solve()` raises `AmbiguousProgramError` listing every tied model, under the
+  discipline's `budget_seconds`. (004 planned an `ambiguous-optimum` finding on a cost-ladder rung;
+  it shipped as an exception instead — see 004's findings.) Verified against clingo 5.8.2 before
   being written down — `--opt-mode=optN` does enumerate tied optima, and a tie-break written the
   obvious way (`#minimize { 1@0,A : selected(A) }`) turned out to separate nothing, which is why the
   static check tests that a tie-break is *well-formed* rather than *present*.
