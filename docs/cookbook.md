@@ -445,6 +445,7 @@ first stub it reaches.
 | `unpinned-program` | warning | An `.lp` program may not pin its own answer |
 | `side-effect-in-cycle` | warning | `effects=True` on a step that would repeat — `run()` refuses it |
 | `side-effect-latched` | warning | `effects="once"` in a loop freezes a coupling and moves the answer |
+| `groups-interleaved` | info | Declared groups that cannot all stay together, and the edges that prove it |
 | `stub-step` | info | A step that only raises `NotImplementedError` — declared, not yet written |
 | `no-target-var` | info | `IterativeSolver` judging convergence on every produced variable |
 | `discretisation-unused` | info | A band nothing consumes — an orphan, or read by the caller |
@@ -869,6 +870,47 @@ pipeline.visualize(inputs=["a"], output_path="results/cookbook.png", view=False)
 
 **Always pass `view=False` outside a notebook.** The default is `view=True`, which calls
 `plt.show()` and blocks forever with no display.
+
+**Keep related steps together with `group=`.** The diagonal follows execution order, so two
+independent parts of a model interleave down it. A group — any label: a subsystem, a stage of a
+workflow — keeps its steps next to each other, in the run and on the diagram, and draws a band
+behind them. It never changes what is computed: only independent blocks change places, and a
+feedback loop's own order is never touched.
+
+```python
+import matplotlib
+matplotlib.use("Agg", force=True)
+
+from smartmdao import Pipeline, analyze, validate
+
+model = Pipeline(inputs=["altitude", "region"])
+
+@model.step(outputs=["orbit"], group="space")
+def orbit_model(altitude: float) -> float:
+    return altitude * 1.1
+
+@model.step(outputs=["terrain"], group="ground")
+def terrain_model(region: float) -> float:
+    return region * 0.5
+
+@model.step(outputs=["coverage"], group="space")
+def coverage_model(orbit: float) -> float:
+    return orbit * 2
+
+@model.step(outputs=["score"])
+def combine(coverage: float, terrain: float) -> float:
+    return coverage + terrain
+
+# Registration order alternates; the plan keeps each group together.
+assert analyze(model).execution_order == ("orbit_model", "coverage_model", "terrain_model", "combine")
+assert [f.code for f in validate(model)] == []
+
+model.visualize(output_path="results/cookbook_groups.png", view=False)
+```
+
+When dependencies run out of a group and back in, it cannot be contiguous. The diagram then draws
+it as more than one band, marked *split* in the legend, and `validate()` reports
+`groups-interleaved` with the dependencies that force it.
 
 ---
 

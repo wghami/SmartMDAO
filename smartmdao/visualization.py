@@ -1,16 +1,16 @@
 import os
 import logging
-from collections import defaultdict, deque
+from collections import defaultdict
 from typing import List, Set, Dict, Literal, Optional, Tuple
 
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from matplotlib.path import Path
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, PathPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Patch, PathPatch, Rectangle
 from matplotlib.textpath import TextPath
 
 from .models import Step
-from .graph import map_producers, build_dependency_graph, tarjan_scc
+from .graph import build_execution_plan
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)
@@ -18,48 +18,13 @@ logger = logging.getLogger(__name__)
 
 def compute_diagonal_order(steps: List[Step], input_keys: Set[str]) -> List[Step]:
     """
-    Orders steps for the XDSM diagonal to match real execution order rather
-    than alphabetical order. Mirrors HybridSolver.solve exactly: the
-    condensation graph of strongly connected components is topologically
-    sorted, and steps within a cyclic SCC (an MDA feedback loop) are
-    tie-broken alphabetically - so diagrams reflect what actually runs,
-    including which steps form a feedback block.
+    The XDSM diagonal: steps in the order a solve runs them.
+
+    Read from the shared planner. Until 1.25.0 this was a copy of the planner's
+    ordering that happened to agree with it - the second implementation the
+    "one planner" invariant warns about, waiting to drift.
     """
-    producers_map = map_producers(steps)
-    adj_list, _ = build_dependency_graph(steps, input_keys, producers_map)
-
-    sccs = tarjan_scc(steps, adj_list)
-    scc_map = {step: i for i, cluster in enumerate(sccs) for step in cluster}
-    scc_adj = defaultdict(set)
-    scc_indegree = defaultdict(int)
-
-    for u in steps:
-        u_scc = scc_map[u]
-        for v in adj_list[u]:
-            v_scc = scc_map[v]
-            if u_scc != v_scc and v_scc not in scc_adj[u_scc]:
-                scc_adj[u_scc].add(v_scc)
-                scc_indegree[v_scc] += 1
-
-    for i in range(len(sccs)):
-        scc_indegree.setdefault(i, 0)
-
-    queue = deque([i for i, deg in scc_indegree.items() if deg == 0])
-    order: List[Step] = []
-    while queue:
-        current = queue.popleft()
-        group = sccs[current]
-        if len(group) == 1 and group[0] not in adj_list[group[0]]:
-            order.append(group[0])
-        else:
-            order.extend(sorted(group, key=lambda s: s.name))
-
-        for neighbor in scc_adj[current]:
-            scc_indegree[neighbor] -= 1
-            if scc_indegree[neighbor] == 0:
-                queue.append(neighbor)
-
-    return order
+    return [step for block in build_execution_plan(steps, input_keys) for step in block.steps]
 
 
 class PipelineVisualizer:
@@ -81,6 +46,13 @@ class PipelineVisualizer:
     STYLE_FORWARD_EDGE = {"color": "#616161", "linewidth": 1.2, "linestyle": "solid"}
     STYLE_FEEDBACK_EDGE = {"color": "#D32F2F", "linewidth": 1.6, "linestyle": "solid"}
     STYLE_MISSING_EDGE = {"color": "#C62828", "linewidth": 1.2, "linestyle": (0, (1, 2))}
+
+    # Groups: a translucent band behind each run of a group on the diagonal,
+    # colours assigned in order of first appearance so a diagram is stable.
+    GROUP_PALETTE = (
+        ("#EDE7F6", "#5E35B1"), ("#E0F2F1", "#00897B"), ("#FCE4EC", "#AD1457"),
+        ("#FFFDE7", "#F9A825"), ("#E8EAF6", "#3949AB"), ("#EFEBE9", "#6D4C41"),
+    )
 
     GUTTER = 0.3
     PAD = 0.3
@@ -289,6 +261,8 @@ class PipelineVisualizer:
         padded_height = total_height + 2 * self.PAD
         self.fig.set_size_inches(*self._compute_figsize(padded_width, padded_height))
 
+        self._draw_groups(col_center, col_width, row_center, row_height)
+
         # ---- Pass 3: build patches at their placed positions (each keeps its own size) ----
         patches: Dict[str, object] = {}
         positions: Dict[str, Tuple[float, float]] = {}
@@ -345,6 +319,60 @@ class PipelineVisualizer:
 
         self.ax.set_xlim(-self.PAD, total_width + self.PAD)
         self.ax.set_ylim(-total_height - self.PAD, self.PAD)
+
+    def group_runs(self) -> List[Tuple[str, int, int]]:
+        """(group, first index, last index) for each contiguous run on the diagonal."""
+        runs: List[Tuple[str, int, int]] = []
+        for index, step in enumerate(self.steps):
+            if step.group is None:
+                continue
+            if runs and runs[-1][0] == step.group and runs[-1][2] == index - 1:
+                runs[-1] = (step.group, runs[-1][1], index)
+            else:
+                runs.append((step.group, index, index))
+        return runs
+
+    def _draw_groups(self, col_center, col_width, row_center, row_height):
+        """
+        A band behind each group's run, and a legend below the diagram.
+
+        The legend sits outside the axes so it can never cover a cell. A group
+        drawn as more than one band is marked as split; `validate()` says which
+        dependencies forced it.
+        """
+        runs = self.group_runs()
+        if not runs:
+            return
+
+        colours: Dict[str, Tuple[str, str]] = {}
+        for group, _, _ in runs:
+            colours.setdefault(group, self.GROUP_PALETTE[len(colours) % len(self.GROUP_PALETTE)])
+
+        half = self.GUTTER / 2
+        for group, first, last in runs:
+            face, edge = colours[group]
+            left = col_center[first] - col_width[first] / 2 - half
+            right = col_center[last] + col_width[last] / 2 + half
+            top = row_center[first] + row_height[first] / 2 + half
+            bottom = row_center[last] - row_height[last] / 2 - half
+            self.ax.add_patch(Rectangle(
+                (left, bottom), right - left, top - bottom,
+                facecolor=face, edgecolor=edge, linewidth=1.2, linestyle=(0, (4, 3)),
+                alpha=0.8, zorder=0,
+            ))
+
+        run_count = defaultdict(int)
+        for group, _, _ in runs:
+            run_count[group] += 1
+        handles = [
+            Patch(facecolor=face, edgecolor=edge,
+                  label=group if run_count[group] == 1 else f"{group} (split in {run_count[group]})")
+            for group, (face, edge) in colours.items()
+        ]
+        self.ax.legend(
+            handles=handles, title="Groups", loc="upper left", bbox_to_anchor=(0.0, 0.0),
+            frameon=False, fontsize=9, title_fontsize=9,
+        )
 
     def _data_style(self) -> Dict[str, str]:
         return {"facecolor": "#F5F5F5", "edgecolor": "#757575", "linewidth": 1.0}

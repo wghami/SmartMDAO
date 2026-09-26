@@ -172,13 +172,19 @@ def render_pipeline_diagram(
     # them - a branch nothing could reach.
     destination = render_xdsm(loaded.pipeline, output_path, inputs=effective)
 
-    return {
+    result = {
         "ok": True,
         "pipeline": loaded.variable,
         "source": loaded.source,
         "inputs_used": provenance,
         "output_path": str(destination),
     }
+    # A split group is visible in the picture, but the reason is not - and the
+    # caller may never look at the picture.
+    notes = [f.message for f in validate(loaded.pipeline, effective) if f.code == "groups-interleaved"]
+    if notes:
+        result["group_notes"] = notes
+    return result
 
 
 def run_pipeline(

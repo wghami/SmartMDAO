@@ -1,6 +1,7 @@
+import heapq
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import List, Dict, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .models import Step
 
@@ -145,44 +146,156 @@ class ExecutionBlock:
     is_cyclic: bool
 
 
-def build_execution_plan(steps: List[Step], input_keys: Set[str]) -> List[ExecutionBlock]:
+@dataclass(frozen=True)
+class GroupConflict:
     """
-    Decomposes a pipeline into the blocks a solver would run, in order.
+    Groups that cannot all be kept contiguous, with the dependencies that prove it.
 
-    This is pure structural analysis - nothing is executed. `HybridSolver` uses
-    it to drive a solve; `smartmdao.analysis` uses it to describe what a solve
-    *would* do without running one. Sharing the function is deliberate: a
-    second implementation would drift, and the analysis would start lying.
+    `edges` are (producer step, consumer step) pairs running between the groups
+    in both directions - or, for a group that cannot be contiguous even on its
+    own, out of it and back in. With `in_loop`, the groups share one feedback
+    loop, whose order is alphabetical and is never changed.
     """
+    groups: Tuple[str, ...]
+    edges: Tuple[Tuple[str, str], ...] = ()
+    in_loop: bool = False
+    #: The loop's steps, in the order they run, when `in_loop`.
+    steps: Tuple[str, ...] = ()
+
+
+def _condensation(steps: List[Step], input_keys: Set[str]):
+    """The strongly connected components, and the DAG between them."""
     producers_map = map_producers(steps)
     adj_list, _ = build_dependency_graph(steps, input_keys, producers_map)
-
     sccs = tarjan_scc(steps, adj_list)
 
-    # Condensation graph: a DAG whose nodes are the SCCs.
     scc_map = {step: i for i, cluster in enumerate(sccs) for step in cluster}
     scc_adj = defaultdict(set)
-    scc_indegree = defaultdict(int)
-
     for producer in steps:
-        producer_scc = scc_map[producer]
         for consumer in adj_list[producer]:
-            consumer_scc = scc_map[consumer]
-            if producer_scc != consumer_scc and consumer_scc not in scc_adj[producer_scc]:
-                scc_adj[producer_scc].add(consumer_scc)
-                scc_indegree[consumer_scc] += 1
+            if scc_map[producer] != scc_map[consumer]:
+                scc_adj[scc_map[producer]].add(scc_map[consumer])
+    return adj_list, sccs, scc_map, scc_adj
 
-    for index in range(len(sccs)):
-        if index not in scc_indegree:
-            scc_indegree[index] = 0
 
-    queue = deque([i for i, degree in scc_indegree.items() if degree == 0])
-    plan = []
+def _first_come_order(count: int, scc_adj) -> List[int]:
+    """Kahn's algorithm, first come first served - the order since 1.0."""
+    indegree = {index: 0 for index in range(count)}
+    for targets in list(scc_adj.values()):
+        for target in targets:
+            indegree[target] += 1
 
+    queue = deque(index for index in range(count) if indegree[index] == 0)
+    order = []
     while queue:
         current = queue.popleft()
-        group = sccs[current]
+        order.append(current)
+        for neighbor in scc_adj[current]:
+            indegree[neighbor] -= 1
+            if indegree[neighbor] == 0:
+                queue.append(neighbor)
+    return order
 
+
+def _block_group(block: List[Step]) -> Tuple[Optional[str], Tuple[str, ...]]:
+    """A block's group, and every group it holds - more than one only in a loop."""
+    held = tuple(sorted({step.group for step in block if step.group is not None}))
+    return (held[0] if len(held) == 1 else None), held
+
+
+def _grouped_order(order, sccs, scc_map, scc_adj, adj_list):
+    """
+    Reorders `order` so each group's blocks are contiguous where dependencies allow.
+
+    Every group is contracted to one node and the contracted graph is sorted
+    topologically; inside a group the blocks keep their relative order. If the
+    contraction has a cycle, dependencies run both ways between the groups in
+    it, so they provably cannot all be contiguous: those groups are dissolved
+    back into their blocks, and the cycle is reported with the edges forming
+    it. Only independent blocks ever change places, and a block's own steps -
+    a feedback loop's alphabetical order included - are never touched.
+    """
+    position = {block: index for index, block in enumerate(order)}
+    conflicts: List[GroupConflict] = []
+    unit_of = {}
+    for block in order:
+        group, held = _block_group(sccs[block])
+        if len(held) > 1:
+            conflicts.append(GroupConflict(
+                groups=held, in_loop=True,
+                steps=tuple(step.name for step in sorted(sccs[block], key=lambda step: step.name)),
+            ))
+        unit_of[block] = ("group", group) if group is not None else ("block", block)
+
+    def contracted():
+        edges = defaultdict(set)
+        for block in order:
+            for target in scc_adj[block]:
+                if unit_of[block] != unit_of[target]:
+                    edges[unit_of[block]].add(unit_of[target])
+        units = list(dict.fromkeys(unit_of[block] for block in order))
+        return units, edges
+
+    units, edges = contracted()
+    for component in tarjan_scc(units, {unit: list(edges[unit]) for unit in units}):
+        if len(component) == 1:
+            continue
+        members = set(component)
+        witnesses = []
+        for block in order:
+            for step in sccs[block]:
+                for consumer in adj_list[step]:
+                    target = scc_map[consumer]
+                    if unit_of[block] in members and unit_of[target] in members \
+                            and unit_of[block] != unit_of[target]:
+                        witnesses.append((step.name, consumer.name))
+        conflicts.append(GroupConflict(
+            groups=tuple(sorted(unit[1] for unit in component if unit[0] == "group")),
+            edges=tuple(witnesses),
+        ))
+        for block in order:
+            if unit_of[block] in members:
+                unit_of[block] = ("block", block)
+
+    # Acyclic now: refining a partition cannot create a cycle the coarser one
+    # did not already have, and every unit on one was just dissolved.
+    units, edges = contracted()
+    members_of = defaultdict(list)
+    for block in order:
+        members_of[unit_of[block]].append(block)
+
+    indegree = {unit: 0 for unit in units}
+    for unit in units:
+        for target in edges[unit]:
+            indegree[target] += 1
+    # Among units that are ready, the one whose first block came earliest goes
+    # first, so the result stays as close to the ungrouped order as it can.
+    ready = [(position[members_of[unit][0]], unit) for unit in units if indegree[unit] == 0]
+    heapq.heapify(ready)
+    result = []
+    while ready:
+        _, unit = heapq.heappop(ready)
+        result.extend(members_of[unit])
+        for target in edges[unit]:
+            indegree[target] -= 1
+            if indegree[target] == 0:
+                heapq.heappush(ready, (position[members_of[target][0]], target))
+    return result, conflicts
+
+
+def _plan(steps: List[Step], input_keys: Set[str]):
+    adj_list, sccs, scc_map, scc_adj = _condensation(steps, input_keys)
+    order = _first_come_order(len(sccs), scc_adj)
+    conflicts: List[GroupConflict] = []
+
+    # Without a declared group nothing is reordered - not even into an
+    # equivalent order - so every existing pipeline plans exactly as before.
+    if any(step.group is not None for step in steps):
+        order, conflicts = _grouped_order(order, sccs, scc_map, scc_adj, adj_list)
+
+    plan = []
+    for index in order:
+        group = sccs[index]
         # A lone step that doesn't depend on itself runs once; anything else
         # is a feedback loop and has to be iterated.
         if len(group) == 1 and group[0] not in adj_list[group[0]]:
@@ -194,10 +307,25 @@ def build_execution_plan(steps: List[Step], input_keys: Set[str]) -> List[Execut
                     is_cyclic=True,
                 )
             )
+    return plan, conflicts
 
-        for neighbor in scc_adj[current]:
-            scc_indegree[neighbor] -= 1
-            if scc_indegree[neighbor] == 0:
-                queue.append(neighbor)
 
-    return plan
+def build_execution_plan(steps: List[Step], input_keys: Set[str]) -> List[ExecutionBlock]:
+    """
+    Decomposes a pipeline into the blocks a solver would run, in order.
+
+    This is pure structural analysis - nothing is executed. `HybridSolver` uses
+    it to drive a solve; `smartmdao.analysis` uses it to describe what a solve
+    *would* do without running one; the XDSM diagonal is drawn from it. Sharing
+    the function is deliberate: a second implementation would drift, and the
+    analysis would start lying.
+
+    Where steps declare a `group`, independent blocks are ordered so each group
+    stays together; see `_grouped_order`.
+    """
+    return _plan(steps, input_keys)[0]
+
+
+def group_conflicts(steps: List[Step], input_keys: Set[str]) -> List[GroupConflict]:
+    """Groups the plan could not keep contiguous, and why. Empty without groups."""
+    return _plan(steps, input_keys)[1]

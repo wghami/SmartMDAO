@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.3 are done and make 1.24.0; 6.4 (grouped XDSM) is next.
-**Baseline:** `v1.24.0` — 711 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+6.0–6.3 made 1.24.0 and 6.4 (grouped XDSM) makes 1.25.0; 6.5 — design records 006 and 007 — is next.
+**Baseline:** `v1.25.0` — 731 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -491,12 +491,22 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 
 **1.25.0:**
 
-- [ ] **6.4 — Grouped XDSM (R6).** First fold `visualization.compute_diagonal_order` into the
-      shared planner — it is a second implementation of the ordering that agrees today. Then
-      `group=` on steps, keeping groups contiguous by choosing the order **between** independent
-      blocks only. **Never inside a cyclic block:** the order there is alphabetical and decides
-      which variable needs a seed, so reordering it would silently change what `run()` requires.
-      Where a cross-group dependency forces interleaving, the diagram says so.
+- [x] **6.4 — Grouped XDSM (R6).** First `visualization.compute_diagonal_order` was folded into
+      the shared planner — it had been a line-for-line copy of the planner's ordering. Then
+      `group=` on steps. The planner contracts each group to one node and sorts the contracted
+      graph, so the **solver runs** the grouped order too and the diagram cannot show an order
+      that does not run. Only independent blocks move; a loop's alphabetical order never does,
+      since it decides which variable needs a seed; with no group declared, nothing moves at all
+      — the whole existing suite passed unchanged before a single group test was written. When
+      contraction creates a cycle, dependencies run both ways between those groups, so they
+      provably cannot all be contiguous: they are drawn in plain order, the legend marks them
+      *split*, and the `groups-interleaved` info finding (also in `render_pipeline_diagram`'s
+      `group_notes`) names the edges. *What changed from the request:* one mechanism — `group=`
+      on the step — rather than a step-to-group mapping passed to `visualize` as well, the same
+      pushback as 6.1; and the legend sits below the diagram, where it cannot cover a cell.
+      **What it cost us:** minimising splits in general is a hard scheduling problem, so the
+      report only claims what it can prove — a cycle between groups — and never "this could not
+      have been better".
 
 **Design first, then build:**
 

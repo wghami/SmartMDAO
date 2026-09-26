@@ -168,7 +168,9 @@ def create_server(name: str = "smartmdao"):
     @server.tool(
         description=(
             "Render an XDSM diagram of a SmartMDAO pipeline to a file. "
-            "Format is inferred from the extension, defaulting to PDF."
+            "Format is inferred from the extension, defaulting to PDF. Steps "
+            "declared with group= are kept together and banded; group_notes "
+            "says why any group could not be."
         )
     )
     def render_pipeline_diagram(

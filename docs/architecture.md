@@ -107,6 +107,14 @@ Three functions, all pure, all in [graph.py](../smartmdao/graph.py):
   `run(y2=1.0)` supplies an initial guess without severing the `y2` edge.
 - **`tarjan_scc(steps, adj_list)`** → list of strongly connected components. Recursive; a pipeline
   deeper than Python's recursion limit would need an iterative rewrite.
+- **`build_execution_plan(steps, input_keys)`** → the blocks a solve runs, in order: the
+  condensation graph of the SCCs, sorted first come first served. **Where steps declare a
+  `group`**, independent blocks are reordered so each group stays together: every group is
+  contracted to one node and the contracted graph sorted, keeping each group's blocks in their
+  relative order. If contraction creates a cycle, dependencies run both ways between those
+  groups, so they provably cannot all be contiguous — they are dissolved back into their blocks
+  and reported by `group_conflicts`. Only independent blocks move; a block's own steps, a loop's
+  alphabetical order included, never do. With no group declared, nothing moves at all.
 
 ---
 
@@ -188,7 +196,7 @@ The interesting one. It decomposes rather than brute-forcing:
 1. Build the dependency graph.
 2. Find SCCs with Tarjan.
 3. Build the condensation graph (a DAG whose nodes are SCCs).
-4. Topologically sort that DAG.
+4. Topologically sort that DAG — keeping each declared `group` together where dependencies allow.
 5. Walk the plan: a single step with no self-loop runs **exactly once**; any larger group is
    handed to a nested `IterativeSolver` ([solvers.py:232](../smartmdao/solvers.py:232)).
 
@@ -296,10 +304,11 @@ the framework can't confidently infer is skipped rather than rejected.
   outputs — is derived from signatures and annotations alone. This is what makes static analysis
   tooling possible. It was quietly false for files until 1.23.0: loading one ran any top-level
   `pipeline.run(...)`. Keep `suspend_execution()` in the loader's import path.
-- **One planner, not two.** `graph.build_execution_plan` is shared by `HybridSolver` and
-  `analysis`, and `effects.repeating_step_names` by `run()` and `validate()`. The XDSM diagonal
-  (`visualization.compute_diagonal_order`) is still a separate implementation of the same ordering;
-  it agrees today, and folding it into the shared planner is the safe way to change either.
+- **One planner, not two.** `graph.build_execution_plan` is shared by `HybridSolver`,
+  `analysis` and the XDSM diagonal, and `effects.repeating_step_names` by `run()` and
+  `validate()`. Until 1.25.0 the diagonal had its own copy of the ordering, which agreed only
+  because nobody had changed either; it was folded in before groups changed the order, so the
+  diagram cannot show an order the solver does not run.
 - **Missing type information is not an error.** It degrades to "unchecked", never to a failure.
 - **The solver decides termination, not the steps.** Steps are pure contributors; convergence is
   judged externally. See [002-agent-as-discipline.md](design/002-agent-as-discipline.md) for why
