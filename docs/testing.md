@@ -297,6 +297,10 @@ spawns fresh, so how you added it decides what "update" means:
 Documentation content — what `smartmdao_cookbook` returns — is read from disk *per call*, so in a
 checkout even that needs no restart.
 
+Your own model is never cached either: the pipeline file *and the modules it imports from your
+project* are read again on every call, so an edit shows up in the next one. (Before 1.24.0 an
+edited sibling module kept its first version until the server restarted.)
+
 **To inspect, change or remove the registration itself:**
 
 ``` bash
@@ -552,7 +556,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 702 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 711 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

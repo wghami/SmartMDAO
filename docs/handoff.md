@@ -3,11 +3,11 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.23.0:** `main` is clean. 702 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**State as of v1.24.0:** `main` is clean. 711 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 Roadmap **Phases 0–5 are complete** — the last two were rule-backed disciplines
 ([004](design/004-rule-backed-disciplines.md)) and steps that touch the world
 ([005](design/005-side-effecting-steps.md)). **Phase 6** — lessons from paper-repro, a downstream
-project using the MCP connector — is under way in the [roadmap](roadmap.md): 6.1 (declared inputs) and 6.2 (stubs) are done, 6.3 is next.
+project using the MCP connector — is under way in the [roadmap](roadmap.md): 6.1–6.3 make 1.24.0; 6.4 is next.
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -136,7 +136,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 702 tests, 100% coverage
+uv run pytest                        # 711 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 16 notebooks, rewritten with outputs
 uv build                             # wheel + sdist
@@ -282,7 +282,7 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-**Phases 0–5 are complete. Phase 6 is under way; 6.1 and 6.2 are done, start at 6.3.** Phase 6 comes from
+**Phases 0–5 are complete. Phase 6 is under way; 6.1–6.3 make 1.24.0, start at 6.4.** Phase 6 comes from
 [a brief](requests/2026-09-paper-repro.md) written by paper-repro, a downstream project that uses the
 MCP connector on a model outside aerospace. Every request was checked against the code before being
 planned, and the roadmap records where SmartMDAO pushed back: one declared-input mechanism rather
