@@ -19,8 +19,13 @@ notebook series about a project whose governing principle is determinism.
 **Fixed** without freezing anything: timestamps are no longer recorded; the set is printed sorted;
 and `run_notebooks.py` compares each re-run with the committed copy after masking only
 measurements, writing back only what really changed. `--check`, which CI now runs, fails on a
-stale output. Checked by tampering with a committed output (caught) and by re-running under two
-hash seeds (unchanged).
+stale output and names the first cell that differs. Checked by tampering with a committed output
+(caught) and by re-running under two hash seeds (unchanged).
+
+**What did not work at first:** comparing images byte for byte in CI. The first CI run failed the
+two notebooks with diagrams while all fourteen others matched: the runner's fonts rasterise
+differently. Locally a re-run is still exact, pixels included, so a changed diagram is rewritten;
+`--check` compares that an image is present and every word of text exactly, but not the pixels.
 
 ---
 

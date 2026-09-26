@@ -61,15 +61,8 @@ def _mask(text: str) -> str:
     return text
 
 
-def fingerprint(notebook) -> str:
-    """
-    The notebook's sources and outputs, with measurements masked.
-
-    Consecutive stream outputs are joined first: when stdout and stderr
-    interleave, the kernel splits the same text into a different number of
-    chunks from run to run. Images are compared as they are - matplotlib's Agg
-    output is deterministic, and a changed picture is a real change.
-    """
+def _cell_prints(notebook, images: bool = True):
+    """One comparable entry per cell. See `fingerprint`."""
     cells = []
     for cell in notebook.cells:
         outputs = []
@@ -81,11 +74,44 @@ def fingerprint(notebook) -> str:
                 else:
                     outputs.append((("stream", output.get("name")), text))
             else:
-                data = {key: value for key, value in output.get("data", {}).items()}
+                data = {
+                    key: (value if images or not key.startswith("image/") else "<image>")
+                    for key, value in output.get("data", {}).items()
+                }
                 outputs.append(((output.get("output_type"), None),
                                 json.dumps(data, sort_keys=True) + "".join(output.get("traceback", []))))
-        cells.append({"source": cell.source, "outputs": [(kind, _mask(text)) for kind, text in outputs]})
-    return json.dumps(cells, sort_keys=True)
+        cells.append(json.dumps(
+            {"source": cell.source, "outputs": [(kind, _mask(text)) for kind, text in outputs]},
+            sort_keys=True,
+        ))
+    return cells
+
+
+def fingerprint(notebook, images: bool = True) -> str:
+    """
+    The notebook's sources and outputs, with measurements masked.
+
+    Consecutive stream outputs are joined first: when stdout and stderr
+    interleave, the kernel splits the same text into a different number of
+    chunks from run to run.
+
+    `images`: on one machine, matplotlib's Agg output is identical run to run,
+    so a changed picture is a real change and is compared byte for byte. Across
+    machines it is not - CI's fonts rasterise differently, which failed the two
+    notebooks with diagrams on the first CI run while all fourteen others
+    matched. So `--check` compares that an image is there, and every word of
+    text exactly, but not the pixels.
+    """
+    return json.dumps(_cell_prints(notebook, images))
+
+
+def first_difference(new, old, images: bool = True) -> str:
+    """Where two runs part company, for a failure message that explains itself."""
+    ours, theirs = _cell_prints(new, images), _cell_prints(old, images)
+    for index, (a, b) in enumerate(zip(ours, theirs)):
+        if a != b:
+            return f"cell {index} ({new.cells[index].source.splitlines()[0][:50]!r}...)"
+    return f"cell count {len(ours)} vs {len(theirs)}"
 
 
 def execute(path: pathlib.Path, check: bool = False) -> tuple[bool, str]:
@@ -115,10 +141,12 @@ def execute(path: pathlib.Path, check: bool = False) -> tuple[bool, str]:
             nbformat.write(notebook, path)
         return False, str(error).strip().splitlines()[-1]
 
-    if fingerprint(notebook) == fingerprint(committed):
+    images = not check
+    if fingerprint(notebook, images) == fingerprint(committed, images):
         return True, "unchanged"
     if check:
-        return False, "stale: its committed outputs differ from what its code prints now"
+        where = first_difference(notebook, committed, images)
+        return False, f"stale at {where}: committed outputs differ from what the code prints now"
     nbformat.write(notebook, path)
     return True, "updated"
 

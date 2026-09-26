@@ -169,3 +169,25 @@ def test_no_cell_carries_timing_metadata(path):
     """Per-cell timestamps changed on every run and were most of every notebook diff."""
     timed = [i for i, cell in enumerate(load(path)["cells"]) if "execution" in cell.get("metadata", {})]
     assert not timed, f"{path.name}: timing metadata in cells {timed}; run_notebooks.py no longer records it"
+
+
+def notebook_showing(png: str):
+    cell = nbformat.v4.new_code_cell("show()")
+    cell.outputs = [nbformat.v4.new_output("display_data", data={"image/png": png, "text/plain": "<Figure>"})]
+    return nbformat.v4.new_notebook(cells=[cell])
+
+
+def test_pixels_count_locally_but_not_across_machines():
+    """CI's fonts rasterise differently; text is still compared exactly there."""
+    one, other = notebook_showing("iVBORw0KGgoAAA"), notebook_showing("iVBORw0KGgoBBB")
+    assert run_notebooks.fingerprint(one) != run_notebooks.fingerprint(other)
+    assert run_notebooks.fingerprint(one, images=False) == run_notebooks.fingerprint(other, images=False)
+
+
+def test_a_difference_is_located():
+    new = notebook_printing("converged in 4 sweeps\n")
+    old = notebook_printing("converged in 3 sweeps\n")
+    assert run_notebooks.first_difference(new, old).startswith("cell 0 ('print(...)'")
+
+    old.cells.append(nbformat.v4.new_code_cell("x"))
+    assert run_notebooks.first_difference(notebook_printing("converged in 3 sweeps\n"), old) == "cell count 1 vs 2"
