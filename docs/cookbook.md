@@ -363,8 +363,30 @@ assert validate(pipeline, inputs=["a"]) == ()
 assert "Recommended solver" in explain(pipeline, inputs=["a"])
 ```
 
-`validate()` reports duplicate outputs, every bad type edge, missing inputs, unseeded feedback
-variables and solver misconfiguration — worst first, all at once.
+`validate()` returns every finding at once, worst first. The full set:
+
+| Code | Severity | Means |
+|---|---|---|
+| `duplicate-output` | error | Two steps declare the same output; the last registered silently wins |
+| `type-mismatch` | error | A producer's declared type does not satisfy its consumer's |
+| `missing-input` | error | A step needs a variable nothing produces and nobody supplies |
+| `initial-guess-required` | error | A feedback loop reads a variable before producing it — seed it |
+| `solver-mismatch` | error | The pipeline has a feedback loop the configured solver cannot iterate |
+| `disconnected-graph` | warning | The graph falls into separate pieces; part of it cannot affect the answer |
+| `avoidable-iteration` | warning | An acyclic pipeline under `IterativeSolver`, which sweeps it for nothing |
+| `checker-needs-target-var` | warning | A custom convergence checker without `target_var` |
+| `target-var-not-produced` | warning | `target_var` names something the loop does not produce |
+| `discretisation-non-numeric` | warning | A band's source is annotated as something edges cannot compare |
+| `discretisation-in-cycle` | warning | A threshold inside a loop — it may settle in more than one place |
+| `rules-in-cycle` | warning | A rule-backed discipline chooses from values that have not settled |
+| `unpinned-program` | warning | An `.lp` program may not pin its own answer |
+| `side-effect-in-cycle` | warning | `effects=True` on a step that would repeat — `run()` refuses it |
+| `side-effect-latched` | warning | `effects="once"` in a loop freezes a coupling and moves the answer |
+| `no-target-var` | info | `IterativeSolver` judging convergence on every produced variable |
+| `discretisation-unused` | info | A band nothing consumes — an orphan, or read by the caller |
+
+Every code `analysis.py` can emit appears in this table; a test fails if one is added without a
+row.
 
 **Deeper:** [`pipeline_analysis_demo.py`](../scripts/pipeline_analysis_demo.py),
 [`mcp_connector_demo.py`](../scripts/mcp_connector_demo.py),

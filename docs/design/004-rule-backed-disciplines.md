@@ -1,6 +1,6 @@
 # 004 — Rule-backed disciplines: naming, and pinning multiplicity
 
-**Status:** accepted as direction; nothing implemented
+**Status:** accepted and implemented — 1.15.0–1.19.0; findings appended below
 **Date:** 2026-09-20
 **Amends:** [003](003-determinism-and-the-engineer-in-the-loop.md) — settles its two open questions,
 and corrects one factual claim in it
@@ -219,3 +219,34 @@ risk in this document was identified by *running the mechanism once and looking 
 Trusting it because clingo is a mature solver and the API is named `core()` would have shipped a
 feature that confidently points at the wrong rule. A mechanism can be correct by its own
 specification and still be the wrong thing to build a claim on.
+
+---
+
+## Finding added 2026-09-26 — two things in this record did not ship as written
+
+Found in a documentation sweep, and recorded here rather than edited away, because the failure it
+describes is the one [roadmap.md](../roadmap.md)'s Phase 2 correction warns about: a planned item
+delivered differently, with nothing recording the difference.
+
+**The runtime half of Decision 2 shipped as an exception, not a finding.** This record, the roadmap,
+[003](003-determinism-and-the-engineer-in-the-loop.md) and the handoff all promised an
+`ambiguous-optimum` finding on a new budgeted rung of the Phase 3 cost ladder. What 1.16.0 built is
+simpler: `RuleDiscipline.solve()` enumerates every proven-optimal model and **raises**
+`AmbiguousProgramError` listing them when there is more than one; the budget is `budget_seconds` on
+the discipline (1.18.0), not a rung. The substance of the decision held — ambiguity is detected by
+solving, reported with every tied model, never silently resolved by taking the first — but the
+shape changed, and for four releases no document said so.
+
+Raising is arguably the better choice. A finding on a separate rung would have let a pipeline run
+to completion on an arbitrarily chosen answer and report the ambiguity afterwards; an exception
+stops at the point the answer stops being determined. But that is a justification found in
+hindsight, and it should have been written down when the shape changed.
+
+**Decision 1's example predates 4.1.** It shows `RuleDiscipline(program=..., discretisation=bands)`.
+Phase 4.1 put the discretisation on the `Pipeline`, and the discipline takes `facts=` and
+`produces=`:
+
+```python
+pipeline = Pipeline(discretisation=Discretisation(mass_band=Bands(...)))
+pipeline.add(RuleDiscipline("wing.lp", facts=["mass_band"], produces="decisions"))
+```

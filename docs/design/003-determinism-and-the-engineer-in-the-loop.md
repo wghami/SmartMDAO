@@ -1,6 +1,6 @@
 # 003 — Determinism, traceability, and the engineer in the loop
 
-**Status:** accepted as direction; nothing implemented
+**Status:** accepted and implemented — Phase 4, 1.15.0–1.19.0 (see [004](004-rule-backed-disciplines.md))
 **Date:** 2026-09-13
 **Amends:** [002](002-agent-as-discipline.md) — supersedes its production path, not its mechanics
 
@@ -200,7 +200,7 @@ record is append-only; read the findings below before acting on either.)*
   tie-break is the shape, but what enforces it, and what `validate()` says when more than one
   optimal model exists, is undesigned. **Settled: a static `unpinned-program` finding from
   `validate()`, and an `ambiguous-optimum` finding from a new, budgeted rung on the cost ladder.
-  `validate()` never grounds.**
+  `validate()` never grounds.** (Shipped differently in 1.16.0, and recorded in 004's findings: `RuleDiscipline.solve()` raises `AmbiguousProgramError` listing every tied model, and the budget is `budget_seconds` on the discipline. No `ambiguous-optimum` finding exists.)
 
 ## Findings added after acceptance
 

@@ -35,19 +35,30 @@ touching the façade.
 
 ## The execution path
 
-`Pipeline.run(**inputs)` ([core.py:51](../smartmdao/core.py:51)) does four things:
+`Pipeline.run(**inputs)` ([core.py:133](../smartmdao/core.py:133)) does, in order:
 
-1. **Structural validation, once per pipeline shape.** `validate_structure` walks every
+0. **Nothing at all, if execution is suspended.** The MCP loader imports a file to find its
+   pipeline, and importing runs top-level code — so a bare `pipeline.run(...)` at module level
+   used to execute the whole study every time the file was *analysed*. `suspend_execution()` makes
+   `run()` return a placeholder on the loading thread instead; using that placeholder raises an
+   explanation. Thread-local.
+1. **Expand the steps.** `effective_steps` adds one synthetic step per declared band and per
+   rule-backed discipline, so the solver plans and runs them like any other node.
+2. **Structural validation, once per pipeline shape.** `validate_structure` walks every
    producer→consumer edge and checks declared types are compatible. It executes nothing, so the
    result only depends on the pipeline's shape — hence the `_structure_validated` flag. Adding a
    step via `add()` resets it. This matters: inside an optimization loop the pipeline is run
    thousands of times and this cost is paid once.
-2. **External input validation, every call.** `validate_external_inputs` type-checks the concrete
+3. **External input validation, every call.** `validate_external_inputs` type-checks the concrete
    values passed to `run()`, but only for variables *not* produced internally.
-3. **Delegation to the solver.** `runtime_type_checks` (default `False`) decides whether a
+4. **Side effects, before anything executes.** `refuse_unstated_effects` raises `SideEffectError`
+   for a step declared `effects=True` that would run more than once; `latch_once` wraps every
+   `effects="once"` step so it executes once in this run. Both ask `repeating_step_names`, the
+   same function `validate()` asks. See [005](design/005-side-effecting-steps.md).
+5. **Delegation to the solver.** `runtime_type_checks` (default `False`) decides whether a
    `type_checker` is threaded down into `StepExecutor` for per-invocation checks. It is opt-in
    because it adds overhead to every step call inside a convergence loop.
-4. **Return `memory`** — a flat dict of every variable the run produced, plus the inputs.
+6. **Return `memory`** — a flat dict of every variable the run produced, plus the inputs.
 
 There is no separate "compile" phase. A `Pipeline` is a list of `Step`s and a `Solver`; everything
 else is derived on demand.
@@ -283,7 +294,12 @@ the framework can't confidently infer is skipped rather than rejected.
 
 - **Introspection must never require execution.** Every structural fact — order, cycles, types,
   outputs — is derived from signatures and annotations alone. This is what makes static analysis
-  tooling possible.
+  tooling possible. It was quietly false for files until 1.23.0: loading one ran any top-level
+  `pipeline.run(...)`. Keep `suspend_execution()` in the loader's import path.
+- **One planner, not two.** `graph.build_execution_plan` is shared by `HybridSolver` and
+  `analysis`, and `effects.repeating_step_names` by `run()` and `validate()`. The XDSM diagonal
+  (`visualization.compute_diagonal_order`) is still a separate implementation of the same ordering;
+  it agrees today, and folding it into the shared planner is the safe way to change either.
 - **Missing type information is not an error.** It degrades to "unchecked", never to a failure.
 - **The solver decides termination, not the steps.** Steps are pure contributors; convergence is
   judged externally. See [002-agent-as-discipline.md](design/002-agent-as-discipline.md) for why

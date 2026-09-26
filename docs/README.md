@@ -1,12 +1,13 @@
 # SmartMDAO documentation
 
 Design records and internals reference. User-facing documentation — installation, quick start,
-examples — lives in the [top-level README](../README.md) and the runnable scripts in
-[`scripts/`](../scripts).
+examples — lives in the [top-level README](../README.md), the [notebooks](../notebooks) and the
+runnable scripts in [`scripts/`](../scripts).
 
 > **Contributing, or picking this up cold?** Start with **[handoff.md](handoff.md)**. It states
-> what "done" means here — docs updated, 100% coverage, a didactic script, and `run_all.py`
-> green — plus the traps that have already cost time.
+> what "done" means here — docs updated, 100% coverage, didactic material (a notebook for a
+> concept, a script for a failure mode), and `run_all.py` green — plus the traps that have already
+> cost time.
 >
 > Then read **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**. It states *why*
 > this project is built the way it is: determinism, traceability, and giving the engineer enough
@@ -26,6 +27,12 @@ analysis catch a feedback loop nobody declared, connect the server to a coding a
 as important — see what it deliberately cannot do. Each step says what to run, what you should
 see, and what it proves. About 20 minutes.
 
+## Want to see it work before installing anything?
+
+**[`notebooks/`](../notebooks)** — sixteen of them, one concept each, committed **with their
+outputs** so GitHub renders what every cell printed, diagrams included. CI re-executes them, so they
+cannot drift from the library.
+
 ## Start here if you prefer running things
 
 Each design record has a runnable counterpart in [`scripts/`](../scripts). They print what they
@@ -43,6 +50,8 @@ do and why, and `python run_all.py` executes every one of them.
 | [`cost_ladder_demo.py`](../scripts/cost_ladder_demo.py) | Running a pipeline under a wall clock, and being quoted the cost before you spend it |
 | [`pipeline_discovery_demo.py`](../scripts/pipeline_discovery_demo.py) | Which ways of defining a pipeline the MCP tools can reach, and which they refuse to guess at |
 | [`non_numeric_convergence_demo.py`](../scripts/non_numeric_convergence_demo.py) | Convergence on frozensets and dataclasses, with no floats involved |
+| [`discretisation_demo.py`](../scripts/discretisation_demo.py) | A threshold that moves 1% and changes the answer — and one inside a loop that gives it two |
+| [`rule_backed_discipline_demo.py`](../scripts/rule_backed_discipline_demo.py) | A reviewed `.lp` file as a discipline: UNSAT as a proof, ambiguity refused, and where the decision belongs |
 
 ## Reading order
 
@@ -61,13 +70,16 @@ a fix direction. Several are deliberate.
 ## Design records
 
 Numbered, dated, and immutable in intent: a record says why a decision was made at a point in
-time. Superseding one means writing a new record, not editing the old.
+time. Superseding one means writing a new record, or appending findings under the original — not
+editing the decision. Only the status line moves.
 
 | # | Record | Status |
 |---|---|---|
-| 001 | [MCP connector](design/001-mcp-connector.md) — why the server verifies rather than authors | accepted, not implemented |
+| 001 | [MCP connector](design/001-mcp-connector.md) — why the server verifies rather than authors | implemented (Phases 2–3) |
 | 002 | [An agent as an MDA discipline](design/002-agent-as-discipline.md) — a model inside an MDA feedback loop | mechanics proven; production path superseded by 003 |
-| 003 | [Determinism, traceability, and the engineer in the loop](design/003-determinism-and-the-engineer-in-the-loop.md) — the governing principle, and ASP-backed disciplines | accepted as direction |
+| 003 | [Determinism, traceability, and the engineer in the loop](design/003-determinism-and-the-engineer-in-the-loop.md) — the governing principle, and rule-backed disciplines | implemented (Phase 4) |
+| 004 | [Rule-backed disciplines](design/004-rule-backed-disciplines.md) — naming, and pinning answer-set multiplicity | implemented (1.15.0–1.19.0) |
+| 005 | [Steps that touch the world](design/005-side-effecting-steps.md) — declaring side effects, and refusing what would repeat | implemented (1.22.0–1.23.0) |
 
 ## Conventions
 
