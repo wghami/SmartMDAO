@@ -64,3 +64,25 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           BASE_REF: ${{ github.base_ref }}
         run: python3 tools/docs_gate.py --ci --base "origin/$BASE_REF"
+
+  # The version in pyproject.toml, its git tag and its GitHub Release, kept in
+  # step. Runs on main only, after the tests pass on the merge commit: a new
+  # version is tagged there and released; an existing tag with no Release gets
+  # one. Bumping the version in a PR is the only manual step. See
+  # tools/release.py for why this stopped being left to memory.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # tags have to be visible to be found
+
+      - name: Tag and release the version, if it is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release.py --sha "$GITHUB_SHA"
