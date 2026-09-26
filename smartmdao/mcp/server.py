@@ -41,6 +41,11 @@ Those four read signatures, annotations and the dependency graph. No discipline
 is called and no pipeline is run, so they are free and fast - and cannot tell
 you whether the physics is right.
 
+WHEN YOU WRITE A PIPELINE, declare its external inputs once:
+Pipeline(inputs=[...]). Every tool above then uses that list, and you need not
+repeat it in each call. A list passed as `inputs` replaces the declaration;
+`inputs_used` in each response says which list was used.
+
 IF YOU TRANSLATE OR REFACTOR a pipeline, prove it still behaves the same with
 `compare_runs`. Two convergence criteria that look equivalent can settle in
 different places and both report success - only running both and diffing shows

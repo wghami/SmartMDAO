@@ -14,7 +14,7 @@ from ._runner import DEFAULT_BUDGET_SWEEPS, SMOKE
 from .loader import _UNRESOLVED
 from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, compare_runs as _compare_runs
 from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
-from .loader import PipelineLoadError, declared_input_map, load_pipeline
+from .loader import PipelineLoadError, input_map_in_source, load_pipeline
 from .rendering import render_xdsm
 
 logger = logging.getLogger(__name__)
@@ -45,18 +45,21 @@ def _effective_inputs(loaded, requested: Optional[Sequence[str]]):
     """
     What the pipeline will actually receive, and where each name came from.
 
-    The caller's list is intent; the file's own `run()` call is evidence. Both
-    count, so they are unioned. Reporting the split matters: an agent that
+    The base list is the caller's when it passes one, otherwise the pipeline's
+    own declaration (`Pipeline(inputs=[...])`) - an explicit argument wins, as
+    it does in the library. The file's own `run()` call is evidence on top of
+    either, so it is unioned in. Reporting the split matters: an agent that
     guessed the design variables and forgot the cycle's seed used to be told the
     seed was missing - a working file reported as broken.
     """
     asked = tuple(requested or ())
-    inferred = tuple(
-        name for name in loaded.declared_inputs if name not in set(asked)
-    )
-    return tuple(sorted(set(asked) | set(inferred))), {
+    declared = () if asked else tuple(loaded.pipeline.inputs)
+    base = asked or declared
+    in_source = tuple(name for name in loaded.inputs_in_source if name not in set(base))
+    return tuple(sorted(set(base) | set(in_source))), {
         "requested": list(asked),
-        "found_in_source": list(inferred),
+        "declared": list(declared),
+        "found_in_source": list(in_source),
     }
 
 
@@ -159,16 +162,19 @@ def render_pipeline_diagram(
     if failure:
         return failure
 
+    effective, provenance = _effective_inputs(loaded, inputs)
+
     # No try/except here on purpose: the only ValueErrors render_xdsm raised
     # were validating `orientation` and `graph_type`, and both were removed in
     # 1.21.0. The 100% coverage rule caught the handler still guarding against
     # them - a branch nothing could reach.
-    destination = render_xdsm(loaded.pipeline, output_path, inputs=inputs or ())
+    destination = render_xdsm(loaded.pipeline, output_path, inputs=effective)
 
     return {
         "ok": True,
         "pipeline": loaded.variable,
         "source": loaded.source,
+        "inputs_used": provenance,
         "output_path": str(destination),
     }
 
@@ -203,12 +209,12 @@ def run_pipeline(
     # the file's own run() call are recovered too. The caller always wins.
     from_source = {
         name: value
-        for name, value in declared_input_map(loaded.path).items()
+        for name, value in input_map_in_source(loaded.path).items()
         if name not in supplied and value is not _UNRESOLVED
     }
     unresolved = [
         name
-        for name, value in declared_input_map(loaded.path).items()
+        for name, value in input_map_in_source(loaded.path).items()
         if name not in supplied and value is _UNRESOLVED
     ]
 
@@ -228,6 +234,15 @@ def run_pipeline(
         "supplied": sorted(supplied),
         "found_in_source": sorted(from_source),
     }
+    # Declared names are only names: they say what must be supplied, not what
+    # the value is. Naming the ones nobody supplied turns a failed run's
+    # traceback into a list the caller can act on before retrying.
+    not_supplied = [
+        name for name in loaded.pipeline.inputs
+        if name not in supplied and name not in from_source and name not in unresolved
+    ]
+    if not_supplied:
+        result["inputs_used"]["declared_not_supplied"] = not_supplied
     if unresolved:
         result["inputs_used"]["unresolved_in_source"] = sorted(unresolved)
         result["inputs_used"]["note"] = (

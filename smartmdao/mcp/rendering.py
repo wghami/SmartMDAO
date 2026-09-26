@@ -7,7 +7,7 @@ here forces the Agg backend and never asks for a window.
 """
 import logging
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +29,15 @@ def force_headless_backend() -> None:
 def render_xdsm(
     pipeline,
     output_path,
-    inputs: Sequence[str] = (),
+    inputs: Optional[Sequence[str]] = None,
 ) -> Path:
     """
     Writes an XDSM diagram of `pipeline` to `output_path` and returns the path.
 
     Format is inferred from the extension, defaulting to PDF. Nothing is
     displayed and no discipline is executed - the diagram is built entirely
-    from the dependency graph.
+    from the dependency graph. `inputs` defaults to the pipeline's declared
+    inputs.
     """
     force_headless_backend()
 
@@ -44,7 +45,7 @@ def render_xdsm(
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     pipeline.visualize(
-        inputs=list(inputs),
+        inputs=None if inputs is None else list(inputs),
         output_path=str(destination),
         view=False,
     )

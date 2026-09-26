@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..core import Pipeline
 
 
-#: Marks a declared input whose value is computed rather than literal. The
+#: Marks an input found in source whose value is computed rather than literal. The
 #: name is known; the value is not, so the caller must supply it to run.
 _UNRESOLVED = object()
 
@@ -64,11 +64,11 @@ class LoadedPipeline:
     #: part of what the engineer needs to know - see docs/design/003.
     source: str = "variable"
     #: Variable names the file itself passes to `run()`, recovered from the
-    #: source without executing it. See `declared_inputs`.
-    declared_inputs: Tuple[str, ...] = ()
+    #: source without executing it. See `inputs_in_source`.
+    inputs_in_source: Tuple[str, ...] = ()
 
 
-def declared_inputs(path) -> Tuple[str, ...]:
+def inputs_in_source(path) -> Tuple[str, ...]:
     """
     The variable names a script passes to `pipeline.run(...)`, read statically.
 
@@ -86,10 +86,10 @@ def declared_inputs(path) -> Tuple[str, ...]:
     Anything dynamic is simply not found; this narrows the guessing, it does not
     eliminate it. Pure AST work - nothing is imported or executed.
     """
-    return tuple(sorted(declared_input_map(path)))
+    return tuple(sorted(input_map_in_source(path)))
 
 
-def declared_input_map(path) -> Dict[str, Any]:
+def input_map_in_source(path) -> Dict[str, Any]:
     """
     The same names, with their **values** where those are literal constants.
 
@@ -302,7 +302,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
 
     instances = _pipeline_variables(module)
     factories = _pipeline_factories(module)
-    declared = declared_inputs(resolved)
+    in_source = inputs_in_source(resolved)
 
     # --- Explicitly named -----------------------------------------------------
     if variable is not None:
@@ -314,17 +314,20 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                 variable=variable,
                 path=resolved,
                 source="variable",
-                declared_inputs=declared,
+                inputs_in_source=in_source,
             )
 
         if callable(found) and not inspect.isclass(found):
-            declared = next((f for f in factories if f.name == variable), None)
+            # Not `declared`: reusing that name here once replaced the inputs
+            # read from source with this descriptor, and every handler given an
+            # explicitly named factory crashed iterating it.
+            factory = next((f for f in factories if f.name == variable), None)
 
-            if declared is not None:
-                if declared.required_args:
+            if factory is not None:
+                if factory.required_args:
                     raise PipelineLoadError(
                         f"'{variable}' in {resolved.name} needs argument(s) "
-                        f"{list(declared.required_args)}, so it cannot be called "
+                        f"{list(factory.required_args)}, so it cannot be called "
                         f"automatically. Give them defaults, or wrap it in a "
                         f"zero-argument factory."
                     )
@@ -333,7 +336,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                     variable=variable,
                     path=resolved,
                     source="factory",
-                    declared_inputs=declared,
+                    inputs_in_source=in_source,
                 )
 
             # Not annotated as a factory. Honour the caller's choice only if it
@@ -346,7 +349,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                     variable=variable,
                     path=resolved,
                     source="factory",
-                    declared_inputs=declared,
+                    inputs_in_source=in_source,
                 )
 
         raise PipelineLoadError(
@@ -363,7 +366,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
             variable=instances[0],
             path=resolved,
             source="variable",
-            declared_inputs=declared,
+            inputs_in_source=in_source,
         )
 
     if not instances and len(ready) == 1:
@@ -372,7 +375,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
             variable=ready[0].name,
             path=resolved,
             source="factory",
-            declared_inputs=declared,
+            inputs_in_source=in_source,
         )
 
     if not instances and not factories:
