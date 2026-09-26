@@ -543,7 +543,10 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 
 **Later:**
 
-- [ ] **6.8 — Units (R7), design record 008 first.** **Consistency checking only — SmartMDAO will
+- [ ] **6.8 — Units (R7), design record 008 first.** *008 written 2026-09-26*
+      ([design/008](design/008-units.md)), with five questions for the maintainer; it also records
+      a gap found while writing it — two consumers of one external input can disagree about its
+      *type* and `validate()` says nothing. **Consistency checking only — SmartMDAO will
       never convert units.** A producer declaring dB wired to a consumer expecting linear is
       reported; nothing is rescaled, because a silent conversion is a default that changes the
       answer, which [003](design/003-determinism-and-the-engineer-in-the-loop.md) forbids. A
