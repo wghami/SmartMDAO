@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.3 made 1.24.0 and 6.4 (grouped XDSM) makes 1.25.0; 6.5 — design records 006 and 007 — is next.
-**Baseline:** `v1.25.0` — 731 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Baseline:** `v1.25.0` — 759 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 

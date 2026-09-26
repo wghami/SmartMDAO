@@ -7,6 +7,28 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ✅ RESOLVED — a notebook's outputs could go stale without failing anything, and every re-run rewrote all sixteen
+
+CI re-executed the notebooks but only failed on an exception, so a notebook whose committed output
+no longer matched what its code printed passed. Meanwhile every local re-run rewrote all sixteen
+files — per-cell timestamps, measured timings, temp paths — so each PR carried noise to be
+discarded by hand, and a real output change was easy to miss in it. Notebook 06 also printed a
+`frozenset` in hash order, which changes with `PYTHONHASHSEED`: an unstable output in the
+notebook series about a project whose governing principle is determinism.
+
+**Fixed** without freezing anything: timestamps are no longer recorded; the set is printed sorted;
+and `run_notebooks.py` compares each re-run with the committed copy after masking only
+measurements, writing back only what really changed. `--check`, which CI now runs, fails on a
+stale output and names the first cell that differs. Checked by tampering with a committed output
+(caught) and by re-running under two hash seeds (unchanged).
+
+**What did not work at first:** comparing images byte for byte in CI. The first CI run failed the
+two notebooks with diagrams while all fourteen others matched: the runner's fonts rasterise
+differently. Locally a re-run is still exact, pixels included, so a changed diagram is rewritten;
+`--check` compares that an image is present and every word of text exactly, but not the pixels.
+
+---
+
 ## ✅ RESOLVED in 1.24.0 — an entry file inside a package could not be loaded
 
 `analyze_pipeline(pkg/pipeline.py)` with `from .physics import lift` failed with "attempted

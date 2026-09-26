@@ -114,3 +114,80 @@ def test_every_notebook_starts_with_a_title():
         assert "".join(first["source"]).lstrip().startswith("# "), (
             f"{path.name} does not open with a title"
         )
+
+
+# ==============================================================================
+# Reproducible, not frozen: run_notebooks.fingerprint
+# ==============================================================================
+
+import importlib.util
+
+import nbformat
+
+_spec = importlib.util.spec_from_file_location("run_notebooks", REPO / "run_notebooks.py")
+run_notebooks = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(run_notebooks)
+
+
+def notebook_printing(*texts, name="stdout"):
+    cell = nbformat.v4.new_code_cell("print(...)")
+    cell.outputs = [nbformat.v4.new_output("stream", name=name, text=text) for text in texts]
+    return nbformat.v4.new_notebook(cells=[cell])
+
+
+@pytest.mark.parametrize("before, after", [
+    ("22:49:53 | INFO | started\n", "17:11:01 | INFO | started\n"),
+    ("projected for 30 sweeps: 0.0293s\n", "projected for 30 sweeps: 0.1183s\n"),
+    ("{'one_sweep_seconds': 0.0008}\n", "{'one_sweep_seconds': 0.0006}\n"),
+    ("'/tmp/tmprdtftzwy/loop.lp' passed\n", "'/tmp/tmp2j12myn2/loop.lp' passed\n"),
+    ('File "/tmp/ipykernel_40467/4163901212.py", line 10\n', 'File "/tmp/ipykernel_1/99.py", line 10\n'),
+    ("<object at 0x7f3a2b1c9d10>\n", "<object at 0x7f00deadbeef>\n"),
+])
+def test_measurements_do_not_count_as_a_change(before, after):
+    assert run_notebooks.fingerprint(notebook_printing(before)) == \
+        run_notebooks.fingerprint(notebook_printing(after))
+
+
+@pytest.mark.parametrize("before, after", [
+    ("converged in 3 sweeps\n", "converged in 4 sweeps\n"),
+    ("y1 = 3.1600\n", "y1 = 3.1700\n"),
+    ("frozenset({'a', 'b'})\n", "frozenset({'b', 'a'})\n"),
+])
+def test_anything_else_does(before, after):
+    assert run_notebooks.fingerprint(notebook_printing(before)) != \
+        run_notebooks.fingerprint(notebook_printing(after))
+
+
+def test_a_stream_split_differently_is_the_same_output():
+    """stdout and stderr interleave, so the kernel chunks the same text differently."""
+    assert run_notebooks.fingerprint(notebook_printing("one\n", "two\n")) == \
+        run_notebooks.fingerprint(notebook_printing("one\ntwo\n"))
+
+
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.stem)
+def test_no_cell_carries_timing_metadata(path):
+    """Per-cell timestamps changed on every run and were most of every notebook diff."""
+    timed = [i for i, cell in enumerate(load(path)["cells"]) if "execution" in cell.get("metadata", {})]
+    assert not timed, f"{path.name}: timing metadata in cells {timed}; run_notebooks.py no longer records it"
+
+
+def notebook_showing(png: str):
+    cell = nbformat.v4.new_code_cell("show()")
+    cell.outputs = [nbformat.v4.new_output("display_data", data={"image/png": png, "text/plain": "<Figure>"})]
+    return nbformat.v4.new_notebook(cells=[cell])
+
+
+def test_pixels_count_locally_but_not_across_machines():
+    """CI's fonts rasterise differently; text is still compared exactly there."""
+    one, other = notebook_showing("iVBORw0KGgoAAA"), notebook_showing("iVBORw0KGgoBBB")
+    assert run_notebooks.fingerprint(one) != run_notebooks.fingerprint(other)
+    assert run_notebooks.fingerprint(one, images=False) == run_notebooks.fingerprint(other, images=False)
+
+
+def test_a_difference_is_located():
+    new = notebook_printing("converged in 4 sweeps\n")
+    old = notebook_printing("converged in 3 sweeps\n")
+    assert run_notebooks.first_difference(new, old).startswith("cell 0 ('print(...)'")
+
+    old.cells.append(nbformat.v4.new_code_cell("x"))
+    assert run_notebooks.first_difference(notebook_printing("converged in 3 sweeps\n"), old) == "cell count 1 vs 2"
