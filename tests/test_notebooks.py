@@ -142,6 +142,7 @@ def notebook_printing(*texts, name="stdout"):
     ("'/tmp/tmprdtftzwy/loop.lp' passed\n", "'/tmp/tmp2j12myn2/loop.lp' passed\n"),
     ('File "/tmp/ipykernel_40467/4163901212.py", line 10\n', 'File "/tmp/ipykernel_1/99.py", line 10\n'),
     ("<object at 0x7f3a2b1c9d10>\n", "<object at 0x7f00deadbeef>\n"),
+    ("'environment': '/home/me/SmartMDAO/.venv'\n", "'environment': '/home/runner/work/SmartMDAO/SmartMDAO/.venv'\n"),
 ])
 def test_measurements_do_not_count_as_a_change(before, after):
     assert run_notebooks.fingerprint(notebook_printing(before)) == \

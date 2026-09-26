@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4 shipped in 1.24.0–1.25.0; 007 is written and 6.6 builds it in 1.26.0. 006 and the sweep (6.7) wait for paper-repro's first real runs.
-**Baseline:** `v1.26.0` — 805 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Baseline:** `v1.26.0` — 806 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
