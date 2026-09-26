@@ -59,13 +59,19 @@ def test_every_snippet_runs(section, code, tmp_path, monkeypatch):
 
     The visualization snippet writes to `results/`, so run everything somewhere
     disposable rather than littering the repository.
+
+    Each block runs from a real file, as a reader's copy would. Compiled under a
+    made-up name, its functions had no readable source, so anything reading it -
+    stub detection does - saw something no user ever would.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / "results").mkdir(exist_ok=True)
+    snippet = tmp_path / f"cookbook_{section.replace('-', '_')}.py"
+    snippet.write_text(code)
 
     namespace = {"__name__": "__cookbook__"}
     try:
-        exec(compile(code, f"cookbook::{section}", "exec"), namespace)
+        exec(compile(code, str(snippet), "exec"), namespace)
     except Exception as error:      # pragma: no cover - only on a broken snippet
         pytest.fail(
             f"Snippet in '{section}' failed: {type(error).__name__}: {error}\n\n{code}"
