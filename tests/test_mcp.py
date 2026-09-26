@@ -622,31 +622,31 @@ def test_unknown_attribute_still_raises():
 # --- declared inputs, recovered from the source ------------------------------
 
 def test_declared_inputs_from_direct_keywords(tmp_path):
-    from smartmdao.mcp.loader import declared_inputs
+    from smartmdao.mcp.loader import inputs_in_source
 
     path = write(tmp_path, "direct.py", SELLAR + "\npipeline.run(z1=1.0, y2=2.0)\n")
-    assert declared_inputs(path) == ("y2", "z1")
+    assert inputs_in_source(path) == ("y2", "z1")
 
 
 def test_declared_inputs_from_a_splatted_dict_literal(tmp_path):
     """The shape the repository's own benchmarks use."""
-    from smartmdao.mcp.loader import declared_inputs
+    from smartmdao.mcp.loader import inputs_in_source
 
     source = SELLAR + '\ninputs = {"z1": 1.0, "x1": 0.0, "y2": 1.0}\npipeline.run(**inputs)\n'
-    assert declared_inputs(write(tmp_path, "splat.py", source)) == ("x1", "y2", "z1")
+    assert inputs_in_source(write(tmp_path, "splat.py", source)) == ("x1", "y2", "z1")
 
 
 def test_declared_inputs_ignores_what_it_cannot_see(tmp_path):
     """Dynamic construction narrows the guessing; it does not eliminate it."""
-    from smartmdao.mcp.loader import declared_inputs
+    from smartmdao.mcp.loader import inputs_in_source
 
     source = SELLAR + "\ninputs = dict(z1=1.0)\npipeline.run(**inputs)\n"
-    assert declared_inputs(write(tmp_path, "dynamic.py", source)) == ()
+    assert inputs_in_source(write(tmp_path, "dynamic.py", source)) == ()
 
 
 def test_a_loaded_pipeline_carries_its_declared_inputs(sellar_file):
     loaded = load_pipeline(sellar_file)
-    assert loaded.declared_inputs == ()          # this fixture never calls run()
+    assert loaded.inputs_in_source == ()          # this fixture never calls run()
 
 
 def test_the_seed_a_file_already_passes_is_not_reported_as_missing(tmp_path):
@@ -665,6 +665,7 @@ def test_the_seed_a_file_already_passes_is_not_reported_as_missing(tmp_path):
     assert report["findings"] == []
     assert report["inputs_used"] == {
         "requested": ["z1", "x1"],
+        "declared": [],
         "found_in_source": ["y2"],
     }
 
@@ -687,14 +688,14 @@ def test_explain_reports_provenance_too(tmp_path):
 
 def test_collection_and_negative_literals_are_recovered(tmp_path):
     """Inputs are not always scalars; bounds and flags are written as literals."""
-    from smartmdao.mcp.loader import declared_input_map
+    from smartmdao.mcp.loader import input_map_in_source
 
     source = (
         SELLAR
         + "\ninputs = {'bounds': [1.0, 2.0], 'pair': (3, 4), 'tags': {'a', 'b'},"
           " 'offset': -1.5, 'on': True}\npipeline.run(**inputs)\n"
     )
-    recovered = declared_input_map(write(tmp_path, "literals.py", source))
+    recovered = input_map_in_source(write(tmp_path, "literals.py", source))
 
     assert recovered["bounds"] == [1.0, 2.0]
     assert recovered["pair"] == (3, 4)
@@ -704,17 +705,17 @@ def test_collection_and_negative_literals_are_recovered(tmp_path):
 
 
 def test_a_computed_value_is_marked_unresolved_not_guessed(tmp_path):
-    from smartmdao.mcp.loader import _UNRESOLVED, declared_input_map
+    from smartmdao.mcp.loader import _UNRESOLVED, input_map_in_source
 
     source = SELLAR + "\nimport math\npipeline.run(z1=math.pi, y2=1.0)\n"
-    recovered = declared_input_map(write(tmp_path, "computed.py", source))
+    recovered = input_map_in_source(write(tmp_path, "computed.py", source))
 
     assert recovered["z1"] is _UNRESOLVED
     assert recovered["y2"] == 1.0
 
 
 def test_a_collection_containing_something_computed_is_unresolved(tmp_path):
-    from smartmdao.mcp.loader import _UNRESOLVED, declared_input_map
+    from smartmdao.mcp.loader import _UNRESOLVED, input_map_in_source
 
     source = SELLAR + "\nimport math\npipeline.run(bounds=[1.0, math.pi])\n"
-    assert declared_input_map(write(tmp_path, "mixed.py", source))["bounds"] is _UNRESOLVED
+    assert input_map_in_source(write(tmp_path, "mixed.py", source))["bounds"] is _UNRESOLVED

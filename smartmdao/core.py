@@ -2,7 +2,7 @@ import logging
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Callable, List, Literal
+from typing import Callable, List, Literal, Optional, Sequence, Tuple
 
 from .discretisation import Discretisation, effective_steps
 from .effects import SideEffectError, latch_once, refuse_unstated_effects
@@ -72,6 +72,36 @@ def suspend_execution():
     finally:
         _suspension.active = previous
 
+def declared_names(names) -> Tuple[str, ...]:
+    """
+    `names` as a tuple of strings, in order, without repeats.
+
+    A bare string is refused rather than iterated: `inputs="span"` would
+    otherwise declare four one-letter inputs and every check downstream would
+    be answering a question nobody asked.
+    """
+    if isinstance(names, (str, bytes)):
+        raise TypeError(
+            f"inputs must be a list of names, not a single string: "
+            f"did you mean inputs=[{names!r}]?"
+        )
+    names = tuple(names)
+    wrong = [name for name in names if not isinstance(name, str)]
+    if wrong:
+        raise TypeError(f"input names must be strings, got {wrong!r}")
+    return tuple(dict.fromkeys(names))
+
+
+def inputs_for(pipeline, inputs: Optional[Sequence[str]]) -> Tuple[str, ...]:
+    """
+    The input names an analysis should assume: the call's own list when it
+    passes one - even an empty one - otherwise what the pipeline declares.
+    """
+    if inputs is not None:
+        return declared_names(inputs)
+    return tuple(getattr(pipeline, "inputs", ()))
+
+
 @dataclass
 class Pipeline:
     steps: list[Step] = field(default_factory=list)
@@ -87,7 +117,16 @@ class Pipeline:
     # them without reaching into anything - the threshold is where the answer
     # is actually decided, so it has to be as visible as the graph is.
     discretisation: Discretisation = field(default_factory=Discretisation)
+    # The names a caller is expected to pass to `run()`, declared once. Which
+    # inputs are external is a property of the pipeline, not of each call:
+    # without it, `analyze`, `validate`, `explain` and `visualize` had to be
+    # told the list every time, and a name missed once came back as a false
+    # `missing-input`. An explicit `inputs=` on any of those calls still wins.
+    inputs: Sequence[str] = ()
     _structure_validated: bool = field(default=False, init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        self.inputs = declared_names(self.inputs)
 
     def add(self, fn: Callable, outputs: list[str] = None, effects=None):
         """
@@ -181,9 +220,10 @@ class Pipeline:
                   output_path: str = None,
                   view: bool = True):
         """
-        Generates an XDSM diagram of the pipeline.
+        Generates an XDSM diagram of the pipeline. `inputs` defaults to the
+        pipeline's declared inputs.
         """
-        input_set = set(inputs or [])
+        input_set = set(inputs_for(self, inputs))
         logger.debug("Generating XDSM diagram for pipeline.")
         
         visualize_pipeline(

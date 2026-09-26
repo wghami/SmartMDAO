@@ -155,7 +155,7 @@ def compare_runs(
     if rung not in RUNGS:
         return {"ok": False, "error": f"Unknown rung {rung!r}; expected one of {list(RUNGS)}."}
 
-    from .loader import _UNRESOLVED, PipelineLoadError, declared_input_map, load_pipeline
+    from .loader import _UNRESOLVED, PipelineLoadError, input_map_in_source, load_pipeline
 
     from ..discretisation import effective_steps
     from ..effects import effects_refusal_message
@@ -188,7 +188,7 @@ def compare_runs(
         loaded_a = loaded["a"]
         recovered = {
             name: value
-            for name, value in declared_input_map(loaded_a.path).items()
+            for name, value in input_map_in_source(loaded_a.path).items()
             if value is not _UNRESOLVED
         }
 

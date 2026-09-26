@@ -406,12 +406,16 @@ can't check engineering" as an excuse and as an accurate, narrow statement.
 You will see `inputs_used` in every response:
 
 ```
-"inputs_used": {"requested": ["z1", "z2", "x1"], "found_in_source": ["y2"]}
+"inputs_used": {"requested": ["z1", "z2", "x1"], "declared": [], "found_in_source": ["y2"]}
 ```
 
-The tools read the `run(...)` call in your file and merge what they find with whatever you asked
-for. This exists because an agent once declared the design variables, forgot the cycle's seed, and
-was told the seed was missing — so it reported a *working* file as broken and offered to patch it.
+The simplest way to never pass `inputs` at all is to declare them in the file:
+`Pipeline(inputs=["z1", "z2", "x1", "y2"])`. The tools use that list whenever a call passes none —
+`declared` shows it — and a list you do pass replaces it.
+
+On top of either, the tools read the `run(...)` call in your file and merge what they find. This
+exists because an agent once named the design variables, forgot the cycle's seed, and was told the
+seed was missing — so it reported a *working* file as broken and offered to patch it.
 `found_in_source` is how you tell "the file already supplies this" from "you told me about this".
 
 ---
@@ -548,13 +552,13 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 645 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 666 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
 | Typing `/` shows only two smartmdao entries | Correct — those are prompts. Tools are never slash commands; see Step 6a |
 | You changed the code but the agent behaves as before | Step 6b — start a new session; the old subprocess is still running |
-| A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read |
+| A `validate` finding names a variable your script clearly passes | Check `inputs_used.found_in_source`; if it is empty, your `run()` call is built too dynamically to read — declare the names with `Pipeline(inputs=[...])` instead |
 | A notebook shows stale output | Re-run `run_notebooks.py`; the committed outputs are regenerated, not hand-edited |
 | A run is killed at 60s | That is the wall clock. Try `rung="smoke"` to see the unit cost, then raise `timeout_seconds` deliberately |
 | A diagram command hangs | You called `visualize()` directly in a headless shell; pass `view=False`. The MCP path forces this already |

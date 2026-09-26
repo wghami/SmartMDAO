@@ -3,9 +3,9 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is planned**:
-6.0 — the plan, and hooks that catch stale documentation — is in place; 6.1 is next.
-**Baseline:** `v1.23.0` — 645 tests, 100% coverage, 29/29 scripts, 16 notebooks.
+**Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
+6.0 (the plan and the docs gate) and 6.1 (declared inputs) are done; 6.2 is next.
+**Baseline:** `v1.23.0` — 666 tests, 100% coverage, 29/29 scripts, 16 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -441,12 +441,21 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 
 **1.24.0 — needed now, all small:**
 
-- [ ] **6.1 — Declared inputs (R1).** `Pipeline(inputs=[...])`; analyze / validate / explain /
-      render use it when a call passes none, and an explicit argument still wins.
-      `inputs_used` reports the source (`requested` / `declared` / `found_in_source`). A declared
-      name no step consumes is reported, since it is probably a typo. *Pushback taken:* one
-      mechanism on the pipeline object rather than a module-level constant as well — it travels
-      with factories and needs no naming convention.
+- [x] **6.1 — Declared inputs (R1).** `Pipeline(inputs=[...])`; analyze / validate / explain /
+      visualize and the MCP tools use it when a call passes none, and an explicit argument still
+      wins — even an empty one. `inputs_used` reports the source (`requested` / `declared` /
+      `found_in_source`); the file's own `run()` call is still unioned on top, as before.
+      `run_pipeline` names `declared_not_supplied`. A name no step reads is the new
+      `unconsumed-input` warning — for any input list, not only a declared one. *Pushback taken:*
+      one mechanism on the pipeline object rather than a module-level constant as well — it
+      travels with factories and needs no naming convention.
+      **What it cost us:** a bare string (`inputs="span"`) is refused, since it would otherwise
+      declare four one-letter inputs. **Found on the way:** naming an annotated factory
+      explicitly (`variable="build"`) crashed every MCP handler since the input recovery landed —
+      the loader reused a variable name and replaced the inputs read from source with the
+      factory's descriptor. No test named a factory *and* went through a handler. Fixed, and the
+      loader's `declared_inputs` / `declared_input_map` became `inputs_in_source` /
+      `input_map_in_source`, so "declared" means one thing.
 - [ ] **6.2 — Stubs (R2).** A static AST check: is the body, docstring aside, a single
       `raise NotImplementedError`? A step with no readable source is *unknown*, never a stub
       (invariant 2). Listed by `analyze` and `explain`, an info finding in `validate`, and named by

@@ -26,6 +26,7 @@ from .graph import (
     map_producers,
     weakly_connected_components,
 )
+from .core import inputs_for
 from .discretisation import effective_steps
 from .effects import repeating_step_names
 from .models import Step
@@ -178,16 +179,17 @@ def _feedback_variables(block: ExecutionBlock) -> Tuple[str, ...]:
 # analyze
 # ==============================================================================
 
-def analyze(pipeline, inputs: Sequence[str] = ()) -> PipelineAnalysis:
+def analyze(pipeline, inputs: Optional[Sequence[str]] = None) -> PipelineAnalysis:
     """
     Describes what running `pipeline` would do.
 
     `inputs` is the set of variable names that would be passed to `run()`.
     Supplying it sharpens the analysis - without it, every external input looks
-    like a missing initial guess.
+    like a missing initial guess. When omitted, the pipeline's declared
+    `inputs` are used; an explicit list, even an empty one, wins.
     """
     steps = effective_steps(pipeline)
-    input_keys = set(inputs)
+    input_keys = set(inputs_for(pipeline, inputs))
 
     producers = map_producers(steps)
 
@@ -391,6 +393,31 @@ def _check_missing_inputs(
             variable=name,
         )
         for name, consumers in missing.items()
+    ]
+
+
+def _check_unconsumed_inputs(steps: List[Step], inputs: Sequence[str]) -> List[Finding]:
+    """
+    Input names no step reads.
+
+    A warning rather than information because of what it usually is: a typo.
+    When the misspelt name belongs to a parameter with a default, nothing else
+    fails - the default is quietly used and the value passed in is ignored.
+    """
+    consumed = {name for step in steps for name in _step_inputs(step)}
+    return [
+        Finding(
+            code="unconsumed-input",
+            severity=WARNING,
+            message=(
+                f"'{name}' is listed as an input but no step reads it, so its "
+                f"value would be ignored. A typo, or a step that was renamed "
+                f"or removed?"
+            ),
+            variable=name,
+        )
+        for name in inputs
+        if name not in consumed
     ]
 
 
@@ -880,7 +907,7 @@ def _check_solver_fit(
 
 def validate(
     pipeline,
-    inputs: Sequence[str] = (),
+    inputs: Optional[Sequence[str]] = None,
     type_checker: Optional[TypeChecker] = None,
 ) -> Tuple[Finding, ...]:
     """
@@ -888,8 +915,10 @@ def validate(
 
     Unlike `validate_structure`, this never raises and never stops at the first
     problem - the point is to hand back a complete list to fix in one pass.
+    `inputs` defaults to the pipeline's declared inputs, as in `analyze`.
     """
     steps = effective_steps(pipeline)
+    inputs = inputs_for(pipeline, inputs)
     input_keys = set(inputs)
     checker = type_checker or StandardTypeChecker()
 
@@ -900,6 +929,7 @@ def validate(
     findings.extend(_check_connectivity(steps))
     findings.extend(_check_type_edges(steps, checker))
     findings.extend(_check_missing_inputs(steps, input_keys))
+    findings.extend(_check_unconsumed_inputs(steps, inputs))
     findings.extend(
         _check_initial_guesses(analysis, type(pipeline.solver).__name__)
     )
@@ -920,8 +950,9 @@ def validate(
 # explain
 # ==============================================================================
 
-def explain(pipeline, inputs: Sequence[str] = ()) -> str:
+def explain(pipeline, inputs: Optional[Sequence[str]] = None) -> str:
     """Human-readable account of the pipeline - for docs, review, or an agent."""
+    inputs = inputs_for(pipeline, inputs)
     analysis = analyze(pipeline, inputs)
     findings = validate(pipeline, inputs)
 
