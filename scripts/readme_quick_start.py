@@ -1,9 +1,9 @@
 """
-The exact Sellar workflow shown in the README's collapsed Quick Start
-section - caching, PipelineEvaluator, SciPy optimization with constraint
-sign flipping, visualization, and running the same problem through a
-second backend - kept here so it's continuously exercised by run_all.py
-and never silently drifts from the documentation.
+The full Sellar workflow the README links to as "the full Sellar
+optimization" - caching, PipelineEvaluator, SciPy optimization with
+constraint sign flipping, visualization, and running the same problem
+through a second backend. It used to be inlined in the README; it lives
+here so run_all.py exercises it continuously and it cannot drift.
 """
 import importlib.util
 import math

@@ -511,6 +511,9 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 **Design first, then build:**
 
 - [ ] **6.5 — Design records 006 (sweep) and 007 (project interpreter), written together.**
+      *007 written 2026-09-26* ([design/007](design/007-project-interpreter.md)), including the
+      substrate 006 inherits; it leaves three questions for the maintainer. 006 waits for
+      paper-repro's first real runs.
       They share one substrate: a worker process whose interpreter is a parameter (the server's
       own by default), speaking a versioned protocol. Building the sweep on `sys.executable` first
       would mean rebuilding it for R4. To settle there: the protocol's minimum version and the

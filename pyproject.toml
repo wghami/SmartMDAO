@@ -1,7 +1,7 @@
 [project]
 name = "SmartMDAO"
 version = "1.25.0"
-description = "Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization."
+description = "Coupled pipelines of plain Python functions - converged, and checked before they run."
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [

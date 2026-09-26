@@ -1,38 +1,24 @@
-# SmartMDAO 🚀
+# SmartMDAO
 
-***Extensible MDAO framework with zero boilerplate integration and plug-and-play optimization.***
+***Coupled pipelines of plain Python functions — converged, and checked before they run.***
 
 [![CI](https://github.com/wghami/SmartMDAO/actions/workflows/ci.yml/badge.svg)](https://github.com/wghami/SmartMDAO/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/smartmdao.svg)](https://pypi.org/project/smartmdao/)
 [![Python versions](https://img.shields.io/pypi/pyversions/smartmdao.svg)](https://pypi.org/project/smartmdao/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/wghami/SmartMDAO/blob/main/LICENSE)
 
-**SmartMDAO** is a lightweight, purely Pythonic framework for Multidisciplinary Design Analysis and Optimization (MDAO). Define your disciplines as plain Python functions, and SmartMDAO maps the dependency graph, converges cyclic feedback loops, caches expensive calls, and bridges straight into your optimizer of choice.
-
-### What makes it different
-
-There are mature MDAO frameworks already. SmartMDAO is not trying to be a smaller one — these are the things it does that they do not:
-
-| | |
-|---|---|
-| **Converges on decisions, not just numbers** | A coupling variable can be a set, an enum, a frozen dataclass or a whole architecture. Anything supporting `==` converges on **structural equality** — unchanged since the last sweep means at rest. Discrete architectural choice sits *inside* the feedback loop, next to the floats. |
-| **Tells you what a solve would do, without running it** | `analyze()` and `validate()` read signatures, annotations and the graph. Execution order, feedback loops, which variable needs a starting value, every structural problem at once — all free, because **no discipline is ever called**. |
-| **Makes the assumptions reviewable** | The threshold that turns `mass_kg = 880` into `"heavy"` is a **declared object**, not a number buried in a helper. `explain()` states it; `validate()` checks it. A hypothesis you cannot see is one nobody reviews. |
-| **Disciplines can be rules, not code** | A reviewed `.lp` file becomes a discipline: deterministic, diffable, version-controlled. "No feasible architecture" stops being a sentinel someone invented and becomes a **proof**, with the minimal set of conflicting requirements to take into a design review. |
-| **Says what a run will cost before it starts** | One sweep proves the model executes *and* measures the unit cost, so every estimate above it falls out of it. An unbounded run is never what happens by accident. |
-| **Knows when a step touches the world** | A step that writes a file or calls an API is *declared* (`effects=`), so the library can tell a recomputed number from a resent email. Inside a loop, repeating it unasked is **refused before anything runs**; an optimizer or a comparison that would multiply it needs an explicit yes. |
-| **Reports what actually happened** | Every iterative block returns a `ConvergenceReport`: converged, exhausted, or abandoned — with the reason and the full residual trace. You never infer it from a list of numbers. |
-| **Zero boilerplate, zero ceremony** | No component classes, no `add_subsystem`, no XML, no separate problem description. A discipline is a function; wiring is by parameter name. |
-
-The thread through all of it: **surface the consequences before the engineer commits to them**, and never let a default quietly decide the answer. That principle is written down in [design record 003](https://github.com/wghami/SmartMDAO/blob/main/docs/design/003-determinism-and-the-engineer-in-the-loop.md).
+Write each discipline as a function. SmartMDAO wires them by parameter name, finds the feedback
+loops, converges them, and tells you what a run would do — and what is wrong with it — without
+running anything. Built for multidisciplinary design analysis and optimization (MDAO), and for any
+workflow whose steps feed each other.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/main/assets/sellar_mdao.svg" alt="Sellar Coupling Workflow" width="600"/>
+  <img src="https://raw.githubusercontent.com/wghami/SmartMDAO/main/assets/sellar_mdao.svg" alt="Sellar coupling workflow" width="560"/>
 </p>
 
-## 🔍 See It In Action
+## In one example
 
-**Without SmartMDAO** — you hand-write the convergence loop and track state yourself:
+**Without SmartMDAO**, you write the convergence loop and track the state yourself:
 
 ```python
 y2 = 1.0  # initial guess
@@ -44,290 +30,89 @@ for _ in range(100):
     y2 = y2_next
 ```
 
-**With SmartMDAO** — declare each discipline once; the y1 ↔ y2 cycle is found and converged for you:
+**With SmartMDAO**, you declare each discipline once; the `y1 ↔ y2` loop is found and converged:
 
 ```python
+import math
+from smartmdao import Pipeline, HybridSolver
+
+pipeline = Pipeline(solver=HybridSolver())
+
 @pipeline.step(outputs=["y1"])
 def discipline_1(z1, z2, x1, y2): return z1 ** 2 + z2 + x1 - 0.2 * y2
 
 @pipeline.step(outputs=["y2"])
 def discipline_2(z1, z2, y1): return math.sqrt(abs(y1)) + z1 + z2
 
-pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
+result = pipeline.run(z1=1.0, z2=1.0, x1=1.0, y2=1.0)
+result["convergence_reports"][0].status      # 'converged'
 ```
 
-# 🌟 Why SmartMDAO?
-
-- **Effortless MDA** — no DSL, just `@pipeline.step` and standard type hints. Works with plain types, dataclasses, or your own objects.
-- **Convergence Beyond Numbers** — coupling variables don't have to be floats. Dicts, sets, dataclasses, or any equatable type converge too: SmartMDAO falls back to structural equality when there's no numeric residual to drive to zero, so a feedback loop over a negotiated plan or a resolved dependency set converges exactly like a numeric MDA loop does. See it in action below.
-- **Built-in Caching** — layer `@cached` (RAM, HDF5, Pickle) onto expensive functions for instant speedups.
-- **Agnostic MDO** — define your `OptimizationProblem` once, then run it through any backend with a single string: `optimize(problem, backend="scipy")` or `backend="openturns"`. Bring your own via `@register_backend`, or drop straight to `PipelineEvaluator` for full control.
-- **Type-Safe** — static validation catches mismatched disciplines before a single step runs; opt-in runtime checks catch the rest.
-- **Built Also for Researchers** — solvers are plain `Protocol` classes, so custom MDA convergence algorithms drop in without touching the core framework.
-- **Inspectable Before You Run It** — `analyze()` and `validate()` report execution order, feedback loops, which variables need an initial guess, and every structural error, without executing a single discipline. Available to coding agents over MCP.
-- **Solves That Explain Themselves** — every feedback loop returns a `ConvergenceReport`: converged, out of iterations, or abandoned as hopeless, with the reason and the full residual trace.
-
-## 🔄 Convergence Beyond Numbers
-
-OpenMDAO and GEMSEO converge coupled disciplines by driving a *numeric* residual (`|Δ|` between
-successive floats) to zero. That assumption breaks the moment a discipline exchanges something
-that isn't a number — a resolved set of dependencies, a negotiated plan, a piece of state an AI
-agent is refining across a feedback loop. SmartMDAO's `StandardConvergenceChecker` falls back to
-structural equality for non-numeric values: "did this value change since the last iteration?" is
-a perfectly good convergence criterion when there's no derivative to speak of.
+And before running it, ask what it would do:
 
 ```python
-from smartmdao import Pipeline, IterativeSolver
+from smartmdao import analyze, validate
 
-pipeline = Pipeline(solver=IterativeSolver(max_iterations=10))
-
-depends_on = {
-    "billing": frozenset({"database", "auth"}),
-    "auth": frozenset({"database"}),
-}
-
-@pipeline.step(outputs=["enabled"])
-def resolve_dependencies(requested: frozenset, enabled: frozenset) -> frozenset:
-    expanded = set(enabled) | set(requested)
-    for feature in list(expanded):
-        expanded |= depends_on.get(feature, frozenset())
-    return frozenset(expanded)
-
-result = pipeline.run(requested=frozenset({"billing"}), enabled=frozenset())
-# result["enabled"] -> frozenset({"billing", "auth", "database"}) - converged in
-# 2 iterations, with not a single float anywhere in the coupling variable.
+analyze(pipeline, inputs=["z1", "z2", "x1"]).cycles[0].feedback_variables   # ('y1', 'y2')
+validate(pipeline, inputs=["z1", "z2", "x1"])
+# ERROR: 'discipline_1' consumes 'y2' before anything produces it ... Pass y2=... to run().
 ```
 
-Bring your own equatable type — a `dict`, a `set`, a frozen `@dataclass` — and the same
-`IterativeSolver`/`HybridSolver` machinery converges it, no numeric tolerance required.
+No discipline was called to find that out.
 
-> 🧭 **Where this leads.** If a coupling variable can be a negotiated plan, one of the disciplines
-> producing it could be an LLM — converging inside the feedback loop, with termination decided by
-> the solver rather than by the model declaring itself done. We've written up what that would take,
-> what it's good for, and where it breaks, in
-> [`docs/design/002-agent-as-discipline.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/design/002-agent-as-discipline.md),
-> and [`scripts/agent_as_discipline_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/agent_as_discipline_demo.py)
-> runs it end to end: a discrete architecture converges in two sweeps, infeasible requirements
-> converge on an explicit "no", a naive model that oscillates is caught at sweep 4 of 100 by
-> `OscillationAwareConvergenceChecker`, and — the topology we'd actually recommend — the model sits
-> on the *linear* part of a `HybridSolver` while the numeric cycle converges underneath it, costing
-> one call per outer iteration instead of one per sweep.
-> *The model call in that demo is a deterministic stub* — the convergence machinery is real and
-> tested; wiring it to a live model is future work.
+## What makes it different
 
-<details>
-<summary><strong>⚡ Full Quick Start: Caching, Constraints & Optimization (click to expand)</strong></summary>
+| | |
+|---|---|
+| **Checked before it runs** | `analyze()` and `validate()` read signatures and the graph: order, loops, the variable that needs a starting value, every structural problem at once. Free, because nothing executes. |
+| **Converges on more than numbers** | A coupling variable can be a set, a dataclass or a whole architecture; anything with `==` converges on structural equality. |
+| **Disciplines can be rules** | A reviewed `.lp` file becomes a discipline. "No feasible design" becomes a proof, with the minimal set of conflicting requirements. |
+| **Says what a run will cost** | One sweep proves the model runs *and* measures the unit cost, so you are quoted a number before a long run. |
+| **Knows when a step touches the world** | A step that writes a file or calls an API is declared; repeating it inside a loop is refused before anything runs. |
+| **Reports what happened** | Every loop returns a report — converged, exhausted, or abandoned — with the reason and the residual trace. |
+| **No ceremony** | No component classes, no problem description files. A discipline is a function. |
 
-Here is how easily you can solve the classic Sellar coupled problem end-to-end, from caching through optimization - swapping the solver backend with a single string.
+The principle behind all of it: surface the consequences before you commit to them, and never let
+a default quietly decide the answer
+([design record 003](https://github.com/wghami/SmartMDAO/blob/main/docs/design/003-determinism-and-the-engineer-in-the-loop.md)).
 
-``` python
-import math
-import logging
-from smartmdao import (
-    Pipeline,
-    HybridSolver,
-    PipelineEvaluator,
-    OptimizationProblem,
-    ConstraintSpec,
-    optimize,
-    cached,
-    MemoryBackend,
-    configure_logging
-)
+## Install
 
-# --- Setup Logging and Cache ---
-configure_logging(level=logging.WARNING)
-mem_cache = MemoryBackend() # HDF5 and Pickle also available
-
-# ==============================================================================
-# PART 1: Initialize the Pipeline with the HybridSolver
-# ==============================================================================
-# The HybridSolver automatically detects and converges cyclic dependencies
-pipeline = Pipeline(
-    solver=HybridSolver(max_iterations=100, tolerance=1e-6)
-)
-
-# ==============================================================================
-# PART 2: Define the Sellar Disciplines (MDA)
-# ==============================================================================
-@pipeline.step(outputs=["y1"])
-@cached(mem_cache) # Instantly cache this discipline to speed up evaluations
-def discipline_1(z1: float, z2: float, x1: float, y2: float) -> float:
-    return (z1 ** 2) + z2 + x1 - (0.2 * y2)
-
-@pipeline.step(outputs=["y2"])
-@cached(mem_cache) 
-def discipline_2(z1: float, z2: float, y1: float) -> float:
-    return math.sqrt(abs(y1)) + z1 + z2
-
-@pipeline.step(outputs=["objective"])
-@cached(mem_cache) 
-def compute_objective(x1: float, z2: float, y1: float, y2: float) -> float:
-    return (x1 ** 2) + z2 + (y1 ** 2) + math.exp(-y2)
-
-@pipeline.step(outputs=["constraint_1"])
-@cached(mem_cache) 
-def compute_constraint_1(y1: float) -> float:
-    """Constraint formulation: 3.16 - y1 <= 0"""
-    return 3.16 - y1
-
-@pipeline.step(outputs=["constraint_2"])
-@cached(mem_cache) 
-def compute_constraint_2(y2: float) -> float:
-    """Constraint formulation: y2 - 24.0 <= 0"""
-    return y2 - 24.0
-
-# ==============================================================================
-# PART 3: Bridge the Pipeline to an Optimizer-Agnostic Problem
-# ==============================================================================
-evaluator = PipelineEvaluator(
-    pipeline=pipeline,
-    design_vars=["z1", "z2", "x1"],
-    constants={"y2": 1.0} # Initial guess to kick off the cycle
-)
-
-# Both backends expect h(x) >= 0; Sellar's constraints are naturally written
-# as g(x) <= 0, so we flip the sign with multiplier=-1.0.
-problem = OptimizationProblem(
-    evaluator=evaluator,
-    initial_guess=[1.0, 1.0, 1.0],
-    bounds=[(-10.0, 10.0), (0.0, 10.0), (0.0, 10.0)],
-    objective="objective",
-    constraints=[
-        ConstraintSpec(name="constraint_1", multiplier=-1.0),
-        ConstraintSpec(name="constraint_2", multiplier=-1.0),
-    ],
-)
-
-# ==============================================================================
-# PART 4: Run the *same* problem through two different backends
-# ==============================================================================
-for backend_name in ("scipy", "openturns"):
-    result = optimize(problem, backend=backend_name)
-    print(f"[{backend_name:>9}] objective={result.objective_value:.4f}")
+```bash
+pip install smartmdao              # or: uv add smartmdao
+pip install "smartmdao[mcp]"       # the MCP server, for coding agents
+pip install "smartmdao[asp]"       # rule-backed disciplines (clingo)
+pip install "smartmdao[openturns]" # the OpenTURNS optimizer backend
 ```
 
-</details>
+Diagrams are drawn with matplotlib; no system packages are needed.
 
-## 🧠 Advanced Examples
+## For coding agents
 
-The Quick Start above just scratches the surface! Notably:
+`smartmdao-mcp` is an MCP server. It lets an agent check the pipelines it writes instead of guessing:
+`analyze_pipeline`, `validate_pipeline`, `explain_pipeline` and `render_pipeline_diagram` read the
+code without executing it. `run_pipeline` runs it in a child process under a wall clock, one sweep
+by default. `compare_runs` proves a refactor did not change the answer. `smartmdao_cookbook` gives
+the agent the real API before it writes a line. Setup:
+[testing guide, step 6](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md).
 
-- **[`readme_quick_start.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/readme_quick_start.py)** — the complete version of the Quick Start above, including SciPy's raw `minimize()` call, full state extraction, and pipeline visualization.
-- **[`optimizer_backends_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/optimizer_backends_demo.py)** — define one `OptimizationProblem` and run the exact same Sellar problem through `scipy`, `openturns`, and a custom registered backend, just by swapping a string.
-- **[`type_validation_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/type_validation_demo.py)** — static and runtime type validation, `Optional`/`Union` support, and writing a custom `TypeChecker`.
-- **[`non_numeric_convergence_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/non_numeric_convergence_demo.py)** — two full non-numeric convergence cases: a single-discipline dependency closure over a `frozenset`, and a two-discipline negotiation over a shared `Plan` dataclass with an auto-detected `HybridSolver` cycle.
-- **[`pipeline_analysis_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/pipeline_analysis_demo.py)** — `analyze`, `validate` and `explain` on a clean pipeline and a deliberately broken one, plus why identical steps need *different* initial guesses depending on the solver.
-- **[`mcp_connector_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/mcp_connector_demo.py)** — the MCP connector driven end to end without an MCP client: an agent-written wing model that accidentally closes a mass-growth loop, caught before it ever runs.
-- **[`convergence_report_demo.py`](https://github.com/wghami/SmartMDAO/blob/main/scripts/convergence_report_demo.py)** — the three ways a solve can end, and how to write a convergence checker that gives up on a hopeless system instead of burning every iteration.
+## Learn more
 
-For deeper nesting, custom convergence solvers, or more complex multidisciplinary systems, check out the **[scripts folder in our GitHub repository](https://github.com/wghami/SmartMDAO/tree/main/scripts)**.
+- **[Notebooks](https://github.com/wghami/SmartMDAO/tree/main/notebooks)** — one concept each,
+  committed with their outputs so GitHub shows what every cell printed. Start here.
+- **[Cookbook](https://github.com/wghami/SmartMDAO/blob/main/docs/cookbook.md)** — task by task,
+  every snippet executed by the test suite.
+- **[Testing guide](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md)** — try
+  everything yourself, step by step.
+- **[Scripts](https://github.com/wghami/SmartMDAO/tree/main/scripts)** — runnable demos, including
+  the [full Sellar optimization](https://github.com/wghami/SmartMDAO/blob/main/scripts/readme_quick_start.py).
+- **[All documentation](https://github.com/wghami/SmartMDAO/tree/main/docs)** — architecture,
+  roadmap, known issues and design records.
 
-# 📦 Installation
+## Contributing
 
-SmartMDAO is available on PyPI. We recommend using uv for lightning-fast installation, but standard pip works perfectly.
-
-Using `uv`:
-
-``` bash
-uv add smartmdao
-```
-
-Using `pip`:
-
-``` bash
-pip install smartmdao
-```
-
-*(Visualization is built in via matplotlib — no extra system packages required.)*
-
-### Optional extras
-
-The base install ships SciPy, the default optimizer backend, and nothing you do not need — as of
-1.8.0 it no longer drags in a Jupyter kernel or OpenTURNS. Two things are opt-in:
-
-``` bash
-pip install smartmdao[openturns]   # the 'openturns' optimizer backend
-pip install smartmdao[mcp]         # the MCP server, for use from a coding agent
-pip install smartmdao[openturns,mcp]
-```
-
-`optimize(problem, backend="openturns")` without the extra raises an `ImportError` telling you
-exactly this — the backend stays registered either way, so nothing fails at import time.
-
-## 🔍 Check a Pipeline Without Running It
-
-Every structural fact about a pipeline — execution order, feedback loops, type-edge mismatches —
-is derivable from signatures and annotations alone. So you can ask, before you run anything:
-
-```python
-from smartmdao import analyze, validate, explain
-
-analysis = analyze(pipeline, inputs=["z1", "z2", "x1"])
-analysis.recommended_solver        # 'HybridSolver'
-analysis.cycles[0].feedback_variables          # ('y1', 'y2')
-analysis.initial_guesses_required              # y2, needed by discipline_1
-
-for finding in validate(pipeline, inputs=["z1", "z2", "x1"]):
-    print(finding)     # ERROR: 'discipline_1' consumes 'y2' before anything produces it...
-
-print(explain(pipeline))   # the whole thing, in prose
-```
-
-`validate()` catches duplicate output names, type mismatches on every edge, missing inputs,
-unseeded feedback variables, and solver misconfiguration — all without executing a single
-discipline.
-
-### As an MCP server
-
-The same analysis is available to a coding agent over MCP, so it can check pipeline code it writes
-instead of guessing:
-
-``` bash
-pip install smartmdao[mcp]
-```
-
-Then point your client at the `smartmdao-mcp` command. It exposes `analyze_pipeline`,
-`validate_pipeline`, `explain_pipeline` and `render_pipeline_diagram`, plus the docs as resources.
-It finds your pipeline either as a module-level `Pipeline`, or by calling a factory annotated
-`-> Pipeline` — it never calls a function speculatively to see what comes back.
-
-It also exposes `smartmdao_cookbook`, which the server's instructions tell the agent to call
-*before* writing any SmartMDAO code — so generated pipelines use the real API rather than a
-plausible-looking one — and `run_pipeline`, which executes a pipeline in a child process under a
-wall clock. That last one defaults to a single sweep: enough to prove the code runs, and enough to
-measure what a full run would cost, so the agent can quote you a number before spending it. And
-`compare_runs`, which runs two pipelines on the same inputs and diffs the answers — the only way to
-prove a translation or refactor did not quietly change the result.
-Nothing it does executes a discipline. See
-[the design record](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md)
-for why it verifies rather than writes code for you.
-
-# 📚 Documentation
-
-**New here? Start with the [step-by-step testing guide](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md)** — set up, run the suite, watch the analysis catch a feedback loop nobody declared, and connect the server to a coding agent. Each step says what it proves.
-
-**Want to see it work before installing anything?** The
-[notebooks](https://github.com/wghami/SmartMDAO/tree/main/notebooks) are committed **with their
-outputs**, so GitHub renders what every cell actually printed — one concept per notebook, fifteen of
-them, from a first pipeline through to rule-backed disciplines and the mistakes that fail silently.
-
-Design records and internals reference live in
-[`docs/`](https://github.com/wghami/SmartMDAO/tree/main/docs):
-
-- **[Notebooks](https://github.com/wghami/SmartMDAO/tree/main/notebooks)** — one concept per notebook, executed and committed with outputs. The long-form companion to the cookbook; CI re-runs them so they cannot drift.
-
-- **[Architecture](https://github.com/wghami/SmartMDAO/blob/main/docs/architecture.md)** — how the library works internally: the execution path, `Step` introspection, the graph layer, `HybridSolver`'s SCC decomposition, and the optimizer bridge.
-- **[Roadmap](https://github.com/wghami/SmartMDAO/blob/main/docs/roadmap.md)** — what's planned, phase by phase, with exit criteria.
-- **[Cookbook](https://github.com/wghami/SmartMDAO/blob/main/docs/cookbook.md)** — task-indexed guidance: solvers, feedback loops, caching, optimization, and the mistakes that fail silently. Every snippet is executed by the test suite.
-- **[Testing guide](https://github.com/wghami/SmartMDAO/blob/main/docs/testing.md)** — try everything yourself, step by step, including what the tools deliberately will not do.
-- **[Known issues](https://github.com/wghami/SmartMDAO/blob/main/docs/known-issues.md)** — sharp edges, each with a severity and a fix direction. Worth a look before filing a bug; several are deliberate.
-- **[Design records](https://github.com/wghami/SmartMDAO/tree/main/docs/design)** — why things are the way they are, including the in-progress design for an [MCP connector](https://github.com/wghami/SmartMDAO/blob/main/docs/design/001-mcp-connector.md) that lets a coding agent analyze and verify SmartMDAO pipelines.
-
-# 🤝 Contributing & License
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-Before you start, read **[`docs/handoff.md`](https://github.com/wghami/SmartMDAO/blob/main/docs/handoff.md)** — it sets out what "done" means in this project: `docs/` updated, 100% test coverage, a didactic script demonstrating the change, and `run_all.py` green.
-
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE) file for details.
+Contributions are welcome. Read
+**[docs/handoff.md](https://github.com/wghami/SmartMDAO/blob/main/docs/handoff.md)** first: it
+defines what "done" means here — docs updated, 100% coverage, something that teaches the change,
+and every script green. MIT licensed; see
+[LICENSE](https://github.com/wghami/SmartMDAO/blob/main/LICENSE).
