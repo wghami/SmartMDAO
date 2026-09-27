@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. Paper-repro's second brief arrived on
-2026-09-27. Its plan (6.9–6.17, *second brief* below) awaits the maintainer's approval; then 006 and the sweep.
+2026-09-27. Its plan (6.9–6.18, *second brief* below) is approved and under way; then 006 and the sweep.
 **Baseline:** `v1.27.0` — 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -572,7 +572,9 @@ checked against 1.27.0 before being planned:
 | F-019 run only what an output needs | A feature request, not a defect. |
 | The R3 cost note | **Received.** 006 can now be written. |
 
-**1.28.0 — unblock smoke runs:**
+*Plan approved 2026-09-27, with 1.28 and 1.29 merged into one release.*
+
+**1.28.0 — unblock smoke runs, and let the project build its inputs:**
 
 - [ ] **6.9 — Design record 009: inputs across the JSON boundary.** It records both directions
       the brief proposes, and why both are taken: the coercion in 6.10 for scalars today, and
@@ -593,8 +595,6 @@ checked against 1.27.0 before being planned:
       already loaded. A test asserts the run's stderr carries no runpy warning, and another that
       every tool taking a `path` advertises `python` and `project`.
 
-**1.29.0 — inputs built by the project:**
-
 - [ ] **6.13 — `inputs_from` (F-011, F-016, F-017).**
       `run_pipeline(path, inputs_from="pkg.module:function", inputs_args=[...], inputs_kwargs={...})`,
       and the same on `compare_runs`.
@@ -611,7 +611,7 @@ checked against 1.27.0 before being planned:
       - **Known-issues** gains the silent float-key case: containers are checked on their outer
         type, so JSON-mangled keys pass. `inputs_from` is the way round it.
 
-**1.30.0 — the smaller items:**
+**1.29.0 — the smaller items:**
 
 - [ ] **6.14 — Group order and notes (F-012).** Among blocks ready at the same time, a group's
       place follows the registration order of its first step instead of plan position. Ungrouped
@@ -626,6 +626,11 @@ checked against 1.27.0 before being planned:
       `run_pipeline(targets=[...])`.
 - [ ] **6.17 — The queued diagram bug.** A defaulted parameter is no longer drawn as a missing
       input; see *Queued* below.
+
+**Last:**
+
+- [ ] **6.18 — Sweep the documents for staleness, the handoff included.** The guards catch counts,
+      links, statuses and source references. Read the rest for sentences that stopped being true.
 
 **Then the sweep, with the cost note as evidence:** 6.5's design record 006 is brought for
 approval before 6.7 is built. Points will be built by the project's code through 6.13's
