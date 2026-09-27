@@ -321,7 +321,8 @@ assert Pipeline(unit_checker=Aliases()).unit_checker.consistent("meter", "m")
 - **A bare string in `Annotated` is not a unit.** That space is shared with pydantic, Typer and
   plain descriptions, so only a `Unit` marker counts.
 - **Checked only when both ends declare one.** Everything else is unchecked, never an error.
-  `explain()` says how many connections were checked.
+  `explain()` says how many connections were checked, and lists the others with the end that lacks
+  a unit (`g -> h (c; producer)`), which is where a declaration would help next.
 - **Two consumers of one external input** declaring different units are reported too. So are two
   declaring types no single value satisfies (`float` and `str`).
 - **The diagram** shows units (`gain [dB]`) and draws a mismatched connection like a missing input.
@@ -502,6 +503,29 @@ A stub is information, not a problem: the pipeline is still valid, and every oth
 means something. Over MCP, `analyze_pipeline` lists `stubs`, and `run_pipeline` names them in its
 result — the run still happens, so the steps already written are exercised, and it stops at the
 first stub it reaches.
+
+**Only what an output needs.** `upstream(*outputs)` returns a smaller pipeline holding just the
+steps those outputs depend on, with a feedback loop kept whole. It is an ordinary pipeline, so
+everything above works on it; over MCP, `run_pipeline(targets=[...])` does the same.
+
+```python
+from smartmdao import Pipeline
+
+study = Pipeline(inputs=["a", "slow_input"])
+
+@study.step(outputs=["b"])
+def cheap(a: float) -> float:
+    return a * 2
+
+@study.step(outputs=["c"])
+def expensive(slow_input: float) -> float:
+    raise RuntimeError("never reached when only b is asked for")
+
+quick = study.upstream("b")
+assert [step.name for step in quick.steps] == ["cheap"]
+assert quick.inputs == ("a",)                        # slow_input is no longer needed
+assert quick.run(a=1.5)["b"] == 3.0
+```
 
 `validate()` returns every finding at once, worst first. The full set:
 
@@ -954,7 +978,8 @@ pipeline.visualize(inputs=["a"], output_path="results/cookbook.png", view=False)
 independent parts of a model interleave down it. A group — any label: a subsystem, a stage of a
 workflow — keeps its steps next to each other, in the run and on the diagram, and draws a band
 behind them. It never changes what is computed: only independent blocks change places, and a
-feedback loop's own order is never touched.
+feedback loop's own order is never touched. Groups ready at the same time follow the order they
+were written in.
 
 ```python
 import matplotlib

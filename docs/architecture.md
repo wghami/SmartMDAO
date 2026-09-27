@@ -49,7 +49,7 @@ copy of input recovery or cost estimation.
 
 ## The execution path
 
-`Pipeline.run(**inputs)` ([core.py:185](../smartmdao/core.py:185)) does, in order:
+`Pipeline.run(**inputs)` ([core.py:233](../smartmdao/core.py:233)) does, in order:
 
 0. **Nothing at all, if execution is suspended.** The MCP loader imports a file to find its
    pipeline, and importing runs top-level code — so a bare `pipeline.run(...)` at module level

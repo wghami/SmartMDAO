@@ -42,7 +42,7 @@ documentation guards — the same checks CI runs, a few minutes earlier.
 uv run pytest
 ```
 
-**You should see** `894 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `909 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -478,6 +478,9 @@ your project: `inputs_from="baseline:inputs"`, with `inputs_args` and `inputs_kw
 inside the run, in your project's environment, so the values never become JSON.
 `inputs_used.built_by_project` lists what it built, and anything you also pass in `inputs` wins.
 
+**Run only what you need.** `targets=["b"]` runs just the steps output `b` depends on. An
+expensive branch nothing asked for is never started, and its inputs are no longer required.
+
 ---
 
 ## Step 7f — The one check nothing else can do
@@ -571,7 +574,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 894 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 909 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |

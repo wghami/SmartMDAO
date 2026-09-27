@@ -46,14 +46,13 @@ only.
 
 ---
 
-## 🟡 The diagram draws a parameter with a default as a missing input
+## ✅ RESOLVED in 1.29.0 — the diagram drew a parameter with a default as a missing input
 
-`PipelineVisualizer` classifies a variable as missing when it is consumed, not produced and not
-passed, without asking whether the parameter has a default. `latency(distance, note=0.0)` therefore
-gets a red `note (?)` hexagon, while `validate()`, which uses only required parameters, correctly
-reports nothing. The two views of one pipeline disagree. **Fix direction:** classify with the
-analysis' `_required_inputs`, and decide whether a defaulted, unsupplied parameter is drawn at all.
-Queued in the [roadmap](roadmap.md).
+`PipelineVisualizer` marked a variable missing when it was consumed, not produced and not passed,
+without asking whether the parameter had a default. So `latency(distance, note=0.0)` got a red
+`note (?)`, while `validate()` correctly reported nothing. **Fixed:** the diagram uses
+`validate()`'s rule (missing means required somewhere, and neither produced nor passed), and draws
+a defaulted, unsupplied parameter as `note (default)`.
 
 ---
 
@@ -724,7 +723,7 @@ on almost every correct pipeline.
 ## 🟡 Which variable needs an initial guess depends on step *names*
 
 Inside a cyclic block the shared planner, which `HybridSolver` runs, puts the steps in `sorted`
-alphabetical order for deterministic execution ([graph.py:306](../smartmdao/graph.py:306)). The alphabetically-first step therefore runs
+alphabetical order for deterministic execution ([graph.py:311](../smartmdao/graph.py:311)). The alphabetically-first step therefore runs
 first, and whichever of its inputs the cycle has not produced yet must be supplied to `run()` as
 an initial guess.
 
