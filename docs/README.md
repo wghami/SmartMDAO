@@ -93,6 +93,7 @@ removed. Decisions live in the roadmap and the design records, not there.
 - [2026-09-26 — paper-repro, first brief](requests/2026-09-26-paper-repro.md) → roadmap Phase 6
 - [2026-09-26 — response: what 1.24.0–1.27.0 changed](requests/2026-09-26-response-1.24-1.27.md)
 - [2026-09-27 — paper-repro, second brief](requests/2026-09-27-paper-repro-f011.md) → roadmap Phase 6, *second brief*
+- [2026-09-27 — response: what 1.28.0–1.29.0 changed](requests/2026-09-27-response-1.28-1.29.md)
 
 ## Conventions
 

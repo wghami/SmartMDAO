@@ -5,8 +5,9 @@ agent. Read this before starting work.
 
 **State as of v1.29.0:** `main` is clean. 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 Roadmap **Phases 0–5 are complete**. **Phase 6** (lessons from paper-repro, a downstream project
-that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.27.0. **Work is paused
-on purpose, waiting for paper-repro's feedback**; see [Next](#next) for what to do when it arrives.
+that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.29.0: its first brief
+in 1.24–1.27, its second in 1.28–1.29. **Next is design record 006, the sweep**, written from the cost
+note in the second brief; see [Next](#next).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -284,51 +285,66 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-**Phases 0–5 are complete; Phase 6 is paused, waiting for paper-repro's feedback.** Phase 6 came
-from [a brief](requests/2026-09-26-paper-repro.md) by paper-repro, a downstream project that uses the
-MCP connector on a model outside aerospace. Six of its seven requests shipped in 1.24.0–1.27.0. A
-note describing those releases was prepared for them on 2026-09-26. It asks them to upgrade to
-1.27.0 and to report on their first real campaign. The seventh request, the sweep, is deliberately
-waiting for that report.
+**Phases 0–5 are complete; Phase 6 has one item left, the sweep.** Phase 6 comes from two briefs by
+paper-repro, a downstream project that uses the MCP connector on a model outside aerospace. Every
+request and every response is kept in [`docs/requests/`](requests/):
 
-### When paper-repro's feedback arrives
+| Date | Direction | What |
+|---|---|---|
+| 2026-09-26 | in | [First brief](requests/2026-09-26-paper-repro.md): R1–R7 |
+| 2026-09-26 | out | [Response](requests/2026-09-26-response-1.24-1.27.md): six of seven shipped in 1.24.0–1.27.0 |
+| 2026-09-27 | in | [Second brief](requests/2026-09-27-paper-repro-f011.md): F-010…F-019, and the R3 cost note |
+| 2026-09-27 | out | [Response](requests/2026-09-27-response-1.28-1.29.md): all addressed in 1.28.0–1.29.0; F-010 not reproduced |
 
-1. **Keep it as evidence** in `docs/requests/` next to the first brief, edited down to what bears
-   on SmartMDAO, and link it from the roadmap. Decisions go in the roadmap and the design records,
-   not in the brief.
-2. **Check every claim against the code before planning.** That is how the first brief was
-   handled, and it is where SmartMDAO pushed back: one input mechanism rather than two, no
-   reordering inside a loop, and never converting units. Reproduce each reported problem first.
-3. **Write design record 006, the sweep, from their real campaign.** It must settle:
+### The sweep: what to do next
+
+1. **Write design record 006 from the cost note** in the second brief. It is measured evidence:
+   Starlink routing at about 1.1 s a realization, downlink allocation at 0.5–2.4 s a slot, and a
+   74-run figure at 4–5 hours serial. The record must settle:
    - the design of a campaign: a grid, explicit points, or both;
+   - points built by the project's code through `inputs_from` (1.28.0), never JSON;
    - seeds as ordinary inputs;
-   - a smoke run that quotes the whole campaign's cost first;
-   - points run in parallel and isolated, on [007](design/007-project-interpreter.md)'s worker;
-   - a resumable store keyed by the model's hash, the SmartMDAO version the worker reports, and the
-     inputs;
-   - failed points recorded, never dropped;
+   - a one-point run that quotes the whole campaign's cost first;
+   - points run in parallel and isolated, on [007](design/007-project-interpreter.md)'s worker,
+     over realizations and slots, which are independent;
+   - a resumable store per point, keyed by the model's hash, the SmartMDAO version the worker
+     reports, and the inputs;
+   - failed points recorded, never dropped, including a solver that mis-reports infeasibility or
+     answers "inaccurate";
    - means and confidence intervals over seeds;
    - refusing declared side effects unless `allow_effects=True`;
+   - `upstream()` (1.29.0), to compute only the outputs a campaign reports;
    - how it is exposed over MCP.
 
-   The roadmap's 6.5 and 6.7 have the detail.
-4. **Build 6.7 and move `compare_runs` onto the worker with it.** `compare_runs` is the one tool
-   still using the server's environment ([known-issues](known-issues.md)). The sweep needs the
-   same per-point path, so build it once. Then check Phase 6's exit criterion. Its last clause, a
-   seeded, resumable campaign in the project's own environment with the cost quoted first, is
-   what the sweep delivers.
-5. **Anything else they raise** becomes a Phase 6 item if it finishes their workflow, or opens
-   Phase 7 if it does not.
+   Bring it for approval before building. The roadmap's 6.5 and 6.7 have the detail.
+2. **Build 6.7, and move `compare_runs` onto the worker with it.** `compare_runs` is the one tool
+   still using the server's environment ([known-issues](known-issues.md)), and the sweep needs the
+   same per-point path. Then check Phase 6's exit criterion, whose last clause is what the sweep
+   delivers.
+
+### When a request arrives
+
+This is how both briefs were handled, and it held up.
+
+1. **Store an edited copy** in `docs/requests/` under a dated name, with anything describing the
+   requester's agents, roles or internal paths removed, and link it from the docs index and the
+   roadmap.
+2. **Check every claim against the code before planning.** In the second brief, F-018 was worse
+   than reported (a crash, not a missing feature), F-016 had a silent case nobody had noticed, and
+   F-010 did not reproduce at all.
+3. **Write the plan into the roadmap as tickable items, and get the maintainer's approval.** Tick
+   each item as it lands.
+4. **Store the response** in `docs/requests/` too, and end with a staleness sweep that includes
+   this file.
 
 ### Any time, independent of paper-repro
 
-- **Queued:** the diagram draws a parameter with a default as a missing input, while `validate()`
-  treats it as optional. See the roadmap's *Queued* section and known-issues. Small.
-- The other 🟡 entries in [known-issues.md](known-issues.md), each with a fix direction.
+- The 🟡 entries in [known-issues.md](known-issues.md), each with a fix direction. The one most
+  likely to bite next: containers are checked on their outer type only, so a `Dict[float, float]`
+  with string keys passes.
 - **A staleness sweep before each release.** The guards catch counts, links, statuses and source
-  line references, but not a sentence that has quietly become untrue. The sweep after 1.27.0
-  found 11 of 16 source references pointing at the wrong line, and a testing guide still
-  expecting version 1.14.0.
+  line references (the last one caught its first drift the day it merged), but not a sentence that
+  has quietly become untrue.
 
 ### Deliberately not scheduled
 
@@ -354,6 +370,9 @@ only once CI has run.
 - **Do not break a downstream project on the day the server is upgraded.** A discovered
   environment below the version floor falls back to the server's, with a note, instead of being
   refused. Refuse only what the caller named explicitly.
+- **A request's severity is a claim, and so is its cause.** Reproduce before believing, both ways:
+  F-018 was reported as a missing feature and was a crash, and F-010 was reported as a gap and did
+  not reproduce.
 - **Say only what can be proven.** A group split is reported with the dependency cycle that forces
   it, never as "this could not have been arranged better", because minimising splits is a hard
   scheduling problem.

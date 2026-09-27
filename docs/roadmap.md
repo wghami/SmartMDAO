@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. Paper-repro's second brief arrived on
-2026-09-27. Its plan (6.9–6.19, *second brief* below) is approved; 6.9–6.13 shipped in 1.28.0 and 6.14–6.17 in 1.29.0; then 006 and the sweep.
+6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0, and the second brief (6.9–6.19) in 1.28.0–1.29.0.
+What remains is design record 006 and the sweep (6.7). See [handoff](handoff.md#next).
 **Baseline:** `v1.29.0` — 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -642,11 +642,14 @@ checked against 1.27.0 before being planned:
 
 **Last:**
 
-- [ ] **6.18 — The response to paper-repro**, saying what 1.28.0 and 1.29.0 changed and what was
+- [x] **6.18 — The response to paper-repro**, saying what 1.28.0 and 1.29.0 changed and what was
       not reproduced (F-010). Stored in `docs/requests/` with the request it answers: every request
       and every response is kept there.
-- [ ] **6.19 — Sweep the documents for staleness, the handoff included.** The guards catch counts,
+- [x] **6.19 — Sweep the documents for staleness, the handoff included.** The guards catch counts,
       links, statuses and source references. Read the rest for sentences that stopped being true.
+      *Done 2026-09-27:* [the response](requests/2026-09-27-response-1.28-1.29.md) is stored, and the
+      sweep rewrote the handoff (it still said "paused, waiting for feedback"), the roadmap's position,
+      the docs index and the architecture page's account of group tie-breaks.
 
 **Then the sweep, with the cost note as evidence:** 6.5's design record 006 is brought for
 approval before 6.7 is built. Points will be built by the project's code through 6.13's
