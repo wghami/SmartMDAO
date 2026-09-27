@@ -554,22 +554,22 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       JSON descriptions and their recorded outputs, never the inputs, which the project's code
       rebuilds when a point runs. The steps:
 
-      - [ ] **6.7a — The campaign worker.** `python -m smartmdao.mcp._sweeper` loads the pipeline
+      - [x] **6.7a — The campaign worker.** `python -m smartmdao.mcp._sweeper` loads the pipeline
             once in the project's environment, keeps only what the recorded outputs need, refuses
             declared effects unless allowed, reports its model hash, then runs points from JSON
             lines. The loader records the user files a load imported, which the hash is taken over.
-      - [ ] **6.7b — `Campaign`: design, quote, run, store, resume, aggregate.** Grid and points,
+      - [x] **6.7b — `Campaign`: design, quote, run, store, resume, aggregate.** Grid and points,
             seeds as inputs, and keys over model hash, SmartMDAO version and point. The store
             appends and flushes each point to disk. A pool of workers runs under a per-point
             timeout and a required budget, with recycling. Every point ends in one of five
             statuses, and aggregates state what they excluded.
-      - [ ] **6.7c — Detached, and interruption-proof.** `start()` runs the coordinator in its own
+      - [x] **6.7c — Detached, and interruption-proof.** `start()` runs the coordinator in its own
             process. A heartbeat lets `status()` tell *running* from *interrupted*. `stop()` stops
             dispatching. A second coordinator on the same store is refused, and a new `start()`
             resumes an interrupted one. Tested by killing a coordinator mid-campaign.
-      - [ ] **6.7d — Over MCP:** `sweep_pipeline` (quote, or start with a budget), `sweep_status`,
+      - [x] **6.7d — Over MCP:** `sweep_pipeline` (quote, or start with a budget), `sweep_status`,
             `sweep_stop`.
-      - [ ] **6.7e — `compare_runs` in each side's own environment**, through the worker. The last
+      - [x] **6.7e — `compare_runs` in each side's own environment**, through the worker. The last
             tool using the server's environment.
       - [ ] **6.7f — Teach it:** cookbook topic, notebook 18, testing guide, architecture,
             known-issues, and 006 marked implemented with its findings. Release 1.30.0.
