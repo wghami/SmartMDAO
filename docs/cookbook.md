@@ -19,6 +19,7 @@ Each section names the scripts in [`scripts/`](../scripts) that go deeper. Those
 | [`caching`](#caching) | Expensive disciplines, repeated evaluations |
 | [`optimization`](#optimization) | Driving a pipeline with an optimizer |
 | [`analysis`](#analysis) | Inspecting a pipeline without running it |
+| [`campaigns`](#campaigns) | Many points — a grid, realizations over seeds — quoted, parallel, resumable |
 | [`discretisation`](#discretisation) | Turning a number into a symbolic fact, with the threshold declared |
 | [`rules`](#rules) | Disciplines backed by a reviewed ASP program |
 | [`side-effects`](#side-effects) | Steps that write a file, launch a subprocess or post to an API |
@@ -559,6 +560,58 @@ row.
 **Deeper:** [`pipeline_analysis_demo.py`](../scripts/pipeline_analysis_demo.py),
 [`mcp_connector_demo.py`](../scripts/mcp_connector_demo.py),
 [`pipeline_discovery_demo.py`](../scripts/pipeline_discovery_demo.py)
+
+---
+
+## campaigns
+
+Many points of one pipeline: a grid, a list, realizations over seeds. A campaign is quoted from one
+point before it starts, runs its points in parallel in the project's own environment, and
+**resumes from where it stopped, whatever stopped it**.
+
+```python
+import pathlib, tempfile
+from smartmdao.sweep import Campaign
+
+workdir = pathlib.Path(tempfile.mkdtemp())
+(workdir / "model.py").write_text(
+    "import random\n"
+    "from smartmdao import Pipeline\n"
+    "pipeline = Pipeline(inputs=['scale', 'seed'])\n"
+    "@pipeline.step(outputs=['value'])\n"
+    "def noisy(scale: float, seed: int) -> float:\n"
+    "    return scale * random.Random(seed).random()\n"
+)
+
+campaign = Campaign(
+    workdir / "model.py", store=workdir / "store",
+    grid={"scale": [1.0, 2.0]}, seeds=range(5), seed_input="seed",
+    outputs=["value"], workers=1,
+)
+assert campaign.quote()["points"] == 10          # one point run and measured; the rest estimated
+campaign.run(budget_seconds=120)                 # a budget is required: there is no default
+assert campaign.status()["counts"] == {"ok": 10}
+
+groups = campaign.aggregate()["groups"]           # mean, std, 95 % interval per group
+assert [group["outputs"]["value"]["n"] for group in groups] == [5, 5]
+```
+
+- **Seeds are inputs.** The model draws its randomness from the input named by `seed_input`.
+  A campaign whose seed no step reads is refused: its "realizations" would all be one run.
+- **Build each point's inputs with `inputs_from`.** A point's values become the function's keyword
+  arguments, called inside the worker, so arrays and tuples never cross JSON.
+- **Resumable.** Each finished point is written to `<store>/points.jsonl` and flushed to disk
+  before the next is handed out. Run the same campaign again, after a budget, a `stop()`, or a
+  crash, and only the missing points run. The store holds point descriptions and outputs, never
+  inputs, so no input type prevents a resume. Edit the model, and its old points are set aside,
+  never averaged in.
+- **Failures are recorded**, as `error`, `timed_out`, `crashed` or `not_converged`. Aggregates
+  exclude them, and count them beside the numbers.
+- **`start()`** runs it detached. It outlives the session, and `status()` says whether it is
+  running or was interrupted. Over MCP: `sweep_pipeline` (a quote, or `start=True` with a budget),
+  `sweep_status`, `sweep_stop`.
+
+Why it is built this way: [design record 006](design/006-sweep.md).
 
 ---
 

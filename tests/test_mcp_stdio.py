@@ -104,6 +104,9 @@ def test_tools_are_listed_over_the_protocol(client):
         "validate_pipeline",
         "explain_pipeline",
         "render_pipeline_diagram",
+        "sweep_pipeline",
+        "sweep_status",
+        "sweep_stop",
     }
 
 

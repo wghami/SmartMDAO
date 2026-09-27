@@ -67,6 +67,10 @@ class LoadedPipeline:
     #: Variable names the file itself passes to `run()`, recovered from the
     #: source without executing it. See `inputs_in_source`.
     inputs_in_source: Tuple[str, ...] = ()
+    #: The entry file and every module of the user's own that loading it
+    #: imported, sorted. What a campaign's model hash is taken over
+    #: (docs/design/006): edit any of them and a resumed campaign recomputes.
+    source_files: Tuple[str, ...] = ()
 
 
 def inputs_in_source(path) -> Tuple[str, ...]:
@@ -272,7 +276,7 @@ def _package_root(directory: Path) -> Optional[Path]:
     return root
 
 
-def _forget_user_modules(names, search_dir: Path) -> None:
+def _forget_user_modules(names, search_dir: Path) -> List[str]:
     """
     Drop the user's own modules this load imported, so the next load reads them
     again.
@@ -283,7 +287,10 @@ def _forget_user_modules(names, search_dir: Path) -> None:
     restarted: the pipeline file was re-read, the discipline it imported was
     not. Installed libraries are left alone; re-importing those is slow at
     best, and some extension modules cannot be imported twice.
+
+    Returns the files of the modules it dropped.
     """
+    forgotten: List[str] = []
     for name in names:
         location = getattr(sys.modules.get(name), "__file__", None)
         if not location:
@@ -291,6 +298,8 @@ def _forget_user_modules(names, search_dir: Path) -> None:
         path = Path(location).resolve()
         if path.is_relative_to(search_dir) and not {"site-packages", "dist-packages"} & set(path.parts):
             sys.modules.pop(name, None)
+            forgotten.append(str(path))
+    return forgotten
 
 
 def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
@@ -365,11 +374,12 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
         if added_to_path:
             sys.path.remove(parent)
         sys.modules.pop(module_name, None)
-        _forget_user_modules(set(sys.modules) - already_loaded, search_dir)
+        user_files = _forget_user_modules(set(sys.modules) - already_loaded, search_dir)
 
     instances = _pipeline_variables(module)
     factories = _pipeline_factories(module)
     in_source = inputs_in_source(resolved)
+    source_files = tuple(sorted({str(resolved), *user_files}))
 
     # --- Explicitly named -----------------------------------------------------
     if variable is not None:
@@ -382,6 +392,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                 path=resolved,
                 source="variable",
                 inputs_in_source=in_source,
+                source_files=source_files,
             )
 
         if callable(found) and not inspect.isclass(found):
@@ -404,6 +415,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                     path=resolved,
                     source="factory",
                     inputs_in_source=in_source,
+                source_files=source_files,
                 )
 
             # Not annotated as a factory. Honour the caller's choice only if it
@@ -417,6 +429,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
                     path=resolved,
                     source="factory",
                     inputs_in_source=in_source,
+                source_files=source_files,
                 )
 
         raise PipelineLoadError(
@@ -434,6 +447,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
             path=resolved,
             source="variable",
             inputs_in_source=in_source,
+                source_files=source_files,
         )
 
     if not instances and len(ready) == 1:
@@ -443,6 +457,7 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
             path=resolved,
             source="factory",
             inputs_in_source=in_source,
+                source_files=source_files,
         )
 
     if not instances and not factories:

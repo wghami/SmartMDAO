@@ -46,6 +46,16 @@ only.
 
 ---
 
+## ⚪ A campaign's workers finish their current point after a hard kill
+
+When a campaign's coordinator is killed outright (`kill -9`), its workers lose their input, finish
+the point they were running, fail to send the result, and exit. A point hanging at that moment
+keeps its worker alive until it returns. Nothing is lost or recorded twice: only the coordinator
+writes the store, and the next start runs that point again. Documented so an orphaned worker in
+`ps` is not a surprise.
+
+---
+
 ## ✅ RESOLVED in 1.29.0 — the diagram drew a parameter with a default as a missing input
 
 `PipelineVisualizer` marked a variable missing when it was consumed, not produced and not passed,
@@ -94,13 +104,13 @@ on, and that text comes back in `stderr`.
 
 ---
 
-## 🟡 compare_runs uses the server's environment
+## ✅ RESOLVED in 1.30.0 — compare_runs used the server's environment
 
-Every other tool handles a file in its own project's environment (1.26.0). `compare_runs` still
-loads both files in the server's process before running them, so it has the pre-1.26.0 limit: both
-files' imports must be installed where the server runs. **Fix direction:** run each side through
-the worker's `run` op, resolved separately, and move the side-effect check into the worker. Record
-006 needs the same per-point path, so do it with the sweep.
+Every other tool handled a file in its own project's environment from 1.26.0, but `compare_runs`
+still loaded both files in the server's process, so both files' imports had to be installed where
+the server ran. **Fixed** with the campaigns work (006): both files are loaded in their own
+environments and checked for declared effects before either runs, then each side runs through
+the worker.
 
 ---
 

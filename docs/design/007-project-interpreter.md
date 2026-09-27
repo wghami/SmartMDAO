@@ -1,7 +1,7 @@
 # 007 — Running each pipeline with its own project's Python
 
-**Status:** implemented — 1.26.0 (roadmap 6.6), amended by the findings at the end; 6.7 (the
-sweep, record 006) builds on the same worker
+**Status:** implemented — 1.26.0 (roadmap 6.6), amended by the findings at the end; the sweep (006)
+was built on the same worker in 1.30.0
 **Date:** 2026-09-26
 **Relates to:** [001](001-mcp-connector.md) (what the subprocess buys, and what it does not);
 [003](003-determinism-and-the-engineer-in-the-loop.md) (report, do not guess); request R4 in
@@ -200,3 +200,8 @@ server's own environment is no slower than today. Timeouts and crash isolation a
   environment's `site-packages`, so the version checks cost no spawn. A metadata-only query of
   the interpreter is used for an explicit interpreter outside a venv, where there is no such
   directory.
+- **The persistent worker was built for campaigns** (006, 1.30.0). A campaign met the trigger this
+  record set: a small point costs 0.71 s through a fresh process and 0.66 ms in a warm one. Its
+  pool lives only as long as its campaign, which keeps the lifecycle this record worried about
+  small. Tool calls outside campaigns still spawn per call.
+

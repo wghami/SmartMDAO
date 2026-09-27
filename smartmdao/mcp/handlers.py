@@ -13,7 +13,8 @@ from ..analysis import analyze, explain, stub_status, unit_connections, validate
 from ..discretisation import effective_steps
 from .protocol import DEFAULT_BUDGET_SWEEPS, SMOKE
 from .loader import _UNRESOLVED
-from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, compare_runs as _compare_runs
+from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, _summary, diff_states
+from .protocol import FULL, RUNGS
 from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
 from .loader import PipelineLoadError, input_map_in_source, load_pipeline
 from .rendering import render_xdsm
@@ -215,6 +216,7 @@ def _run(
     inputs_args: Optional[Sequence[Any]] = None,
     inputs_kwargs: Optional[Dict[str, Any]] = None,
     targets: Optional[Sequence[str]] = None,
+    use_source_literals: bool = True,
 ) -> Dict[str, Any]:
     """
     Executes a pipeline in a child process, under a wall clock.
@@ -246,14 +248,17 @@ def _run(
 
     # Names alone are not enough to *run* a pipeline, so the literal values in
     # the file's own run() call are recovered too. The caller always wins.
+    # compare_runs passes use_source_literals=False: it hands both sides the
+    # same inputs, and each side's own literals would make them differ.
+    in_source = input_map_in_source(loaded.path) if use_source_literals else {}
     from_source = {
         name: value
-        for name, value in input_map_in_source(loaded.path).items()
+        for name, value in in_source.items()
         if name not in supplied and value is not _UNRESOLVED
     }
     unresolved = [
         name
-        for name, value in input_map_in_source(loaded.path).items()
+        for name, value in in_source.items()
         if name not in supplied and value is _UNRESOLVED
     ]
 
@@ -324,7 +329,27 @@ def _run(
 
 #: What the worker can be asked to do. The worker calls these same functions,
 #: so a project's environment and the server's run one implementation.
+def _effects(path: str, variable: Optional[str] = None, because: str = "") -> Dict[str, Any]:
+    """
+    Loads a file and reports the steps that declare side effects - in the file's
+    own environment, without running anything. What compare_runs asks of both
+    files before it runs either.
+    """
+    from ..effects import effects_refusal_message
+
+    loaded, failure = _load(path, variable)
+    if failure:
+        return failure
+    declared = [step for step in effective_steps(loaded.pipeline) if step.has_effects]
+    return {
+        "ok": True,
+        "declared": [step.name for step in declared],
+        "refusal": effects_refusal_message(declared, because) if declared else None,
+    }
+
+
 LOCAL_OPS = {
+    "effects": _effects,
     "analyze": _analyze,
     "validate": _validate,
     "explain": _explain,
@@ -423,7 +448,7 @@ def compare_runs(
     inputs: Optional[Dict[str, Any]] = None,
     variable_a: Optional[str] = None,
     variable_b: Optional[str] = None,
-    rung: str = "full",
+    rung: str = FULL,
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     allow_effects: bool = False,
@@ -438,18 +463,91 @@ def compare_runs(
     number is worse than no conversion, because it looks cleaner and gets
     trusted. Neither the agent nor static analysis can catch that; only running
     both and comparing can.
+
+    Each side is resolved and run in its own project's environment (since
+    1.30.0; docs/design/007), through the same `run` op as run_pipeline. Before
+    either runs, both are loaded there and checked for declared side effects:
+    both files really execute, so every effect would run twice, and one side's
+    must not fire before the other is refused. `allow_effects=True` permits it.
+
+    The rung defaults to `full`: a comparison of two single sweeps says little,
+    since the divergence that matters is where each one settles. Inputs are
+    identical on both sides - what the caller supplies, or else the literals in
+    path_a's own run() call - and neither side adds its own literals.
     """
-    return _compare_runs(
-        path_a=path_a,
-        path_b=path_b,
-        inputs=inputs,
-        variable_a=variable_a,
-        variable_b=variable_b,
-        rung=rung,
-        budget_sweeps=budget_sweeps,
-        timeout_seconds=timeout_seconds,
-        allow_effects=allow_effects,
-        inputs_from=inputs_from,
-        inputs_args=list(inputs_args) if inputs_args else None,
-        inputs_kwargs=inputs_kwargs,
-    )
+    if rung not in RUNGS:
+        return {"ok": False, "error": f"Unknown rung {rung!r}; expected one of {list(RUNGS)}."}
+
+    sides = (("a", path_a, variable_a), ("b", path_b, variable_b))
+    because = "compare_runs executes BOTH files, so every side effect would run twice, once per file"
+    for label, path, variable in sides:
+        checked = _dispatch("effects", path, None, None, worker.ANALYSIS_TIMEOUT_SECONDS,
+                            variable=variable, because=because)
+        if not checked.get("ok"):
+            return checked
+        if checked["refusal"] and not allow_effects:
+            return {"ok": False, "error": f"{path}: {checked['refusal']}", "refused": "side-effects"}
+
+    supplied = dict(inputs or {})
+    recovered: Dict[str, Any] = {}
+    if not supplied:
+        recovered = {
+            name: value for name, value in input_map_in_source(path_a).items() if value is not _UNRESOLVED
+        }
+    shared = {**recovered, **supplied}
+
+    runs = {}
+    for label, path, variable in sides:
+        runs[label] = _dispatch(
+            "run", path, None, None, timeout_seconds + worker.STARTUP_ALLOWANCE_SECONDS,
+            inputs=shared, variable=variable, rung=rung, budget_sweeps=budget_sweeps,
+            timeout_seconds=timeout_seconds, inputs_from=inputs_from, inputs_args=inputs_args,
+            inputs_kwargs=inputs_kwargs, use_source_literals=False,
+        )
+        if runs[label].get("refused"):
+            # Refused before running (a value that cannot cross the boundary,
+            # an argument an older project does not know): say so as itself,
+            # and do not run the other side for nothing.
+            return {**runs[label], "error": f"{path}: {runs[label].get('error')}"}
+
+    coerced = sorted({n for r in runs.values() for n in r.get("inputs_used", {}).get("coerced", [])})
+    built = sorted({n for r in runs.values() for n in r.get("inputs_used", {}).get("built_by_project", [])})
+    inputs_used = {
+        "supplied": sorted(supplied),
+        "recovered_from_a": sorted(recovered),
+        **({"coerced": coerced} if coerced else {}),
+        **({"built_by_project": built} if inputs_from else {}),
+    }
+
+    failed = [label for label, result in runs.items() if not result.get("ok")]
+    if failed:
+        return {
+            "ok": False,
+            "error": (
+                f"Cannot compare: {' and '.join(sorted(failed))} did not run. "
+                f"A comparison needs both sides."
+            ),
+            "runs": runs,
+            "inputs_used": inputs_used,
+        }
+
+    comparison = diff_states(runs["a"].get("state", {}), runs["b"].get("state", {}))
+    summaries = {label: {**_summary(result), "interpreter": result.get("interpreter")}
+                 for label, result in runs.items()}
+    convergence_differs = summaries["a"]["converged"] != summaries["b"]["converged"]
+    if convergence_differs:
+        comparison["match"] = False
+
+    return {
+        "ok": True,
+        **comparison,
+        "convergence_differs": convergence_differs,
+        "runs": summaries,
+        "inputs_used": {
+            **inputs_used,
+            "note": (
+                "The same inputs were used for both sides; a comparison on "
+                "different inputs would mean nothing."
+            ),
+        },
+    }

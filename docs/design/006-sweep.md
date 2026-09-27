@@ -1,6 +1,6 @@
 # 006 — Campaigns: many points, quoted first, resumable, never silent about failures
 
-**Status:** proposed — not implemented; roadmap 6.7 builds it after approval
+**Status:** implemented — 1.30.0 (roadmap 6.7), as proposed; findings at the end
 **Date:** 2026-09-27
 **Relates to:** [003](003-determinism-and-the-engineer-in-the-loop.md) (a number before a
 commitment; report, do not guess); [007](007-project-interpreter.md) (the worker, and the
@@ -202,16 +202,13 @@ tool using the server's environment is gone.
 - **Averaging whatever finished.** It is simpler, and it misreports every campaign that had
   failures.
 
-## Open questions for the maintainer
+## Open questions for the maintainer — answered 2026-09-27
 
-1. **Detached campaigns over MCP** (start, status, stop), as proposed, or blocking only?
-2. **A budget required to start**, with no default, as proposed, or a default budget?
-3. **`not_converged` points excluded from aggregates and counted**, as proposed, or included with
-   a flag?
-4. **Recorded outputs as JSON**, with arrays capped (proposed), or arrays stored in HDF5 through
-   `h5py`, already a dependency?
-5. **Scope of the Python API:** file-based `Campaign` only (proposed), or also in-process
-   `Pipeline` objects, run sequentially, without isolation?
+All five as proposed: detached campaigns over MCP, a budget required to start, `not_converged`
+excluded and counted, outputs as JSON with arrays capped, and a file-based `Campaign` only. The
+maintainer added one requirement: **a campaign must resume from where it stopped, whatever stopped
+it**, and the store must not depend on an input's type. HDF, for one, cannot hold every input. Met
+by design: points are fsynced one at a time, and the store never holds inputs.
 
 ## Exit criterion for 6.7
 
@@ -224,3 +221,29 @@ The requester's routing campaign shape is reproduced end to end:
 - aggregates with confidence intervals that state what they excluded.
 
 `compare_runs` runs in each side's own environment.
+
+---
+
+## Findings from building it (6.7)
+
+- **The resume requirement, tested by doing it.** A detached campaign killed with `SIGKILL` shows
+  as *interrupted* once its heartbeat is stale. Started again, it ends with exactly one record per
+  point: 20 for 20, none computed twice. A budget stop and a stop request resume the same way.
+- **Six bugs, each found by a test before merge:**
+  - a replaced worker's slot kept the dead process's pipe (`BrokenPipeError` on the next point);
+  - waiting for a replacement to load discarded other workers' results arriving meanwhile;
+  - reopening a store sorted seeds as strings, so `10` came before `2` and a resume was refused as
+    "a different campaign";
+  - keying a campaign rebuilt its whole design per key, which is quadratic, and would have meant
+    tens of millions of encodings for the requester's 7,400-point figure;
+  - a stop request let one more point start, because it was checked only between loop turns;
+  - a module cached under the same name from another project stood in for the project's own,
+    both in the model hash and in `inputs_from`. Modules are now located on the entry file's
+    search path first.
+- **`compare_runs` moved as planned (section 8).** Both files are loaded in their own environments
+  and checked for effects before either runs. The whole-number repair is now per side: the rare
+  case of one side declaring `float` and the other `int` for the same input gets each its own
+  type.
+- **Orphaned workers after a hard kill** finish their current point and exit. Documented in
+  known-issues; nothing is recorded twice, because only the coordinator writes the store.
+

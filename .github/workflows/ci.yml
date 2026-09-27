@@ -73,7 +73,7 @@ jobs:
       - name: Environment and loader tests
         env:
           MPLBACKEND: Agg
-        run: uv run pytest tests/test_environment.py tests/test_loader_packages.py -q --no-cov
+        run: uv run pytest tests/test_environment.py tests/test_loader_packages.py tests/test_campaigns.py -q --no-cov
 
   # Definition of Done item 1, enforced: a PR that changes smartmdao/ must
   # change docs/ too, or say why not with "Docs: not needed — <reason>" in its

@@ -25,6 +25,7 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 | 15 | [Side effects](15-side-effects.ipynb) | Steps that write files, launch processes or call APIs — declared, refused, latched |
 | 16 | [Pitfalls](16-pitfalls.ipynb) | Mistakes that produce a wrong answer rather than an error |
 | 17 | [Units](17-units.ipynb) | Declaring units, and catching dB wired into linear — checked, never converted |
+| 18 | [Campaigns](18-campaigns.ipynb) | Many points, quoted first, resumable whatever stops them, failures never dropped |
 
 ## Reading order
 
@@ -32,7 +33,7 @@ from `run_notebooks.py` executing the files, not from anyone typing what they ex
 there on, every notebook draws the pipeline it is describing, so you can see whether it is linear or
 cyclic instead of reconstructing that from parameter names.
 
-6–15 and 17 are independent and can be read as needed. **16 is the one to read twice** — everything in it
+6–15, 17 and 18 are independent and can be read as needed. **16 is the one to read twice** — everything in it
 runs, converges, and is wrong.
 
 ## Regenerating
