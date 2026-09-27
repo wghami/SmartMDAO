@@ -1860,7 +1860,7 @@ wheels = [
 
 [[package]]
 name = "smartmdao"
-version = "1.28.0"
+version = "1.29.0"
 source = { editable = "." }
 dependencies = [
     { name = "h5py" },
