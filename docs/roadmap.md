@@ -4,8 +4,8 @@ Living document. Update the checkboxes as work lands; each phase states the cond
 it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. **Paused, waiting for paper-repro's feedback**
-on their first real campaign; then 006 and the sweep (6.7). See [handoff](handoff.md#next).
+6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. Paper-repro's second brief arrived on
+2026-09-27. Its plan (6.9–6.18, *second brief* below) is approved and under way; then 006 and the sweep.
 **Baseline:** `v1.27.0` — 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -554,6 +554,87 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       converts units**: a test runs the same pipeline with and without them and gets the same
       numbers. **Found while designing it, fixed in it:** two consumers of one external input
       declaring incompatible *types* passed `validate()` and failed only at `run()`.
+
+### Second brief (2026-09-27): the JSON boundary, and small items
+
+[requests/2026-09-27-paper-repro-f011.md](requests/2026-09-27-paper-repro-f011.md). Each item was
+checked against 1.27.0 before being planned:
+
+| Item | Result on 1.27.0 |
+|---|---|
+| F-011 whole-number floats | **Reproduced.** `{"x_km": 2}` is refused; `2.0` and `2.5` run. |
+| F-016 / F-017 structured inputs | **Reproduced, and worse in one case.** A tuple arrives as a list and is refused. A `Dict[float, float]` arrives with *string* keys and **passes** the type check, because containers are checked on their outer type only. |
+| F-018 `Literal` | **Worse than reported.** A `Literal[...]` annotation makes `run()` crash with `TypeError` for *every* value, valid ones included. That breaks invariant 2. |
+| F-014 runpy warning | **Reproduced.** Every run's stderr opens with it. |
+| F-012 group order | **Partly.** Groups are contiguous, but when several are ready at once they follow first-come plan position, not registration. `group_notes` is absent rather than `[]`. |
+| F-013 unit coverage | **Confirmed.** Counts only. |
+| F-010 `analyze_pipeline` lacks `python=` / `project=` | **Not reproduced.** A live 1.27.0 session advertises both on all five tools. Probably a client holding a tool list from a 1.25 session; ask them for the exact call. |
+| F-019 run only what an output needs | A feature request, not a defect. |
+| The R3 cost note | **Received.** 006 can now be written. |
+
+*Plan approved 2026-09-27, with 1.28 and 1.29 merged into one release.*
+
+**1.28.0 — unblock smoke runs, and let the project build its inputs:**
+
+- [ ] **6.9 — Design record 009: inputs across the JSON boundary.** It records both directions
+      the brief proposes, and why both are taken: the coercion in 6.10 for scalars today, and
+      project-built inputs in 6.13 for everything JSON cannot carry.
+- [ ] **6.10 — Whole-number floats (F-011).** Only in `run_pipeline` and `compare_runs`, the JSON
+      boundary; Python callers keep the strict rule. An `int` (never a `bool`) is passed as a
+      `float` when every step consuming it declares a type that accepts `float` but not `int`.
+      This is exact, and reported in `inputs_used.coerced`. Beyond 2^53 a float cannot hold the
+      integer exactly, so such a value is refused with the reason rather than rounded. Nothing else
+      is coerced: a list stays a list, which is 6.13's job.
+- [ ] **6.11 — `Literal` (F-018).** Fix the crash. At run time, a value must be one of the
+      `Literal`'s options. Statically, a producer's `Literal` must fit within the consumer's, and a
+      `type-mismatch` names the allowed options. Also audit the type checker for other special
+      forms (`NewType`, `TypeVar`, `Callable`, `Protocol`, …): anything it cannot check must
+      degrade to unchecked, never crash (invariant 2).
+- [ ] **6.12 — A clean stderr (F-014) and a schema guard (F-010).** Move the constants the
+      package imports out of `_runner` and `_worker`, so `python -m` starts a module that is not
+      already loaded. A test asserts the run's stderr carries no runpy warning, and another that
+      every tool taking a `path` advertises `python` and `project`.
+
+- [ ] **6.13 — `inputs_from` (F-011, F-016, F-017).**
+      `run_pipeline(path, inputs_from="pkg.module:function", inputs_args=[...], inputs_kwargs={...})`,
+      and the same on `compare_runs`.
+      - **Where it runs:** the function is called *inside the run process*, in the project's
+        environment and under the run's wall clock, so arrays, tuples and float-keyed dicts never
+        cross JSON.
+      - **Precedence:** explicit `inputs`, then `inputs_from`, then the file's own `run()`
+        literals. `inputs_used` reports where each name came from.
+      - **Never** used by analyze / validate / explain / render, which do not execute project code
+        (invariant 1).
+      - **Found via the loader's search path**, so a package-relative module works as it does for
+        entry files. A function that returns something other than a mapping is reported, not
+        guessed at.
+      - **Known-issues** gains the silent float-key case: containers are checked on their outer
+        type, so JSON-mangled keys pass. `inputs_from` is the way round it.
+
+**1.29.0 — the smaller items:**
+
+- [ ] **6.14 — Group order and notes (F-012).** Among blocks ready at the same time, a group's
+      place follows the registration order of its first step instead of plan position. Ungrouped
+      pipelines are unchanged. `group_notes` is always a list.
+- [ ] **6.15 — Which connections are unit-checked (F-013).** `explain` lists the unchecked
+      connections (producer → consumer, the variable, and which end lacks a unit), capped at 20
+      with "and N more". `analyze_pipeline` returns the same as `unit_coverage`.
+- [ ] **6.16 — Run only what an output needs (F-019).** `pipeline.upstream(*outputs)` returns a
+      new `Pipeline` holding only the steps those outputs depend on, with feedback loops kept
+      whole. Everything else (`analyze`, `validate`, `run`, `visualize`) works on it unchanged,
+      because it is an ordinary pipeline planned by the one planner. Over MCP it is
+      `run_pipeline(targets=[...])`.
+- [ ] **6.17 — The queued diagram bug.** A defaulted parameter is no longer drawn as a missing
+      input; see *Queued* below.
+
+**Last:**
+
+- [ ] **6.18 — Sweep the documents for staleness, the handoff included.** The guards catch counts,
+      links, statuses and source references. Read the rest for sentences that stopped being true.
+
+**Then the sweep, with the cost note as evidence:** 6.5's design record 006 is brought for
+approval before 6.7 is built. Points will be built by the project's code through 6.13's
+`inputs_from`, so the sweep's inputs never cross JSON either.
 
 **Release discipline:** each release is tagged on its merge commit — paper-repro pins SmartMDAO
 by tag and bumps deliberately. Since 6.0 CI does it: the `release` job tags a new version and

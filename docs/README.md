@@ -89,6 +89,7 @@ editing the decision. Only the status line moves.
 produced. Decisions live in the roadmap and the design records, not there.
 
 - [2026-09 — paper-repro](requests/2026-09-paper-repro.md) → roadmap Phase 6
+- [2026-09-27 — paper-repro, second brief](requests/2026-09-27-paper-repro-f011.md) → roadmap Phase 6, *second brief*
 
 ## Conventions
 
