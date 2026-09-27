@@ -253,6 +253,16 @@ def _call_factory(function, name: str, path: Path) -> Pipeline:
     return produced
 
 
+def search_directory(path: Path) -> Path:
+    """
+    The directory that goes on `sys.path` for a file: its package's parent when
+    it sits in an `__init__.py` chain, otherwise its own directory. Shared with
+    `inputs_from`, so a module next to the entry file is found the same way.
+    """
+    root = _package_root(path.parent)
+    return path.parent if root is None else root.parent
+
+
 def _package_root(directory: Path) -> Optional[Path]:
     """The top of the `__init__.py` chain `directory` sits in, if it is in one."""
     root = None
@@ -316,14 +326,12 @@ def load_pipeline(path, variable: Optional[str] = None) -> LoadedPipeline:
     # the package's parent on sys.path - so its relative imports resolve the
     # way `python -m pkg.module` would resolve them. A standalone file gets a
     # unique name instead, so repeated loads of one path cannot collide.
-    package_root = _package_root(resolved.parent)
-    if package_root is None:
+    search_dir = search_directory(resolved)
+    if _package_root(resolved.parent) is None:
         module_name = f"_smartmdao_loaded_{uuid.uuid4().hex}"
-        search_dir = resolved.parent
     else:
-        parts = resolved.relative_to(package_root.parent).with_suffix("").parts
+        parts = resolved.relative_to(search_dir).with_suffix("").parts
         module_name = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
-        search_dir = package_root.parent
 
     spec = importlib.util.spec_from_file_location(module_name, resolved)
     if spec is None or spec.loader is None:            # pragma: no cover

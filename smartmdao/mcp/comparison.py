@@ -18,7 +18,7 @@ prove was behaviour-preserving, and the same model under two solvers.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from ._runner import DEFAULT_BUDGET_SWEEPS, FULL, RUNGS
+from .protocol import DEFAULT_BUDGET_SWEEPS, FULL, RUNGS
 from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,9 @@ def compare_runs(
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     allow_effects: bool = False,
+    inputs_from: Optional[str] = None,
+    inputs_args: Optional[List[Any]] = None,
+    inputs_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Runs both pipelines on the **same** inputs and reports where they disagree.
@@ -192,19 +195,30 @@ def compare_runs(
             if value is not _UNRESOLVED
         }
 
-    shared = {**recovered, **supplied}
+    from .boundary import whole_number_floats
+
+    supplied, coerced, refusal = whole_number_floats(
+        [loaded["a"].pipeline, loaded["b"].pipeline], supplied
+    )
+    if refusal:
+        return {"ok": False, "refused": "json-boundary", "error": refusal}
 
     runs = {}
     for label, path, variable in (("a", path_a, variable_a), ("b", path_b, variable_b)):
         runs[label] = run_in_subprocess(
             path=str(path),
-            inputs=shared,
+            inputs=supplied,
+            fallback_inputs=recovered,
+            inputs_from=inputs_from,
+            inputs_args=inputs_args,
+            inputs_kwargs=inputs_kwargs,
             variable=variable,
             rung=rung,
             budget_sweeps=budget_sweeps,
             timeout_seconds=timeout_seconds,
         )
 
+    built = sorted({name for result in runs.values() for name in result.pop("built_inputs", [])} - set(supplied))
     failed = [label for label, result in runs.items() if not result.get("ok")]
     if failed:
         return {
@@ -235,6 +249,8 @@ def compare_runs(
         "inputs_used": {
             "supplied": sorted(supplied),
             "recovered_from_a": sorted(recovered),
+            **({"coerced": coerced} if coerced else {}),
+            **({"built_by_project": built} if inputs_from else {}),
             "note": (
                 "The same inputs were used for both sides; a comparison on "
                 "different inputs would mean nothing."

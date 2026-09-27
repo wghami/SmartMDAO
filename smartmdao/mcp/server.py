@@ -58,6 +58,11 @@ IF YOU TRANSLATE OR REFACTOR a pipeline, prove it still behaves the same with
 different places and both report success - only running both and diffing shows
 it.
 
+INPUTS CROSS JSON, which cannot tell 2.0 from 2: a whole number is passed as a
+float where every step reading it declares float, and `inputs_used.coerced`
+says so. Anything else JSON cannot carry - tuples, arrays, float keys - should
+come from the project: run_pipeline(inputs_from="pkg.module:function").
+
 TO RUN ONE, use `run_pipeline` rather than a shell. It enforces a wall clock,
 returns typed results instead of scraped stdout, and survives a discipline that
 crashes. It defaults to rung='smoke': one sweep, which proves the code executes
@@ -210,7 +215,10 @@ def create_server(name: str = "smartmdao"):
             "(capped sweeps), or 'full'. ALWAYS tell the user the estimated "
             "cost from a smoke run before choosing 'full' on anything "
             "non-trivial. Analyse and validate first - they are free, and "
-            "validate reports steps that declare side effects."
+            "validate reports steps that declare side effects. Inputs JSON "
+            "cannot carry (tuples, arrays, float-keyed dicts) come from the "
+            "project: inputs_from='package.module:function' with inputs_args / "
+            "inputs_kwargs is called inside the run, and `inputs` still win."
         )
     )
     def run_pipeline(
@@ -222,9 +230,13 @@ def create_server(name: str = "smartmdao"):
         timeout_seconds: float = 60.0,
         python: Optional[str] = None,
         project: Optional[str] = None,
+        inputs_from: Optional[str] = None,
+        inputs_args: Optional[List[Any]] = None,
+        inputs_kwargs: Optional[Dict[str, Any]] = None,
     ) -> dict:
         return handlers.run_pipeline(
-            path, inputs, variable, rung, budget_sweeps, timeout_seconds, python, project
+            path, inputs, variable, rung, budget_sweeps, timeout_seconds, python, project,
+            inputs_from, inputs_args, inputs_kwargs,
         )
 
     @server.tool(
@@ -250,10 +262,14 @@ def create_server(name: str = "smartmdao"):
         budget_sweeps: int = 25,
         timeout_seconds: float = 60.0,
         allow_effects: bool = False,
+        inputs_from: Optional[str] = None,
+        inputs_args: Optional[List[Any]] = None,
+        inputs_kwargs: Optional[Dict[str, Any]] = None,
     ) -> dict:
         return handlers.compare_runs(
             path_a, path_b, inputs, variable_a, variable_b,
             rung, budget_sweeps, timeout_seconds, allow_effects,
+            inputs_from, inputs_args, inputs_kwargs,
         )
 
     # ----- Resources ---------------------------------------------------------

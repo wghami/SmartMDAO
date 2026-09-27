@@ -9,10 +9,11 @@ to an exception.
 """
 import json
 import logging
+import re
 import subprocess
 from typing import Any, Dict, Optional, Tuple
 
-from ._worker import PROTOCOL
+from .protocol import PROTOCOL
 from .environment import MIN_PROJECT_VERSION, Interpreter
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,17 @@ def call(
     stderr = (completed.stderr or "")[-_TAIL:]
 
     if completed.returncode != 0:
+        unknown = re.search(r"unexpected keyword argument '(\w+)'", stderr)
+        if unknown:
+            return {
+                "ok": False,
+                "refused": "version",
+                "error": (
+                    f"The environment at {where} has SmartMDAO {interpreter.smartmdao or 'unknown'}, "
+                    f"which does not know the argument '{unknown.group(1)}'. Upgrade SmartMDAO there."
+                ),
+                "stderr": stderr,
+            }, None
         if "No module named" in stderr and ("_worker" in stderr or "'smartmdao'" in stderr):
             found = interpreter.smartmdao or "none found"
             return {

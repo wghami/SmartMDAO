@@ -16,7 +16,7 @@ import subprocess
 import sys
 from typing import Any, Dict, Optional, Sequence
 
-from ._runner import BUDGETED, DEFAULT_BUDGET_SWEEPS, FULL, RUNGS, SMOKE
+from .protocol import BUDGETED, DEFAULT_BUDGET_SWEEPS, FULL, RUNGS, SMOKE
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +71,16 @@ def run_in_subprocess(
     rung: str = SMOKE,
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    inputs_from: Optional[str] = None,
+    inputs_args: Optional[Sequence[Any]] = None,
+    inputs_kwargs: Optional[Dict[str, Any]] = None,
+    fallback_inputs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Runs `path`'s pipeline in a child process and returns a summarised result.
+
+    `inputs` win over what `inputs_from` builds in the child, which wins over
+    `fallback_inputs` - the literals recovered from the file (docs/design/009).
 
     Never raises for anything the child does: a crash, a timeout or a malformed
     reply all come back as `{"ok": False, ...}` so the agent can read and act on
@@ -89,6 +96,10 @@ def run_in_subprocess(
             "path": str(path),
             "variable": variable,
             "inputs": inputs or {},
+            "fallback_inputs": fallback_inputs or {},
+            "inputs_from": inputs_from,
+            "inputs_args": list(inputs_args or ()),
+            "inputs_kwargs": dict(inputs_kwargs or {}),
             "rung": rung,
             "budget_sweeps": budget_sweeps,
         }

@@ -23,10 +23,7 @@ import json
 import sys
 from typing import Any, Dict
 
-#: Protocol versions this worker speaks, lowest and highest. Change the request
-#: or response shape -> raise the upper bound, and keep answering the old one
-#: for as long as servers speaking it are expected to be around.
-PROTOCOL = (1, 1)
+from .protocol import PROTOCOL
 
 
 def _version() -> str:

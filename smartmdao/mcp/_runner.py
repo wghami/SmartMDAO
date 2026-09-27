@@ -23,16 +23,7 @@ import time
 import traceback
 from typing import Any, Dict, List
 
-#: Cost rungs, cheapest first. `smoke` exists to answer "does this execute at
-#: all" and to *measure the unit cost*, so the estimate for every larger run
-#: falls out of one cheap run.
-SMOKE = "smoke"
-BUDGETED = "budgeted"
-FULL = "full"
-RUNGS = (SMOKE, BUDGETED, FULL)
-
-#: Sweeps allowed on the `budgeted` rung unless the caller says otherwise.
-DEFAULT_BUDGET_SWEEPS = 25
+from .protocol import BUDGETED, DEFAULT_BUDGET_SWEEPS, FULL, RUNGS, SMOKE  # noqa: F401 - re-exported
 
 #: Longest list or array preview returned. A converged `memory` holds numpy
 #: arrays and a residual history per cyclic block; unsummarised, the first real
@@ -163,7 +154,22 @@ def run(request: Dict[str, Any]) -> Dict[str, Any]:
     except PipelineLoadError as error:
         return {"ok": False, "error": str(error)}
 
-    inputs = dict(request.get("inputs") or {})
+    # Precedence: what the caller passed, then what the project built, then
+    # the literals in the file's own run() call (docs/design/009).
+    built: Dict[str, Any] = {}
+    if request.get("inputs_from"):
+        from pathlib import Path
+
+        from .boundary import InputsFromError, build_inputs
+
+        try:
+            built = build_inputs(
+                request["inputs_from"], request.get("inputs_args"),
+                request.get("inputs_kwargs"), Path(loaded.path),
+            )
+        except InputsFromError as error:
+            return {"ok": False, "error": str(error), "rung": rung}
+    inputs = {**(request.get("fallback_inputs") or {}), **built, **(request.get("inputs") or {})}
     rung_detail = _apply_rung(
         loaded.pipeline.solver, rung, request.get("budget_sweeps", DEFAULT_BUDGET_SWEEPS)
     )
@@ -179,6 +185,7 @@ def run(request: Dict[str, Any]) -> Dict[str, Any]:
             "traceback": traceback.format_exc()[-2000:],
             "elapsed_seconds": round(time.perf_counter() - started, 4),
             "rung": rung,
+            "built_inputs": sorted(built),
         }
     elapsed = time.perf_counter() - started
 
@@ -195,6 +202,7 @@ def run(request: Dict[str, Any]) -> Dict[str, Any]:
         "ok": True,
         "rung": rung,
         "rung_detail": rung_detail,
+        "built_inputs": sorted(built),
         "converged": all(report.get("status") == "converged" for report in reports)
         if reports
         else True,
