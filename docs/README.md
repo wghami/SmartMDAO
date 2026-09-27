@@ -82,13 +82,16 @@ editing the decision. Only the status line moves.
 | 005 | [Steps that touch the world](design/005-side-effecting-steps.md) — declaring side effects, and refusing what would repeat | implemented (1.22.0–1.23.0) |
 | 007 | [Running each pipeline with its own project's Python](design/007-project-interpreter.md) — interpreter discovery, one versioned worker, version floors | implemented (1.26.0) |
 | 008 | [Units, checked for consistency and never converted](design/008-units.md) — a `Unit` marker, exact match with a pluggable checker, where mismatches are found | implemented (1.27.0) |
+| 009 | [Inputs across the JSON boundary](design/009-json-boundary.md) — whole numbers repaired and reported; everything else built by the project, inside the run | implemented (1.28.0) |
 
 ## Requests
 
-[requests/](requests/) keeps briefs from people using SmartMDAO, as evidence for the plans they
-produced. Decisions live in the roadmap and the design records, not there.
+[requests/](requests/) keeps every request from people using SmartMDAO, and every response sent
+back, as evidence for the plans they produced. Details internal to the requesting project are
+removed. Decisions live in the roadmap and the design records, not there.
 
-- [2026-09 — paper-repro](requests/2026-09-paper-repro.md) → roadmap Phase 6
+- [2026-09-26 — paper-repro, first brief](requests/2026-09-26-paper-repro.md) → roadmap Phase 6
+- [2026-09-26 — response: what 1.24.0–1.27.0 changed](requests/2026-09-26-response-1.24-1.27.md)
 - [2026-09-27 — paper-repro, second brief](requests/2026-09-27-paper-repro-f011.md) → roadmap Phase 6, *second brief*
 
 ## Conventions

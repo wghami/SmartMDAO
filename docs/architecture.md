@@ -27,7 +27,7 @@ The whole library is ~1800 lines across 12 modules. Read it in this order:
 | `cache.py` | `@cached` and its four storage backends. |
 | `visualization.py` | Pure-matplotlib XDSM diagram rendering. |
 | `logging_config.py` | `configure_logging` helper. |
-| `mcp/` | The MCP server. `handlers.py` holds one local function per tool; `environment.py` decides which environment a file belongs to; `worker.py` / `_worker.py` run a tool in another environment over a versioned JSON protocol ([007](design/007-project-interpreter.md)); `loader.py` imports a file with execution suspended and the user's prints sent to stderr; `_runner.py` is the run process. |
+| `mcp/` | The MCP server. `handlers.py` holds one local function per tool; `environment.py` decides which environment a file belongs to; `worker.py` / `_worker.py` run a tool in another environment over a versioned JSON protocol ([007](design/007-project-interpreter.md)); `loader.py` imports a file with execution suspended and the user's prints sent to stderr; `_runner.py` is the run process; `boundary.py` repairs whole numbers at the JSON boundary and builds `inputs_from` ([009](design/009-json-boundary.md)); `protocol.py` holds the constants the child processes share, so `python -m` never starts a module already loaded. |
 
 Only three modules import `core`: `optimization` (for the `Pipeline` type), `analysis` (for
 `inputs_for`, the one rule deciding which input list an analysis uses), and the MCP loader. The

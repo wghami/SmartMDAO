@@ -249,6 +249,29 @@ except TypeMismatchError as error:
 `int` deliberately does **not** satisfy `float`. Pass `runtime_type_checks=True` to `Pipeline` to
 also check actual values on every call.
 
+`Literal` options are checked on their values, which suits a switchable decision:
+
+```python
+from typing import Literal
+from smartmdao import Pipeline, TypeMismatchError
+
+router = Pipeline(inputs=["method"])
+
+@router.step(outputs=["cost"])
+def route(method: Literal["steiner", "shortest"]) -> float:
+    return 1.0 if method == "steiner" else 2.0
+
+assert router.run(method="steiner")["cost"] == 1.0
+try:
+    router.run(method="dijkstra")
+    raise AssertionError("should have been rejected")
+except TypeMismatchError as error:
+    assert "Literal['steiner', 'shortest']" in str(error)      # the options are named
+```
+
+A type the checker cannot test, such as a `Protocol` not marked `@runtime_checkable`, is
+*unchecked*: never an error.
+
 **Deeper:** [`type_validation_demo.py`](../scripts/type_validation_demo.py)
 
 ---
@@ -992,6 +1015,11 @@ returns its input unchanged then makes the solver report convergence at iteratio
 never evaluated. `HybridSolver` derives order from the graph and avoids this entirely.
 
 **5. `int` does not satisfy `float`.** Deliberate. Implement `TypeChecker` if you want it looser.
+Over MCP only, where JSON cannot tell 2.0 from 2, `run_pipeline` and `compare_runs` pass a whole
+number as a float when every step reading it declares `float`, and report it in
+`inputs_used.coerced`. Tuples, arrays and float-keyed dicts cannot cross JSON at all: build them
+with `inputs_from="package.module:function"`, which runs inside the run. See
+[design record 009](design/009-json-boundary.md).
 
 **6. `@cached` functions are keyword-only.** `f(1.0)` raises; `f(x=1.0)` works.
 

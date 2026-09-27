@@ -20,7 +20,7 @@ import inspect
 import logging
 import textwrap
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, get_args, get_origin
 
 from .graph import (
     ExecutionBlock,
@@ -380,6 +380,11 @@ def _types_can_meet(first, second, checker: TypeChecker) -> bool:
     left, right = _concrete_classes(first), _concrete_classes(second)
     if not left or not right:
         return True
+    # Options are values, not classes: Literal["a"] and Literal["b"] are both
+    # str, and no value satisfies both.
+    for options, other in ((first, second), (second, first)):
+        if get_origin(options) is Literal:
+            return any(checker.check_value(option, other) for option in get_args(options))
     if checker.check_types(first, second) or checker.check_types(second, first):
         return True
     return any(issubclass(a, b) or issubclass(b, a) for a in left for b in right)

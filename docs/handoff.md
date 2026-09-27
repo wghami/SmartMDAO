@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.27.0:** `main` is clean. 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+**State as of v1.28.0:** `main` is clean. 894 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 Roadmap **Phases 0–5 are complete**. **Phase 6** (lessons from paper-repro, a downstream project
 that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.27.0. **Work is paused
 on purpose, waiting for paper-repro's feedback**; see [Next](#next) for what to do when it arrives.
@@ -138,7 +138,7 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 843 tests, 100% coverage
+uv run pytest                        # 894 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
 uv run python run_notebooks.py       # 17 notebooks; rewrites only the ones that changed
 uv build                             # wheel + sdist
@@ -285,7 +285,7 @@ Not bugs — judgement calls left deliberately to the maintainer.
 ## Next
 
 **Phases 0–5 are complete; Phase 6 is paused, waiting for paper-repro's feedback.** Phase 6 came
-from [a brief](requests/2026-09-paper-repro.md) by paper-repro, a downstream project that uses the
+from [a brief](requests/2026-09-26-paper-repro.md) by paper-repro, a downstream project that uses the
 MCP connector on a model outside aerospace. Six of its seven requests shipped in 1.24.0–1.27.0. A
 note describing those releases was prepared for them on 2026-09-26. It asks them to upgrade to
 1.27.0 and to report on their first real campaign. The seventh request, the sweep, is deliberately

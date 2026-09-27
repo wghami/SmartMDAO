@@ -5,8 +5,8 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. Paper-repro's second brief arrived on
-2026-09-27. Its plan (6.9–6.18, *second brief* below) is approved and under way; then 006 and the sweep.
-**Baseline:** `v1.27.0` — 843 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+2026-09-27. Its plan (6.9–6.19, *second brief* below) is approved; 6.9–6.13 shipped in 1.28.0; then 006 and the sweep.
+**Baseline:** `v1.28.0` — 894 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -427,7 +427,7 @@ cost of that choice reported rather than hidden.
 
 paper-repro is a downstream project that uses SmartMDAO through its MCP connector. It logged every
 point where the connector could not do what it needed, and the resulting brief is kept as evidence
-in [requests/2026-09-paper-repro.md](requests/2026-09-paper-repro.md). Its model is deliberately
+in [requests/2026-09-26-paper-repro.md](requests/2026-09-26-paper-repro.md). Its model is deliberately
 not aerospace MDO, which makes it the first real test of SmartMDAO outgrowing MDAO.
 
 Every request was checked against the code before being planned: R5's error reproduces verbatim,
@@ -576,26 +576,26 @@ checked against 1.27.0 before being planned:
 
 **1.28.0 — unblock smoke runs, and let the project build its inputs:**
 
-- [ ] **6.9 — Design record 009: inputs across the JSON boundary.** It records both directions
+- [x] **6.9 — Design record 009: inputs across the JSON boundary.** It records both directions
       the brief proposes, and why both are taken: the coercion in 6.10 for scalars today, and
       project-built inputs in 6.13 for everything JSON cannot carry.
-- [ ] **6.10 — Whole-number floats (F-011).** Only in `run_pipeline` and `compare_runs`, the JSON
+- [x] **6.10 — Whole-number floats (F-011).** Only in `run_pipeline` and `compare_runs`, the JSON
       boundary; Python callers keep the strict rule. An `int` (never a `bool`) is passed as a
       `float` when every step consuming it declares a type that accepts `float` but not `int`.
       This is exact, and reported in `inputs_used.coerced`. Beyond 2^53 a float cannot hold the
       integer exactly, so such a value is refused with the reason rather than rounded. Nothing else
       is coerced: a list stays a list, which is 6.13's job.
-- [ ] **6.11 — `Literal` (F-018).** Fix the crash. At run time, a value must be one of the
+- [x] **6.11 — `Literal` (F-018).** Fix the crash. At run time, a value must be one of the
       `Literal`'s options. Statically, a producer's `Literal` must fit within the consumer's, and a
       `type-mismatch` names the allowed options. Also audit the type checker for other special
       forms (`NewType`, `TypeVar`, `Callable`, `Protocol`, …): anything it cannot check must
       degrade to unchecked, never crash (invariant 2).
-- [ ] **6.12 — A clean stderr (F-014) and a schema guard (F-010).** Move the constants the
+- [x] **6.12 — A clean stderr (F-014) and a schema guard (F-010).** Move the constants the
       package imports out of `_runner` and `_worker`, so `python -m` starts a module that is not
       already loaded. A test asserts the run's stderr carries no runpy warning, and another that
       every tool taking a `path` advertises `python` and `project`.
 
-- [ ] **6.13 — `inputs_from` (F-011, F-016, F-017).**
+- [x] **6.13 — `inputs_from` (F-011, F-016, F-017).**
       `run_pipeline(path, inputs_from="pkg.module:function", inputs_args=[...], inputs_kwargs={...})`,
       and the same on `compare_runs`.
       - **Where it runs:** the function is called *inside the run process*, in the project's
@@ -610,6 +610,13 @@ checked against 1.27.0 before being planned:
         guessed at.
       - **Known-issues** gains the silent float-key case: containers are checked on their outer
         type, so JSON-mangled keys pass. `inputs_from` is the way round it.
+
+      **Shipped in 1.28.0.** **Found on the way:** a `Protocol` not marked `@runtime_checkable`
+      crashed `run()` just as `Literal` did, which the audit in 6.11 turned up. Two consumers
+      declaring disjoint `Literal`s for one input (`["a"]` and `["b"]`) are now reported, although
+      both are `str`. Composite types are named whole in messages (`Literal['steiner', ...]`,
+      not `Literal`). A 1.28 server sends an older project's worker only the arguments a call gives,
+      so plain calls still work, and `inputs_from` is refused as "upgrade SmartMDAO there".
 
 **1.29.0 — the smaller items:**
 
@@ -629,7 +636,10 @@ checked against 1.27.0 before being planned:
 
 **Last:**
 
-- [ ] **6.18 — Sweep the documents for staleness, the handoff included.** The guards catch counts,
+- [ ] **6.18 — The response to paper-repro**, saying what 1.28.0 and 1.29.0 changed and what was
+      not reproduced (F-010). Stored in `docs/requests/` with the request it answers: every request
+      and every response is kept there.
+- [ ] **6.19 — Sweep the documents for staleness, the handoff included.** The guards catch counts,
       links, statuses and source references. Read the rest for sentences that stopped being true.
 
 **Then the sweep, with the cost note as evidence:** 6.5's design record 006 is brought for

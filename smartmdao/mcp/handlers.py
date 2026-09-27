@@ -11,12 +11,13 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from ..analysis import analyze, explain, stub_status, validate
 from ..discretisation import effective_steps
-from ._runner import DEFAULT_BUDGET_SWEEPS, SMOKE
+from .protocol import DEFAULT_BUDGET_SWEEPS, SMOKE
 from .loader import _UNRESOLVED
 from .comparison import DEFAULT_ATOL, DEFAULT_RTOL, compare_runs as _compare_runs
 from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
 from .loader import PipelineLoadError, input_map_in_source, load_pipeline
 from .rendering import render_xdsm
+from .boundary import whole_number_floats
 from . import worker
 from .environment import resolve
 
@@ -196,6 +197,9 @@ def _run(
     rung: str = SMOKE,
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    inputs_from: Optional[str] = None,
+    inputs_args: Optional[Sequence[Any]] = None,
+    inputs_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Executes a pipeline in a child process, under a wall clock.
@@ -213,7 +217,9 @@ def _run(
     if failure:
         return failure
 
-    supplied = dict(inputs or {})
+    supplied, coerced, refusal = whole_number_floats([loaded.pipeline], dict(inputs or {}))
+    if refusal:
+        return {"ok": False, "refused": "json-boundary", "error": refusal}
 
     # Names alone are not enough to *run* a pipeline, so the literal values in
     # the file's own run() call are recovered too. The caller always wins.
@@ -230,26 +236,37 @@ def _run(
 
     result = run_in_subprocess(
         path=str(loaded.path),
-        inputs={**from_source, **supplied},
+        inputs=supplied,
+        fallback_inputs=from_source,
+        inputs_from=inputs_from,
+        inputs_args=inputs_args,
+        inputs_kwargs=inputs_kwargs,
         variable=variable,
         rung=rung,
         budget_sweeps=budget_sweeps,
         timeout_seconds=timeout_seconds,
     )
+    built = [name for name in result.pop("built_inputs", []) if name not in supplied]
 
     result.setdefault("pipeline", loaded.variable)
     result.setdefault("source", loaded.source)
     result["path"] = str(loaded.path)
     result["inputs_used"] = {
         "supplied": sorted(supplied),
-        "found_in_source": sorted(from_source),
+        "found_in_source": sorted(name for name in from_source if name not in built),
     }
+    if inputs_from:
+        result["inputs_used"]["built_by_project"] = built
+    if coerced:
+        # JSON cannot tell 2.0 from 2 (docs/design/009). Said, not done silently.
+        result["inputs_used"]["coerced"] = coerced
     # Declared names are only names: they say what must be supplied, not what
     # the value is. Naming the ones nobody supplied turns a failed run's
     # traceback into a list the caller can act on before retrying.
     not_supplied = [
         name for name in loaded.pipeline.inputs
         if name not in supplied and name not in from_source and name not in unresolved
+        and name not in built
     ]
     if not_supplied:
         result["inputs_used"]["declared_not_supplied"] = not_supplied
@@ -308,7 +325,11 @@ def _dispatch(op: str, path: str, python: Optional[str], project: Optional[str],
     if interpreter.is_server:
         result = LOCAL_OPS[op](path=path, **args)
     else:
-        result, answered_by = worker.call(interpreter, op, {"path": path, **args}, timeout)
+        # Only arguments actually given: a project pinned to an older SmartMDAO
+        # has an older handler, and a None it has never heard of would break
+        # a call it can otherwise answer.
+        given = {key: value for key, value in args.items() if value is not None}
+        result, answered_by = worker.call(interpreter, op, {"path": path, **given}, timeout)
         if answered_by:
             interpreter = replace(interpreter, smartmdao=answered_by)
 
@@ -352,7 +373,10 @@ def run_pipeline(path: str, inputs: Optional[Dict[str, Any]] = None,
                  variable: Optional[str] = None, rung: str = SMOKE,
                  budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
                  timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-                 python: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
+                 python: Optional[str] = None, project: Optional[str] = None,
+                 inputs_from: Optional[str] = None,
+                 inputs_args: Optional[Sequence[Any]] = None,
+                 inputs_kwargs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Executes a pipeline in a child process, under a wall clock. See `_run`.
 
@@ -363,7 +387,8 @@ def run_pipeline(path: str, inputs: Optional[Dict[str, Any]] = None,
     return _dispatch("run", path, python, project,
                      timeout_seconds + worker.STARTUP_ALLOWANCE_SECONDS,
                      inputs=inputs, variable=variable, rung=rung,
-                     budget_sweeps=budget_sweeps, timeout_seconds=timeout_seconds)
+                     budget_sweeps=budget_sweeps, timeout_seconds=timeout_seconds,
+                     inputs_from=inputs_from, inputs_args=inputs_args, inputs_kwargs=inputs_kwargs)
 
 
 def compare_runs(
@@ -376,6 +401,9 @@ def compare_runs(
     budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     allow_effects: bool = False,
+    inputs_from: Optional[str] = None,
+    inputs_args: Optional[Sequence[Any]] = None,
+    inputs_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Runs two pipelines on the same inputs and reports where they disagree.
@@ -395,4 +423,7 @@ def compare_runs(
         budget_sweeps=budget_sweeps,
         timeout_seconds=timeout_seconds,
         allow_effects=allow_effects,
+        inputs_from=inputs_from,
+        inputs_args=list(inputs_args) if inputs_args else None,
+        inputs_kwargs=inputs_kwargs,
     )

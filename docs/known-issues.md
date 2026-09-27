@@ -7,6 +7,45 @@ is a bug report against behaviour that already works as documented — these are
 
 ---
 
+## ✅ RESOLVED in 1.28.0 — whole-number floats and structured values could not cross the MCP
+
+JSON cannot tell 2.0 from 2, and many clients send a whole-number float as an integer. So
+`run_pipeline(inputs={"altitude_km": 550})` was refused although the same value works from Python.
+Tuples arrived as lists and were refused. The requester could make no smoke run of their model
+through the MCP. **Fixed** by [009](design/009-json-boundary.md): whole numbers are passed as
+floats where every consumer declares one, and reported; everything else is built by the project
+with `inputs_from`, inside the run.
+
+---
+
+## ✅ RESOLVED in 1.28.0 — a `Literal` or a non-runtime `Protocol` annotation crashed every run
+
+The type checker handed both to `isinstance`, which raises `TypeError`. So `method:
+Literal["steiner", "shortest"]` made `run()` fail for every value, valid ones included. This broke
+invariant 2 outright. `Literal` is now checked on its values. Anything `isinstance` cannot test is
+unchecked.
+
+---
+
+## ✅ RESOLVED in 1.28.0 — every run's stderr opened with a runpy warning
+
+`python -m smartmdao.mcp._runner` warned that the module was already in `sys.modules`, because
+importing the package loaded it for its constants. The warning came first in every run's stderr,
+above anything real. The constants moved to `mcp/protocol.py`.
+
+---
+
+## 🟡 Containers are checked on their outer type only
+
+`Dict[float, float]` accepts a dict with *string* keys, and `List[float]` a list of strings:
+`StandardTypeChecker` checks a container's outer type and not its contents. That is cheap and
+usually enough. At the JSON boundary it lets a mangled value through silently, though: `{0.5: 1.0}`
+arrives as `{"0.5": 1.0}` and passes. **Workaround:** build such inputs with `inputs_from`, so
+they never cross JSON. **Fix direction:** check contents for small containers, or at the boundary
+only.
+
+---
+
 ## 🟡 The diagram draws a parameter with a default as a missing input
 
 `PipelineVisualizer` classifies a variable as missing when it is consumed, not produced and not
