@@ -329,3 +329,67 @@ def test_visualize_uses_the_pipelines_checker(tmp_path, monkeypatch):
     pipeline = link_budget("dB", "dB")
     pipeline.visualize(view=False)
     assert seen["unit_checker"] is pipeline.unit_checker
+
+
+# ==============================================================================
+# Which connections are not checked (F-013)
+# ==============================================================================
+
+def partly_declared():
+    pipeline = Pipeline(inputs=["a"])
+
+    @pipeline.step(outputs=["b"])
+    def f(a: float) -> Annotated[float, Unit("m")]:
+        return a
+
+    @pipeline.step(outputs=["c"])
+    def g(b: Annotated[float, Unit("m")]) -> float:
+        return b
+
+    @pipeline.step(outputs=["d"])
+    def h(c: Annotated[float, Unit("s")], b: float) -> float:
+        return c
+
+    @pipeline.step(outputs=["e"])
+    def k(d: float) -> float:
+        return d
+
+    return pipeline
+
+
+def test_each_connection_says_which_end_lacks_a_unit():
+    from smartmdao.analysis import unit_connections
+
+    missing = {(c["producer"], c["consumer"]): c["missing"] for c in unit_connections(partly_declared().steps)}
+    assert missing == {("f", "g"): "", ("g", "h"): "producer", ("f", "h"): "consumer", ("h", "k"): "both"}
+
+
+def test_explain_lists_the_unchecked_connections():
+    text = explain(partly_declared())
+    assert "Units: 1 of 4 connections between steps checked." in text
+    assert "g -> h (c; producer)" in text and "h -> k (d; both)" in text
+
+
+def test_a_long_list_is_capped(monkeypatch):
+    import smartmdao.analysis as analysis
+
+    monkeypatch.setattr(analysis, "UNCHECKED_SHOWN", 1)
+    assert "... and 2 more" in explain(partly_declared())
+
+
+def test_analyze_pipeline_returns_the_coverage(tmp_path):
+    from smartmdao.mcp.handlers import analyze_pipeline
+
+    source = tmp_path / "partial.py"
+    source.write_text(
+        "from typing import Annotated\n"
+        "from smartmdao import Pipeline, Unit\n"
+        "pipeline = Pipeline(inputs=['a'])\n"
+        "@pipeline.step(outputs=['b'])\n"
+        "def f(a: float) -> Annotated[float, Unit('m')]: return a\n"
+        "@pipeline.step(outputs=['c'])\n"
+        "def g(b: float) -> float: return b\n"
+    )
+    coverage = analyze_pipeline(str(source))["unit_coverage"]
+    assert coverage["checked"] == 0 and coverage["total"] == 1
+    assert coverage["unchecked"] == [{"variable": "b", "producer": "f", "consumer": "g", "missing": "consumer"}]

@@ -273,4 +273,32 @@ def test_render_pipeline_diagram_is_quiet_without_conflicts(tmp_path):
         "@pipeline.step(outputs=['y'], group='only')\n"
         "def f(x: float) -> float: return x\n"
     )
-    assert "group_notes" not in render_pipeline_diagram(str(source), str(tmp_path / "xdsm.png"))
+    assert render_pipeline_diagram(str(source), str(tmp_path / "xdsm.png"))["group_notes"] == []
+
+
+def test_groups_ready_together_follow_registration_order():
+    """
+    F-012: groups appear in the order they were written, wherever dependencies
+    allow. Before 1.29.0 a tie was broken by first-come plan position, which
+    put 'ground' ahead of 'routing' here although 'routing' was written first.
+    """
+    pipeline = Pipeline(inputs=["seed"])
+
+    @pipeline.step(outputs=["sats"], group="constellation")
+    def c1(seed: float) -> float:
+        return seed
+
+    @pipeline.step(outputs=["routes"], group="routing")
+    def r1(sats: float) -> float:
+        return sats
+
+    @pipeline.step(outputs=["alloc"], group="downlink")
+    def d1(sats: float, cells: float) -> float:
+        return sats * cells
+
+    @pipeline.step(outputs=["cells"], group="ground")
+    def g1(seed: float) -> float:
+        return seed
+
+    # ground must precede downlink (it reads cells); otherwise, as written.
+    assert order(pipeline) == ["c1", "r1", "g1", "d1"]

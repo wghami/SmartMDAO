@@ -75,6 +75,7 @@ def run_in_subprocess(
     inputs_args: Optional[Sequence[Any]] = None,
     inputs_kwargs: Optional[Dict[str, Any]] = None,
     fallback_inputs: Optional[Dict[str, Any]] = None,
+    targets: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
     Runs `path`'s pipeline in a child process and returns a summarised result.
@@ -100,6 +101,7 @@ def run_in_subprocess(
             "inputs_from": inputs_from,
             "inputs_args": list(inputs_args or ()),
             "inputs_kwargs": dict(inputs_kwargs or {}),
+            "targets": list(targets or ()),
             "rung": rung,
             "budget_sweeps": budget_sweeps,
         }

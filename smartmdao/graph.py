@@ -203,7 +203,7 @@ def _block_group(block: List[Step]) -> Tuple[Optional[str], Tuple[str, ...]]:
     return (held[0] if len(held) == 1 else None), held
 
 
-def _grouped_order(order, sccs, scc_map, scc_adj, adj_list):
+def _grouped_order(order, sccs, scc_map, scc_adj, adj_list, registered):
     """
     Reorders `order` so each group's blocks are contiguous where dependencies allow.
 
@@ -215,7 +215,6 @@ def _grouped_order(order, sccs, scc_map, scc_adj, adj_list):
     it. Only independent blocks ever change places, and a block's own steps -
     a feedback loop's alphabetical order included - are never touched.
     """
-    position = {block: index for index, block in enumerate(order)}
     conflicts: List[GroupConflict] = []
     unit_of = {}
     for block in order:
@@ -268,9 +267,14 @@ def _grouped_order(order, sccs, scc_map, scc_adj, adj_list):
     for unit in units:
         for target in edges[unit]:
             indegree[target] += 1
-    # Among units that are ready, the one whose first block came earliest goes
-    # first, so the result stays as close to the ungrouped order as it can.
-    ready = [(position[members_of[unit][0]], unit) for unit in units if indegree[unit] == 0]
+    # Among units that are ready, the one registered first goes first: groups
+    # then appear in the order they were written, wherever dependencies allow
+    # (F-012). Plan position would follow the first-come order instead, which
+    # nobody reading the diagram can predict.
+    def first_registered(unit):
+        return min(registered[step] for block in members_of[unit] for step in sccs[block])
+
+    ready = [(first_registered(unit), unit) for unit in units if indegree[unit] == 0]
     heapq.heapify(ready)
     result = []
     while ready:
@@ -279,7 +283,7 @@ def _grouped_order(order, sccs, scc_map, scc_adj, adj_list):
         for target in edges[unit]:
             indegree[target] -= 1
             if indegree[target] == 0:
-                heapq.heappush(ready, (position[members_of[target][0]], target))
+                heapq.heappush(ready, (first_registered(target), target))
     return result, conflicts
 
 
@@ -291,7 +295,8 @@ def _plan(steps: List[Step], input_keys: Set[str]):
     # Without a declared group nothing is reordered - not even into an
     # equivalent order - so every existing pipeline plans exactly as before.
     if any(step.group is not None for step in steps):
-        order, conflicts = _grouped_order(order, sccs, scc_map, scc_adj, adj_list)
+        registered = {step: index for index, step in enumerate(steps)}
+        order, conflicts = _grouped_order(order, sccs, scc_map, scc_adj, adj_list, registered)
 
     plan = []
     for index in order:
