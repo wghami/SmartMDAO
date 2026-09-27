@@ -3,9 +3,9 @@
 Living document. Update the checkboxes as work lands; each phase states the condition under which
 it is considered done.
 
-**Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
-6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0, and the second brief (6.9–6.19) in 1.28.0–1.29.0.
-Design record 006 is written and awaits approval; then the sweep (6.7). See [handoff](handoff.md#next).
+**Current position:** Phases 0–6 complete. Phase 6, lessons from paper-repro, shipped in
+1.24.0–1.30.0, the sweep last. Nothing is scheduled: the next step is paper-repro's report on its
+first real campaign. See [handoff](handoff.md#next).
 **Baseline:** `v1.30.0` — 962 tests, 100% coverage, 29/29 scripts, 18 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -178,7 +178,7 @@ thing to ask someone to consent to blindly.
 - [x] [`scripts/cost_ladder_demo.py`](../scripts/cost_ladder_demo.py)
 - [x] **`compare_runs`** — same inputs, two pipelines, diff the state. The thing that makes a
       translation from hand-written code trustworthy
-- [ ] `optimize` / `sweep` — deferred until someone asks for them *(`sweep` was asked for in 2026-09 — Phase 6.7. `optimize` over MCP stays deferred.)*
+- [ ] `optimize` / `sweep` — deferred until someone asks for them *(`sweep` was asked for in 2026-09 and shipped in 1.30.0 as campaigns, Phase 6.7. `optimize` over MCP stays deferred.)*
 
 **Exit criterion met.** An engineer is told what a run will cost before it starts, a non-converging
 pipeline is killed by timeout and reported as such, and a translation can be checked against its
@@ -423,7 +423,7 @@ cost of that choice reported rather than hidden.
 
 ---
 
-## Phase 6 — Lessons from paper-repro ⬜
+## Phase 6 — Lessons from paper-repro ✅
 
 paper-repro is a downstream project that uses SmartMDAO through its MCP connector. It logged every
 point where the connector could not do what it needed, and the resulting brief is kept as evidence
@@ -527,7 +527,7 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       *006 written 2026-09-27* ([design/006](design/006-sweep.md)), from the requester's cost note.
       Measured first: a small point costs 0.71 s in a fresh process and 0.66 ms in a warm one, about
       1,000×, so a campaign runs a pool of long-lived workers, which is the case 007 deferred. Five
-      questions for the maintainer; 6.7 waits for the answers.
+      questions for the maintainer, answered the same day; 6.7 shipped in 1.30.0.
 - [x] **6.6 — Run in the project's interpreter (R4)**, as designed in
       [007](design/007-project-interpreter.md), in 1.26.0. Every tool resolves the file's
       environment and reports it as `interpreter`; the server's own runs in-process, any other
@@ -539,7 +539,7 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       `print()` in a discipline broke `run_pipeline` (since 1.13.0), and a file printing while
       loaded wrote into the MCP protocol stream. **Not done:** `compare_runs` still uses the
       server's environment ([known-issues](known-issues.md)).
-- [ ] **6.7 — Sweep / Monte Carlo driver (R3)**, on the same worker, in the library and over
+- [x] **6.7 — Sweep / Monte Carlo driver (R3)**, on the same worker, in the library and over
       MCP. Seeds are ordinary pipeline inputs; one point is smoked first and the campaign's cost
       quoted; points run isolated, in parallel, under a wall clock; completed points are skipped
       on re-run; failures are recorded, never dropped; aggregation gives means and confidence
@@ -573,8 +573,8 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
             tool using the server's environment.
       - [x] **6.7f — Teach it:** cookbook topic, notebook 18, testing guide, architecture,
             known-issues, and 006 marked implemented with its findings. Release 1.30.0.
-      - [ ] **6.7g — The response to paper-repro**, stored in `docs/requests/`.
-      - [ ] **6.7h — Staleness sweep, the handoff included.**
+      - [x] **6.7g — The response to paper-repro**, stored in `docs/requests/`.
+      - [x] **6.7h — Staleness sweep, the handoff included.**
 
 **Later:**
 
@@ -686,7 +686,7 @@ checked against 1.27.0 before being planned:
       the docs index and the architecture page's account of group tie-breaks.
 
 **Then the sweep, with the cost note as evidence:** 6.5's design record 006 is brought for
-approval before 6.7 is built. Points will be built by the project's code through 6.13's
+approval before 6.7 is built *(done: 1.30.0)*. Points will be built by the project's code through 6.13's
 `inputs_from`, so the sweep's inputs never cross JSON either.
 
 **Release discipline:** each release is tagged on its merge commit — paper-repro pins SmartMDAO
@@ -694,10 +694,16 @@ by tag and bumps deliberately. Since 6.0 CI does it: the `release` job tags a ne
 creates its GitHub Release once the tests pass on `main`
 ([handoff](handoff.md#working-conventions)).
 
-**Exit criterion:** paper-repro can analyse, validate and render a contract-first pipeline with no
-repeated input lists; see how much of it is still stubbed; run a seeded, resumable campaign in its
-own environment with the cost quoted first; and read a diagram that keeps each part of the model
-together.
+**Exit criterion met (1.30.0).** paper-repro can:
+- analyse, validate and render a contract-first pipeline with no repeated input lists
+  (`Pipeline(inputs=[...])`, 1.24.0);
+- see how much of it is still stubbed (1.24.0);
+- run a seeded, resumable campaign in its own environment, with the cost quoted first
+  (`sweep_pipeline`, 1.30.0, with points built by its own code through `inputs_from`, 1.28.0);
+- read a diagram that keeps each part of the model together (groups, 1.25.0).
+
+The resume clause was tested the hard way: a campaign killed with `SIGKILL` and started again ends
+with exactly one record per point.
 
 ---
 

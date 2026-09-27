@@ -1,7 +1,7 @@
 # 007 — Running each pipeline with its own project's Python
 
-**Status:** implemented — 1.26.0 (roadmap 6.6), amended by the findings at the end; 6.7 (the
-sweep, record 006) builds on the same worker
+**Status:** implemented — 1.26.0 (roadmap 6.6), amended by the findings at the end; the sweep (006)
+was built on the same worker in 1.30.0
 **Date:** 2026-09-26
 **Relates to:** [001](001-mcp-connector.md) (what the subprocess buys, and what it does not);
 [003](003-determinism-and-the-engineer-in-the-loop.md) (report, do not guess); request R4 in

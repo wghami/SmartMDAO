@@ -4,10 +4,9 @@ For whoever picks this up next — a contributor, a maintainer returning after a
 agent. Read this before starting work.
 
 **State as of v1.30.0:** `main` is clean. 962 tests, 100% coverage, 29/29 scripts, 18 notebooks.
-Roadmap **Phases 0–5 are complete**. **Phase 6** (lessons from paper-repro, a downstream project
-that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.29.0: its first brief
-in 1.24–1.27, its second in 1.28–1.29. **Design record [006](design/006-sweep.md), the sweep, is written and
-awaits the maintainer's answers**; see [Next](#next).
+Roadmap **Phases 0–6 are complete**. Phase 6, lessons from paper-repro (a downstream project that
+uses the MCP connector), shipped in 1.24.0–1.30.0: its first brief in 1.24–1.27, its second in
+1.28–1.29, and the sweep in 1.30. **Nothing is scheduled**; see [Next](#next).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -285,9 +284,9 @@ Not bugs — judgement calls left deliberately to the maintainer.
 
 ## Next
 
-**Phases 0–5 are complete; Phase 6 has one item left, the sweep.** Phase 6 comes from two briefs by
-paper-repro, a downstream project that uses the MCP connector on a model outside aerospace. Every
-request and every response is kept in [`docs/requests/`](requests/):
+**Phases 0–6 are complete, and nothing is scheduled.** Phase 6 came from two briefs by paper-repro,
+a downstream project that uses the MCP connector on a model outside aerospace. Every request and
+every response is kept in [`docs/requests/`](requests/):
 
 | Date | Direction | What |
 |---|---|---|
@@ -295,19 +294,11 @@ request and every response is kept in [`docs/requests/`](requests/):
 | 2026-09-26 | out | [Response](requests/2026-09-26-response-1.24-1.27.md): six of seven shipped in 1.24.0–1.27.0 |
 | 2026-09-27 | in | [Second brief](requests/2026-09-27-paper-repro-f011.md): F-010…F-019, and the R3 cost note |
 | 2026-09-27 | out | [Response](requests/2026-09-27-response-1.28-1.29.md): all addressed in 1.28.0–1.29.0; F-010 not reproduced |
+| 2026-09-27 | out | [Response](requests/2026-09-27-response-1.30.md): the sweep, in 1.30.0 |
 
-### The sweep: what to do next
-
-1. **Get the maintainer's answers to [006](design/006-sweep.md)'s five questions.** The record is
-   written from the cost note in the second brief, and it measured one thing first: a small point
-   costs 0.71 s in a fresh process and 0.66 ms in a warm one. So a campaign runs a pool of
-   long-lived workers (the case 007 deferred), detached from the tool call, quoted from one point
-   and started only with a budget. Its store is resumable and keyed so that two model versions are
-   never averaged together. Failures are recorded, and aggregates state what they excluded.
-2. **Build 6.7, and move `compare_runs` onto the worker with it.** `compare_runs` is the one tool
-   still using the server's environment ([known-issues](known-issues.md)), and the sweep needs the
-   same per-point path. Then check Phase 6's exit criterion, whose last clause is what the sweep
-   delivers.
+The last response asks paper-repro for an account of its first real campaign: what the quote said
+against what it took, whether the resume held, and what it still wrote by hand. **That report is
+the next input.** Handle it as below.
 
 ### When a request arrives
 
@@ -335,8 +326,10 @@ This is how both briefs were handled, and it held up.
 
 ### Deliberately not scheduled
 
-- **A persistent worker per environment** ([007](design/007-project-interpreter.md)). A foreign
-  environment costs 0.8–0.9 s a call. Build it only if a real session shows that cost dominating.
+- **A persistent worker for single tool calls** ([007](design/007-project-interpreter.md)). A
+  foreign environment costs 0.8–0.9 s a call. Campaigns have one, scoped to the campaign (006),
+  because a point there costs milliseconds. Build one for ordinary calls only if a real session
+  shows that cost dominating.
 - **Converting units.** Never. [008](design/008-units.md) checks consistency, and a `UnitChecker`
   answers yes or no, by design.
 
