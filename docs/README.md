@@ -29,7 +29,7 @@ see, and what it proves. About 20 minutes.
 
 ## Want to see it work before installing anything?
 
-**[`notebooks/`](../notebooks)** — seventeen of them, one concept each, committed **with their
+**[`notebooks/`](../notebooks)** — eighteen of them, one concept each, committed **with their
 outputs** so GitHub renders what every cell printed, diagrams included. CI re-executes them, so they
 cannot drift from the library.
 
@@ -80,7 +80,7 @@ editing the decision. Only the status line moves.
 | 003 | [Determinism, traceability, and the engineer in the loop](design/003-determinism-and-the-engineer-in-the-loop.md) — the governing principle, and rule-backed disciplines | implemented (Phase 4) |
 | 004 | [Rule-backed disciplines](design/004-rule-backed-disciplines.md) — naming, and pinning answer-set multiplicity | implemented (1.15.0–1.19.0) |
 | 005 | [Steps that touch the world](design/005-side-effecting-steps.md) — declaring side effects, and refusing what would repeat | implemented (1.22.0–1.23.0) |
-| 006 | [Campaigns](design/006-sweep.md) — many points, quoted first, resumable, never silent about failures | proposed (Phase 6.7) |
+| 006 | [Campaigns](design/006-sweep.md) — many points, quoted first, resumable, never silent about failures | implemented (1.30.0) |
 | 007 | [Running each pipeline with its own project's Python](design/007-project-interpreter.md) — interpreter discovery, one versioned worker, version floors | implemented (1.26.0) |
 | 008 | [Units, checked for consistency and never converted](design/008-units.md) — a `Unit` marker, exact match with a pluggable checker, where mismatches are found | implemented (1.27.0) |
 | 009 | [Inputs across the JSON boundary](design/009-json-boundary.md) — whole numbers repaired and reported; everything else built by the project, inside the run | implemented (1.28.0) |

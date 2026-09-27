@@ -200,3 +200,8 @@ server's own environment is no slower than today. Timeouts and crash isolation a
   environment's `site-packages`, so the version checks cost no spawn. A metadata-only query of
   the interpreter is used for an explicit interpreter outside a venv, where there is no such
   directory.
+- **The persistent worker was built for campaigns** (006, 1.30.0). A campaign met the trigger this
+  record set: a small point costs 0.71 s through a fresh process and 0.66 ms in a warm one. Its
+  pool lives only as long as its campaign, which keeps the lifecycle this record worried about
+  small. Tool calls outside campaigns still spawn per call.
+

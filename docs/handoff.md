@@ -3,7 +3,7 @@
 For whoever picks this up next — a contributor, a maintainer returning after a break, or a coding
 agent. Read this before starting work.
 
-**State as of v1.29.0:** `main` is clean. 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+**State as of v1.30.0:** `main` is clean. 962 tests, 100% coverage, 29/29 scripts, 18 notebooks.
 Roadmap **Phases 0–5 are complete**. **Phase 6** (lessons from paper-repro, a downstream project
 that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.29.0: its first brief
 in 1.24–1.27, its second in 1.28–1.29. **Design record [006](design/006-sweep.md), the sweep, is written and
@@ -139,9 +139,9 @@ explaining what each command proves.
 
 ```bash
 uv sync                              # dev env, includes every extra
-uv run pytest                        # 909 tests, 100% coverage
+uv run pytest                        # 962 tests, 100% coverage
 uv run python run_all.py             # 29 scripts
-uv run python run_notebooks.py       # 17 notebooks; rewrites only the ones that changed
+uv run python run_notebooks.py       # 18 notebooks; rewrites only the ones that changed
 uv build                             # wheel + sdist
 MPLBACKEND=Agg uv run pytest         # CI sets this; conftest.py also forces Agg
 ```

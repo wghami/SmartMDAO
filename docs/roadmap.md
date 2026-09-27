@@ -6,7 +6,7 @@ it is considered done.
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0, and the second brief (6.9–6.19) in 1.28.0–1.29.0.
 Design record 006 is written and awaits approval; then the sweep (6.7). See [handoff](handoff.md#next).
-**Baseline:** `v1.29.0` — 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+**Baseline:** `v1.30.0` — 962 tests, 100% coverage, 29/29 scripts, 18 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -571,7 +571,7 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
             `sweep_stop`.
       - [x] **6.7e — `compare_runs` in each side's own environment**, through the worker. The last
             tool using the server's environment.
-      - [ ] **6.7f — Teach it:** cookbook topic, notebook 18, testing guide, architecture,
+      - [x] **6.7f — Teach it:** cookbook topic, notebook 18, testing guide, architecture,
             known-issues, and 006 marked implemented with its findings. Release 1.30.0.
       - [ ] **6.7g — The response to paper-repro**, stored in `docs/requests/`.
       - [ ] **6.7h — Staleness sweep, the handoff included.**

@@ -42,7 +42,7 @@ documentation guards — the same checks CI runs, a few minutes earlier.
 uv run pytest
 ```
 
-**You should see** `909 passed` and a coverage table ending in `TOTAL ... 100%`.
+**You should see** `962 passed` and a coverage table ending in `TOTAL ... 100%`.
 
 **What it proves:** every behavioural claim in this repository is executable. The 100% figure is
 load-bearing rather than decorative — it has already caught genuinely dead code, and the rule is
@@ -82,7 +82,7 @@ fails the build. It also means any of them can be read *and executed* to check a
 uv run python run_notebooks.py
 ```
 
-**You should see** 17 notebooks, all `PASS … unchanged`, in about 45 seconds — and `git status`
+**You should see** 18 notebooks, all `PASS … unchanged`, in about 45 seconds — and `git status`
 still clean afterwards.
 
 **What it proves:** [`notebooks/`](../notebooks) is one concept per file, committed **with its
@@ -483,6 +483,23 @@ expensive branch nothing asked for is never started, and its inputs are no longe
 
 ---
 
+## Step 7e′ — A campaign: many points, and stopping it on purpose
+
+Ask your agent:
+
+> Run a campaign of `scripts/sellar_benchmark_mda.py` over `z1` in 1, 2, 3 with the smartmdao
+> tools, storing it in `/tmp/sellar-campaign`. Quote it before starting.
+
+**You should see** `sweep_pipeline` return a quote measured from one point, and nothing more until
+you agree a budget. Then `start=True` returns at once, and `sweep_status` reports progress.
+
+**Now stop it on purpose:** `sweep_stop`, or close the session, or kill the process. Start it again
+with the same arguments. **Only the missing points run.** `points.jsonl` in the store has exactly
+one line per point. That is the property that matters for a 5-hour campaign: whatever interrupts
+it, the finished work is kept, and none of it is computed twice.
+
+---
+
 ## Step 7f — The one check nothing else can do
 
 ``` bash
@@ -574,7 +591,7 @@ why, and the fix is to expose it as a module-level instance or a zero-argument f
 
 | Symptom | Likely cause |
 |---|---|
-| `pytest` reports fewer than 909 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
+| `pytest` reports fewer than 962 tests, with skips | `uv sync` did not install the extras — check for `openturns`, `mcp` and `clingo` |
 | A script fails in `run_all.py` | Run it directly to see the traceback; `openturns` ones skip cleanly with a message if the extra is missing |
 | `smartmdao-mcp: command not found` | Use `uv run smartmdao-mcp`, or install with `pip install smartmdao[mcp]` |
 | The agent says it cannot find a pipeline | Step 8 — your pipeline is probably local to a function |
