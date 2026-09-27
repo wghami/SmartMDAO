@@ -5,7 +5,7 @@ sweep, record 006) builds on the same worker
 **Date:** 2026-09-26
 **Relates to:** [001](001-mcp-connector.md) (what the subprocess buys, and what it does not);
 [003](003-determinism-and-the-engineer-in-the-loop.md) (report, do not guess); request R4 in
-[requests/2026-09-paper-repro.md](../requests/2026-09-paper-repro.md)
+[requests/2026-09-26-paper-repro.md](../requests/2026-09-26-paper-repro.md)
 
 ---
 

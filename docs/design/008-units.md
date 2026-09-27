@@ -4,7 +4,7 @@
 **Date:** 2026-09-26
 **Relates to:** [003](003-determinism-and-the-engineer-in-the-loop.md) (a default must not decide
 the answer); invariants 1 and 2 in [architecture.md](../architecture.md); request R7 in
-[requests/2026-09-paper-repro.md](../requests/2026-09-paper-repro.md)
+[requests/2026-09-26-paper-repro.md](../requests/2026-09-26-paper-repro.md)
 
 ---
 
