@@ -75,6 +75,19 @@ def whole_number_floats(
     return result, sorted(coerced), None
 
 
+def locate(module_name: str, search: Path) -> Optional[Path]:
+    """
+    The file `module_name` names on the entry file's own search path, found
+    without importing anything and without consulting `sys.modules`: a module
+    of the same name imported earlier from elsewhere must not stand in for it.
+    """
+    base = search.joinpath(*module_name.split("."))
+    for candidate in (base.with_suffix(".py"), base / "__init__.py"):
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
 class InputsFromError(Exception):
     """`inputs_from` could not produce inputs; the message says why."""
 
@@ -107,6 +120,12 @@ def build_inputs(
         )
 
     search = str(search_directory(Path(pipeline_file).resolve()))
+    # A module of this name cached from elsewhere - another project, an
+    # earlier campaign - is dropped, so the project's own is the one called.
+    own = locate(module_name, Path(search))
+    cached = sys.modules.get(module_name)
+    if own and cached is not None and Path(getattr(cached, "__file__", "") or "").resolve() != own:
+        sys.modules.pop(module_name, None)
     added = search not in sys.path
     if added:
         sys.path.insert(0, search)

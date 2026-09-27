@@ -18,8 +18,6 @@ prove was behaviour-preserving, and the same model under two solvers.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from .protocol import DEFAULT_BUDGET_SWEEPS, FULL, RUNGS
-from .execution import DEFAULT_TIMEOUT_SECONDS, run_in_subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -122,138 +120,14 @@ def diff_states(
     }
 
 
-def compare_runs(
-    path_a: str,
-    path_b: str,
-    inputs: Optional[Dict[str, Any]] = None,
-    variable_a: Optional[str] = None,
-    variable_b: Optional[str] = None,
-    rung: str = FULL,
-    budget_sweeps: int = DEFAULT_BUDGET_SWEEPS,
-    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-    allow_effects: bool = False,
-    inputs_from: Optional[str] = None,
-    inputs_args: Optional[List[Any]] = None,
-    inputs_kwargs: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+def compare_runs(*args, **kwargs) -> Dict[str, Any]:
     """
     Runs both pipelines on the **same** inputs and reports where they disagree.
 
-    **Both files really execute**, so every declared side effect would run
-    twice - once per file. "Compare two translations" should not quietly mean
-    "send every notification twice", so a pipeline declaring effects is refused
-    unless `allow_effects=True`. The check loads each file statically, which
-    registers steps without evaluating any of them.
-
-    The rung defaults to `full` here, unlike `run_pipeline`: a comparison of two
-    single sweeps says almost nothing, since the interesting divergence is in
-    *where each one settles*. Smoke both first with `run_pipeline` if you want
-    the cost before committing.
-
-    Inputs must be identical for the comparison to mean anything, so unlike a
-    single run, values are not taken from each file separately. Whatever the
-    caller supplies goes to both; if the caller supplies nothing, the values are
-    recovered from `path_a` and used for both, and that is reported.
+    Lives in `handlers.compare_runs` since 1.30.0, where each side is resolved
+    and run in its own project's environment (docs/design/007). Kept here, by
+    name, for anyone importing it from this module.
     """
-    if rung not in RUNGS:
-        return {"ok": False, "error": f"Unknown rung {rung!r}; expected one of {list(RUNGS)}."}
+    from .handlers import compare_runs as run_both
 
-    from .loader import _UNRESOLVED, PipelineLoadError, input_map_in_source, load_pipeline
-
-    from ..discretisation import effective_steps
-    from ..effects import effects_refusal_message
-
-    supplied = dict(inputs or {})
-    recovered: Dict[str, Any] = {}
-
-    loaded = {}
-    for label, path, variable in (("a", path_a, variable_a), ("b", path_b, variable_b)):
-        try:
-            loaded[label] = load_pipeline(path, variable)
-        except PipelineLoadError as error:
-            return {"ok": False, "error": str(error)}
-
-    if not allow_effects:
-        for label, path in (("a", path_a), ("b", path_b)):
-            declared = [s for s in effective_steps(loaded[label].pipeline) if s.has_effects]
-            if declared:
-                return {
-                    "ok": False,
-                    "error": f"{path}: " + effects_refusal_message(
-                        declared,
-                        "compare_runs executes BOTH files, so every side effect "
-                        "would run twice, once per file",
-                    ),
-                    "refused": "side-effects",
-                }
-
-    if not supplied:
-        loaded_a = loaded["a"]
-        recovered = {
-            name: value
-            for name, value in input_map_in_source(loaded_a.path).items()
-            if value is not _UNRESOLVED
-        }
-
-    from .boundary import whole_number_floats
-
-    supplied, coerced, refusal = whole_number_floats(
-        [loaded["a"].pipeline, loaded["b"].pipeline], supplied
-    )
-    if refusal:
-        return {"ok": False, "refused": "json-boundary", "error": refusal}
-
-    runs = {}
-    for label, path, variable in (("a", path_a, variable_a), ("b", path_b, variable_b)):
-        runs[label] = run_in_subprocess(
-            path=str(path),
-            inputs=supplied,
-            fallback_inputs=recovered,
-            inputs_from=inputs_from,
-            inputs_args=inputs_args,
-            inputs_kwargs=inputs_kwargs,
-            variable=variable,
-            rung=rung,
-            budget_sweeps=budget_sweeps,
-            timeout_seconds=timeout_seconds,
-        )
-
-    built = sorted({name for result in runs.values() for name in result.pop("built_inputs", [])} - set(supplied))
-    failed = [label for label, result in runs.items() if not result.get("ok")]
-    if failed:
-        return {
-            "ok": False,
-            "error": (
-                f"Cannot compare: {' and '.join(sorted(failed))} did not run. "
-                f"A comparison needs both sides."
-            ),
-            "runs": {label: result for label, result in runs.items()},
-            "inputs_used": {"supplied": sorted(supplied), "recovered_from_a": sorted(recovered)},
-        }
-
-    comparison = diff_states(
-        runs["a"].get("state", {}), runs["b"].get("state", {})
-    )
-
-    # A different destination is a difference even when the numbers are close.
-    summaries = {label: _summary(result) for label, result in runs.items()}
-    convergence_differs = summaries["a"]["converged"] != summaries["b"]["converged"]
-    if convergence_differs:
-        comparison["match"] = False
-
-    return {
-        "ok": True,
-        **comparison,
-        "convergence_differs": convergence_differs,
-        "runs": summaries,
-        "inputs_used": {
-            "supplied": sorted(supplied),
-            "recovered_from_a": sorted(recovered),
-            **({"coerced": coerced} if coerced else {}),
-            **({"built_by_project": built} if inputs_from else {}),
-            "note": (
-                "The same inputs were used for both sides; a comparison on "
-                "different inputs would mean nothing."
-            ),
-        },
-    }
+    return run_both(*args, **kwargs)

@@ -63,6 +63,11 @@ float where every step reading it declares float, and `inputs_used.coerced`
 says so. Anything else JSON cannot carry - tuples, arrays, float keys - should
 come from the project: run_pipeline(inputs_from="pkg.module:function").
 
+TO RUN MANY - a grid, a list of points, realizations over seeds - use
+sweep_pipeline: it quotes one point first; start=true with a budget runs the
+campaign detached, resumable whatever stops it; sweep_status reports progress
+and aggregates, sweep_stop stops it.
+
 TO RUN ONE, use `run_pipeline` rather than a shell. It enforces a wall clock,
 returns typed results instead of scraped stdout, and survives a discipline that
 crashes. It defaults to rung='smoke': one sweep, which proves the code executes
@@ -273,6 +278,70 @@ def create_server(name: str = "smartmdao"):
             rung, budget_sweeps, timeout_seconds, allow_effects,
             inputs_from, inputs_args, inputs_kwargs,
         )
+
+    @server.tool(
+        description=(
+            "Run a CAMPAIGN - many points of one pipeline (a grid, a list, "
+            "seeds as realizations) - in the project's own environment, in "
+            "parallel. By default (start=false) it runs ONE point and QUOTES "
+            "the whole campaign: tell the user that number. start=true with "
+            "budget_seconds starts it DETACHED and returns at once; it outlives "
+            "the session. Build each point's inputs with inputs_from (the point's "
+            "values become its keyword arguments). The store is resumable: "
+            "starting again after a stop, a budget, or a crash does only what is "
+            "missing. Refuses declared side effects unless allow_effects=true."
+        )
+    )
+    def sweep_pipeline(
+        path: str,
+        store: str,
+        grid: Optional[Dict[str, List[Any]]] = None,
+        points: Optional[List[Dict[str, Any]]] = None,
+        seeds: Optional[Any] = None,
+        seed_input: Optional[str] = None,
+        outputs: Optional[List[str]] = None,
+        inputs_from: Optional[str] = None,
+        inputs_args: Optional[List[Any]] = None,
+        inputs_kwargs: Optional[Dict[str, Any]] = None,
+        inputs: Optional[Dict[str, Any]] = None,
+        variable: Optional[str] = None,
+        workers: Optional[int] = None,
+        point_timeout: Optional[float] = None,
+        allow_effects: bool = False,
+        python: Optional[str] = None,
+        project: Optional[str] = None,
+        start: bool = False,
+        budget_seconds: Optional[float] = None,
+        retry_failed: bool = False,
+    ) -> dict:
+        from . import campaigns
+
+        return campaigns.sweep_pipeline(
+            path, store, grid, points, seeds, seed_input, outputs, inputs_from, inputs_args,
+            inputs_kwargs, inputs, variable, workers, point_timeout, allow_effects, python,
+            project, start, budget_seconds, retry_failed,
+        )
+
+    @server.tool(
+        description=(
+            "How a campaign is going: points ok / failed / pending, its state "
+            "(running, interrupted, finished, stopped: budget), the first "
+            "failures in full, and the aggregates so far - means and confidence "
+            "intervals over seeds, with what they excluded."
+        )
+    )
+    def sweep_status(store: str, aggregate: bool = True) -> dict:
+        from . import campaigns
+
+        return campaigns.sweep_status(store, aggregate)
+
+    @server.tool(
+        description="Stop a running campaign handing out points. Resumable: start it again to finish."
+    )
+    def sweep_stop(store: str) -> dict:
+        from . import campaigns
+
+        return campaigns.sweep_stop(store)
 
     # ----- Resources ---------------------------------------------------------
     # Grounding for the client's own generation: current docs beat whatever

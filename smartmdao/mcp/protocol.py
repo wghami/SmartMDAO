@@ -24,3 +24,13 @@ DEFAULT_BUDGET_SWEEPS = 25
 #: the request or response shape -> raise the upper bound, and keep answering
 #: the old one for as long as servers speaking it are expected to be around.
 PROTOCOL = (1, 1)
+
+#: How a campaign point can end (docs/design/006). Shared by the coordinator
+#: and the worker, so neither imports the other.
+OK = "ok"
+NOT_CONVERGED = "not_converged"
+ERROR = "error"
+TIMED_OUT = "timed_out"
+CRASHED = "crashed"
+#: Statuses a resumed campaign keeps; the others run again on request.
+FINISHED = (OK, NOT_CONVERGED)

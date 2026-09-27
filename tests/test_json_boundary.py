@@ -414,3 +414,12 @@ def test_the_run_process_builds_inputs_before_running(structured):
 
     refused = run({"path": structured, "rung": "full", "inputs_from": "baseline:nope"})
     assert refused["ok"] is False and "could not be found" in refused["error"]
+
+
+def test_a_module_of_the_same_name_imported_elsewhere_does_not_stand_in(tmp_path):
+    """Two projects, each with its own baseline.py: each run calls its own."""
+    first, second = tmp_path / "one", tmp_path / "two"
+    write(first / "baseline.py", "def inputs():\n    return {'who': 'one'}\n")
+    write(second / "baseline.py", "def inputs():\n    return {'who': 'two'}\n")
+    assert build_inputs("baseline:inputs", None, None, write(first / "entry.py", ""))["who"] == "one"
+    assert build_inputs("baseline:inputs", None, None, write(second / "entry.py", ""))["who"] == "two"
