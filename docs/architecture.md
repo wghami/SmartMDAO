@@ -125,7 +125,8 @@ Three functions, all pure, all in [graph.py](../smartmdao/graph.py):
   condensation graph of the SCCs, sorted first come first served. **Where steps declare a
   `group`**, independent blocks are reordered so each group stays together: every group is
   contracted to one node and the contracted graph sorted, keeping each group's blocks in their
-  relative order. If contraction creates a cycle, dependencies run both ways between those
+  relative order; among groups ready at the same time, the one registered first goes first (since
+  1.29.0; before, plan position decided). If contraction creates a cycle, dependencies run both ways between those
   groups, so they provably cannot all be contiguous — they are dissolved back into their blocks
   and reported by `group_conflicts`. Only independent blocks move; a block's own steps, a loop's
   alphabetical order included, never do. With no group declared, nothing moves at all.
