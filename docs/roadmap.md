@@ -5,7 +5,7 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0, and the second brief (6.9–6.19) in 1.28.0–1.29.0.
-What remains is design record 006 and the sweep (6.7). See [handoff](handoff.md#next).
+Design record 006 is written and awaits approval; then the sweep (6.7). See [handoff](handoff.md#next).
 **Baseline:** `v1.29.0` — 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
@@ -511,10 +511,10 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
 
 **Design first, then build:**
 
-- [ ] **6.5 — Design records 006 (sweep) and 007 (project interpreter), written together.**
+- [x] **6.5 — Design records 006 (sweep) and 007 (project interpreter), written together.**
       *007 written 2026-09-26* ([design/007](design/007-project-interpreter.md)), including the
-      substrate 006 inherits; it leaves three questions for the maintainer. 006 waits for
-      paper-repro's first real runs.
+      substrate 006 inherits; its three questions were answered and it shipped in 1.26.0. 006
+      waited for paper-repro's first real runs, whose cost note arrived with the second brief.
       They share one substrate: a worker process whose interpreter is a parameter (the server's
       own by default), speaking a versioned protocol. Building the sweep on `sys.executable` first
       would mean rebuilding it for R4. To settle there: the protocol's minimum version and the
@@ -524,6 +524,10 @@ the runner uses `sys.executable`, and the loader reads only literal `run()` call
       so a resumed campaign never mixes two versions of a model.
       **Note: R3's final shape is settled only after paper-repro's first real runs.** The
       record can start now; the sweep's details wait for that evidence.
+      *006 written 2026-09-27* ([design/006](design/006-sweep.md)), from the requester's cost note.
+      Measured first: a small point costs 0.71 s in a fresh process and 0.66 ms in a warm one, about
+      1,000×, so a campaign runs a pool of long-lived workers, which is the case 007 deferred. Five
+      questions for the maintainer; 6.7 waits for the answers.
 - [x] **6.6 — Run in the project's interpreter (R4)**, as designed in
       [007](design/007-project-interpreter.md), in 1.26.0. Every tool resolves the file's
       environment and reports it as `interpreter`; the server's own runs in-process, any other

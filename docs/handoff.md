@@ -6,8 +6,8 @@ agent. Read this before starting work.
 **State as of v1.29.0:** `main` is clean. 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 Roadmap **Phases 0–5 are complete**. **Phase 6** (lessons from paper-repro, a downstream project
 that uses the MCP connector) has shipped everything but the sweep, in 1.24.0–1.29.0: its first brief
-in 1.24–1.27, its second in 1.28–1.29. **Next is design record 006, the sweep**, written from the cost
-note in the second brief; see [Next](#next).
+in 1.24–1.27, its second in 1.28–1.29. **Design record [006](design/006-sweep.md), the sweep, is written and
+awaits the maintainer's answers**; see [Next](#next).
 
 Two documents set the rules. This one says what *done* means. **[003](design/003-determinism-and-the-engineer-in-the-loop.md)**
 says *why the project is built the way it is*: determinism, traceability, and giving the engineer
@@ -298,25 +298,12 @@ request and every response is kept in [`docs/requests/`](requests/):
 
 ### The sweep: what to do next
 
-1. **Write design record 006 from the cost note** in the second brief. It is measured evidence:
-   Starlink routing at about 1.1 s a realization, downlink allocation at 0.5–2.4 s a slot, and a
-   74-run figure at 4–5 hours serial. The record must settle:
-   - the design of a campaign: a grid, explicit points, or both;
-   - points built by the project's code through `inputs_from` (1.28.0), never JSON;
-   - seeds as ordinary inputs;
-   - a one-point run that quotes the whole campaign's cost first;
-   - points run in parallel and isolated, on [007](design/007-project-interpreter.md)'s worker,
-     over realizations and slots, which are independent;
-   - a resumable store per point, keyed by the model's hash, the SmartMDAO version the worker
-     reports, and the inputs;
-   - failed points recorded, never dropped, including a solver that mis-reports infeasibility or
-     answers "inaccurate";
-   - means and confidence intervals over seeds;
-   - refusing declared side effects unless `allow_effects=True`;
-   - `upstream()` (1.29.0), to compute only the outputs a campaign reports;
-   - how it is exposed over MCP.
-
-   Bring it for approval before building. The roadmap's 6.5 and 6.7 have the detail.
+1. **Get the maintainer's answers to [006](design/006-sweep.md)'s five questions.** The record is
+   written from the cost note in the second brief, and it measured one thing first: a small point
+   costs 0.71 s in a fresh process and 0.66 ms in a warm one. So a campaign runs a pool of
+   long-lived workers (the case 007 deferred), detached from the tool call, quoted from one point
+   and started only with a budget. Its store is resumable and keyed so that two model versions are
+   never averaged together. Failures are recorded, and aggregates state what they excluded.
 2. **Build 6.7, and move `compare_runs` onto the worker with it.** `compare_runs` is the one tool
    still using the server's environment ([known-issues](known-issues.md)), and the sweep needs the
    same per-point path. Then check Phase 6's exit criterion, whose last clause is what the sweep
