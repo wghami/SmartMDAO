@@ -475,20 +475,33 @@ def _check_units(steps: List[Step], checker) -> List[Finding]:
     return findings
 
 
-def unit_coverage(steps: List[Step]) -> Tuple[int, int]:
-    """(connections with a unit on both ends, connections between steps)."""
+def unit_connections(steps: List[Step]) -> List[Dict[str, object]]:
+    """
+    Every connection between steps, and whether each end declares a unit.
+
+    `missing` is "", "producer", "consumer" or "both" - which end to annotate
+    for the connection to be checked (F-013).
+    """
     producers = map_producers(steps)
-    checked = total = 0
+    connections = []
     for consumer in steps:
         declared = input_units(consumer)
         for name in consumer.get_signature().parameters:
             producer = producers.get(name)
             if producer is None:
                 continue
-            total += 1
-            if name in declared and name in output_units(producer):
-                checked += 1
-    return checked, total
+            made, read = name in output_units(producer), name in declared
+            connections.append({
+                "variable": name,
+                "producer": producer.name,
+                "consumer": consumer.name,
+                "missing": "" if made and read else "consumer" if made else "producer" if read else "both",
+            })
+    return connections
+
+
+#: Longest list of unchecked connections `explain` prints.
+UNCHECKED_SHOWN = 20
 
 
 def _check_connectivity(steps: List[Step]) -> List[Finding]:
@@ -1229,9 +1242,21 @@ def explain(pipeline, inputs: Optional[Sequence[str]] = None) -> str:
 
     lines.append(f"Execution order: {' -> '.join(analysis.execution_order)}")
 
-    checked, total = unit_coverage(effective_steps(pipeline))
-    if checked:
-        lines.append(f"Units: {checked} of {total} connections between steps checked.")
+    connections = unit_connections(effective_steps(pipeline))
+    unchecked = [c for c in connections if c["missing"]]
+    if len(unchecked) < len(connections):
+        lines.append(
+            f"Units: {len(connections) - len(unchecked)} of {len(connections)} connections "
+            f"between steps checked."
+        )
+        if unchecked:
+            # Which ones, and which end to annotate: where a declaration
+            # would help next (F-013).
+            lines.append("  Not checked (no unit on the end named):")
+            for c in unchecked[:UNCHECKED_SHOWN]:
+                lines.append(f"    {c['producer']} -> {c['consumer']} ({c['variable']}; {c['missing']})")
+            if len(unchecked) > UNCHECKED_SHOWN:
+                lines.append(f"    ... and {len(unchecked) - UNCHECKED_SHOWN} more")
 
     if analysis.stubs:
         lines.append("")

@@ -218,7 +218,8 @@ def create_server(name: str = "smartmdao"):
             "validate reports steps that declare side effects. Inputs JSON "
             "cannot carry (tuples, arrays, float-keyed dicts) come from the "
             "project: inputs_from='package.module:function' with inputs_args / "
-            "inputs_kwargs is called inside the run, and `inputs` still win."
+            "inputs_kwargs is called inside the run, and `inputs` still win. "
+            "targets=[...] runs only the steps those outputs need."
         )
     )
     def run_pipeline(
@@ -233,10 +234,11 @@ def create_server(name: str = "smartmdao"):
         inputs_from: Optional[str] = None,
         inputs_args: Optional[List[Any]] = None,
         inputs_kwargs: Optional[Dict[str, Any]] = None,
+        targets: Optional[List[str]] = None,
     ) -> dict:
         return handlers.run_pipeline(
             path, inputs, variable, rung, budget_sweeps, timeout_seconds, python, project,
-            inputs_from, inputs_args, inputs_kwargs,
+            inputs_from, inputs_args, inputs_kwargs, targets,
         )
 
     @server.tool(

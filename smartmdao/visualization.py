@@ -1,3 +1,4 @@
+import inspect
 import os
 import logging
 from collections import defaultdict
@@ -138,7 +139,17 @@ class PipelineVisualizer:
                 consumed.add(param)
 
         real_inputs = {v for v in consumed if v not in produced}
-        missing = {v for v in real_inputs if v not in self.input_keys}
+        # Missing means what validate() means: required somewhere, and neither
+        # produced nor passed. A parameter with a default nobody supplies is
+        # not missing - the step uses its default - and was drawn as a red
+        # "(?)" until 1.29.0, disagreeing with validate().
+        required = {
+            name
+            for step in self.steps
+            for name, parameter in step.get_signature().parameters.items()
+            if parameter.default is inspect.Parameter.empty
+        }
+        missing = {v for v in real_inputs if v not in self.input_keys and v in required}
         valid_inputs = real_inputs.intersection(self.input_keys)
         intermediates = produced.intersection(consumed)
         finals = produced - consumed
@@ -187,7 +198,14 @@ class PipelineVisualizer:
 
             if valid_params:
                 units = input_units(step)
-                label = "\n".join(self._with_unit(p, units.get(p)) for p in valid_params)
+                defaulted = {
+                    name for name, parameter in sig.parameters.items()
+                    if parameter.default is not inspect.Parameter.empty and name not in self.input_keys
+                }
+                label = "\n".join(
+                    self._with_unit(p, units.get(p)) + (" (default)" if p in defaulted else "")
+                    for p in valid_params
+                )
                 w, h = self._label_size(label)
                 cells[f"input_{i}"] = dict(
                     col=self.INPUT_COL, row=i, w=w, h=h, shape="rect", style=self.STYLE_INPUT,

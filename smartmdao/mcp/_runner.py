@@ -17,6 +17,7 @@ Run directly for debugging:
 
     echo '{"path": "model.py", "rung": "smoke"}' | python -m smartmdao.mcp._runner
 """
+import dataclasses
 import json
 import sys
 import time
@@ -153,6 +154,11 @@ def run(request: Dict[str, Any]) -> Dict[str, Any]:
         loaded = load_pipeline(request["path"], request.get("variable"))
     except PipelineLoadError as error:
         return {"ok": False, "error": str(error)}
+
+    # Only what the requested outputs need (F-019). The handler has already
+    # checked the names, on the same file.
+    if request.get("targets"):
+        loaded = dataclasses.replace(loaded, pipeline=loaded.pipeline.upstream(*request["targets"]))
 
     # Precedence: what the caller passed, then what the project built, then
     # the literals in the file's own run() call (docs/design/009).

@@ -1,3 +1,4 @@
+import copy
 import logging
 import threading
 from contextlib import contextmanager
@@ -5,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Callable, List, Literal, Optional, Sequence, Tuple
 
 from .discretisation import Discretisation, effective_steps
+from .graph import map_producers
 from .effects import SideEffectError, latch_once, refuse_unstated_effects
 from .models import Step
 from .solvers import Solver, DAGSolver
@@ -181,6 +183,52 @@ class Pipeline:
             return func
         
         return wrapper
+
+    def upstream(self, *outputs: str) -> "Pipeline":
+        """
+        A new pipeline holding only the steps `outputs` depend on.
+
+        Everything else - analyze, validate, run, visualize - works on it
+        unchanged, because it is an ordinary pipeline planned by the same
+        planner. A feedback loop an output depends on is kept whole; declared
+        bands and inputs are kept only where something kept reads them. The
+        steps are shared with this pipeline; the solver is a copy, so a run of
+        one cannot leave state in the other.
+
+        Written as a method, not a `run(targets=...)` argument: `run(**inputs)`
+        takes variable names as keywords, and one called `targets` would clash.
+        """
+        if not outputs:
+            raise ValueError("upstream() needs at least one output name.")
+
+        steps = effective_steps(self)
+        producers = map_producers(steps)
+        unknown = [name for name in outputs if name not in producers]
+        if unknown:
+            raise ValueError(
+                f"No step produces {unknown}. Outputs of this pipeline: {sorted(producers)}."
+            )
+
+        needed = set()
+        pending = list(outputs)
+        while pending:
+            producer = producers.get(pending.pop())
+            if producer is None or producer in needed:
+                continue
+            needed.add(producer)
+            pending.extend(producer.get_signature().parameters)
+
+        read = {name for step in needed for name in step.get_signature().parameters}
+        bands = {name: band for name, band in self.discretisation.bands.items() if producers[name] in needed}
+        return Pipeline(
+            steps=[step for step in self.steps if step in needed],
+            solver=copy.deepcopy(self.solver),
+            runtime_type_checks=self.runtime_type_checks,
+            type_checker=self.type_checker,
+            discretisation=Discretisation(**bands),
+            inputs=[name for name in self.inputs if name in read],
+            unit_checker=self.unit_checker,
+        )
 
     def run(self, **inputs):
         """

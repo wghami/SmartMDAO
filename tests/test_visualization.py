@@ -127,3 +127,30 @@ def test_long_step_name_shrinks_fontsize_to_fit_box():
     width, height, fontsize = viz._step_layout(step.name)
     assert fontsize < PipelineVisualizer.STEP_FONTSIZE
     assert fontsize >= PipelineVisualizer.STEP_MIN_FONTSIZE
+
+
+def test_a_defaulted_parameter_is_not_drawn_as_missing():
+    """
+    Until 1.29.0 the diagram marked `note (?)` missing while validate() rightly
+    reported nothing: the step uses its default. Now both agree - only `rate`,
+    required and unsupplied, is missing.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    from smartmdao import Pipeline, validate
+    from smartmdao.visualization import PipelineVisualizer
+
+    pipeline = Pipeline(inputs=["distance"])
+
+    @pipeline.step(outputs=["delay"])
+    def latency(distance: float, note: float = 0.0) -> float:
+        return distance + note
+
+    @pipeline.step(outputs=["cost"])
+    def price(distance: float, rate: float) -> float:
+        return distance * rate
+
+    labels = {text.get_text() for text in PipelineVisualizer(pipeline.steps, {"distance"}).build().ax.texts}
+    assert "distance\nnote (default)" in labels
+    assert "rate (?)" in labels and not any("note (?)" in label for label in labels)
+    assert [(f.code, f.variable) for f in validate(pipeline)] == [("missing-input", "rate")]

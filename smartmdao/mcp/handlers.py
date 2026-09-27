@@ -9,7 +9,7 @@ import logging
 from dataclasses import asdict, replace
 from typing import Any, Dict, List, Optional, Sequence
 
-from ..analysis import analyze, explain, stub_status, validate
+from ..analysis import analyze, explain, stub_status, unit_connections, validate
 from ..discretisation import effective_steps
 from .protocol import DEFAULT_BUDGET_SWEEPS, SMOKE
 from .loader import _UNRESOLVED
@@ -43,6 +43,17 @@ def _load(path: str, variable: Optional[str]):
         return load_pipeline(path, variable), None
     except PipelineLoadError as error:
         return None, {"ok": False, "error": str(error)}
+
+
+def _unit_coverage(pipeline) -> Dict[str, Any]:
+    """How many connections are unit-checked, and which are not (F-013)."""
+    connections = unit_connections(effective_steps(pipeline))
+    unchecked = [c for c in connections if c["missing"]]
+    return {
+        "checked": len(connections) - len(unchecked),
+        "total": len(connections),
+        "unchecked": _truncate(unchecked),
+    }
 
 
 def _effective_inputs(loaded, requested: Optional[Sequence[str]]):
@@ -101,6 +112,7 @@ def _analyze(
         ],
         "inputs_used": provenance,
         "stubs": _truncate(analysis.stubs),
+        "unit_coverage": _unit_coverage(loaded.pipeline),
         "recommended_solver": analysis.recommended_solver,
         "reason": analysis.reason,
     }
@@ -184,9 +196,11 @@ def _render(
     }
     # A split group is visible in the picture, but the reason is not - and the
     # caller may never look at the picture.
-    notes = [f.message for f in validate(loaded.pipeline, effective) if f.code == "groups-interleaved"]
-    if notes:
-        result["group_notes"] = notes
+    # Always a list, empty when nothing was split, so a client can read it
+    # without first asking whether it is there (F-012).
+    result["group_notes"] = [
+        f.message for f in validate(loaded.pipeline, effective) if f.code == "groups-interleaved"
+    ]
     return result
 
 
@@ -200,6 +214,7 @@ def _run(
     inputs_from: Optional[str] = None,
     inputs_args: Optional[Sequence[Any]] = None,
     inputs_kwargs: Optional[Dict[str, Any]] = None,
+    targets: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
     Executes a pipeline in a child process, under a wall clock.
@@ -216,6 +231,14 @@ def _run(
     loaded, failure = _load(path, variable)
     if failure:
         return failure
+
+    if targets:
+        # Only what those outputs need (F-019); everything below, and the run
+        # itself, sees the smaller pipeline.
+        try:
+            loaded = replace(loaded, pipeline=loaded.pipeline.upstream(*targets))
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
 
     supplied, coerced, refusal = whole_number_floats([loaded.pipeline], dict(inputs or {}))
     if refusal:
@@ -241,6 +264,7 @@ def _run(
         inputs_from=inputs_from,
         inputs_args=inputs_args,
         inputs_kwargs=inputs_kwargs,
+        targets=targets,
         variable=variable,
         rung=rung,
         budget_sweeps=budget_sweeps,
@@ -376,7 +400,8 @@ def run_pipeline(path: str, inputs: Optional[Dict[str, Any]] = None,
                  python: Optional[str] = None, project: Optional[str] = None,
                  inputs_from: Optional[str] = None,
                  inputs_args: Optional[Sequence[Any]] = None,
-                 inputs_kwargs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                 inputs_kwargs: Optional[Dict[str, Any]] = None,
+                 targets: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """
     Executes a pipeline in a child process, under a wall clock. See `_run`.
 
@@ -388,7 +413,8 @@ def run_pipeline(path: str, inputs: Optional[Dict[str, Any]] = None,
                      timeout_seconds + worker.STARTUP_ALLOWANCE_SECONDS,
                      inputs=inputs, variable=variable, rung=rung,
                      budget_sweeps=budget_sweeps, timeout_seconds=timeout_seconds,
-                     inputs_from=inputs_from, inputs_args=inputs_args, inputs_kwargs=inputs_kwargs)
+                     inputs_from=inputs_from, inputs_args=inputs_args, inputs_kwargs=inputs_kwargs,
+                     targets=targets)
 
 
 def compare_runs(

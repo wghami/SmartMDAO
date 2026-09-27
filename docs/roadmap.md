@@ -5,8 +5,8 @@ it is considered done.
 
 **Current position:** Phases 0–5 complete. **Phase 6 (lessons from paper-repro) is under way**:
 6.0–6.4, 6.6 and 6.8 shipped in 1.24.0–1.27.0. Paper-repro's second brief arrived on
-2026-09-27. Its plan (6.9–6.19, *second brief* below) is approved; 6.9–6.13 shipped in 1.28.0; then 006 and the sweep.
-**Baseline:** `v1.28.0` — 894 tests, 100% coverage, 29/29 scripts, 17 notebooks.
+2026-09-27. Its plan (6.9–6.19, *second brief* below) is approved; 6.9–6.13 shipped in 1.28.0 and 6.14–6.17 in 1.29.0; then 006 and the sweep.
+**Baseline:** `v1.29.0` — 909 tests, 100% coverage, 29/29 scripts, 17 notebooks.
 
 New here? Read [handoff.md](handoff.md) first — it states what "done" means in this repo.
 
@@ -620,19 +620,25 @@ checked against 1.27.0 before being planned:
 
 **1.29.0 — the smaller items:**
 
-- [ ] **6.14 — Group order and notes (F-012).** Among blocks ready at the same time, a group's
+- [x] **6.14 — Group order and notes (F-012).** Among blocks ready at the same time, a group's
       place follows the registration order of its first step instead of plan position. Ungrouped
       pipelines are unchanged. `group_notes` is always a list.
-- [ ] **6.15 — Which connections are unit-checked (F-013).** `explain` lists the unchecked
+- [x] **6.15 — Which connections are unit-checked (F-013).** `explain` lists the unchecked
       connections (producer → consumer, the variable, and which end lacks a unit), capped at 20
       with "and N more". `analyze_pipeline` returns the same as `unit_coverage`.
-- [ ] **6.16 — Run only what an output needs (F-019).** `pipeline.upstream(*outputs)` returns a
+- [x] **6.16 — Run only what an output needs (F-019).** `pipeline.upstream(*outputs)` returns a
       new `Pipeline` holding only the steps those outputs depend on, with feedback loops kept
       whole. Everything else (`analyze`, `validate`, `run`, `visualize`) works on it unchanged,
       because it is an ordinary pipeline planned by the one planner. Over MCP it is
       `run_pipeline(targets=[...])`.
-- [ ] **6.17 — The queued diagram bug.** A defaulted parameter is no longer drawn as a missing
+- [x] **6.17 — The queued diagram bug.** A defaulted parameter is no longer drawn as a missing
       input; see *Queued* below.
+
+      **Shipped in 1.29.0.** **Found on the way:** the new source-reference guard caught its first
+      drift the same day it merged, since `upstream()` moved `Pipeline.run`. The 100% coverage rule
+      caught `unit_coverage`, left dead once `explain` and the MCP both used `unit_connections`.
+      *Decided:* a defaulted, unsupplied parameter is drawn as `name (default)` rather than left off
+      the diagram, because the step does read a value.
 
 **Last:**
 
@@ -660,7 +666,7 @@ together.
 
 ## Queued — small, not tied to a phase
 
-- [ ] **The diagram draws a defaulted parameter as a missing input.** A step `latency(distance,
+- [x] **The diagram draws a defaulted parameter as a missing input.** *Fixed in 1.29.0 (6.17).* A step `latency(distance,
       note=0.0)` gets a red `note (?)` on the XDSM when nobody passes `note`, while `validate()`
       rightly treats it as optional, so the diagram and the analysis disagree. Noticed while
       checking the units diagram in 6.8. See [known-issues](known-issues.md).
